@@ -9,7 +9,7 @@ from astropy.io import fits
 import source.line_models as LM
 import source.external_sfrs as extSFRs
 
-from source.utilities import check_params,check_models,check_sfr
+from source.utilities import check_params,check_models,check_sfr,get_default_params
 
 class Lightcone(object):
     '''
@@ -54,21 +54,21 @@ class Lightcone(object):
                  output_root = "output/default"):
                  
         # Get list of input values to check type and units
-        self._run_params = locals()
-        self._run_params.pop('self')
+        self._lightcone_params = locals()
+        self._lightcone_params.pop('self')
         
         # Get list of input names and default values
-        self._default_run_params = get_default_params(Run.__init__)
+        self._default_lightcone_params = get_default_params(Lightcone.__init__)
         # Check that input values have the correct type and units
-        check_params(self._run_params,self._default_run_params)
+        check_params(self._lightcone_params,self._default_lightcone_params)
         # Fill lines no included with false
-        for key in list(self._default_run_params['lines'].keys()):
-            if key not in self._run_params['lines'].keys():
-                self._run_params['lines'][key] = False
+        for key in list(self._default_lightcone_params['lines'].keys()):
+            if key not in self._lightcone_params['lines'].keys():
+                self._lightcone_params['lines'][key] = False
         
         # Set all given parameters
-        for key in self._run_params:
-            setattr(self,key,self._run_params[key])
+        for key in self._lightcone_params:
+            setattr(self,key,self._lightcone_params[key])
                                 
         # Check that the input line models are included
         check_models(self.lines,self.models)

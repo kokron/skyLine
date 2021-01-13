@@ -4,6 +4,7 @@ Set of functions useful in some modules
 
 import source.line_models as LM
 import source.external_sfrs as extSFRs
+import inspect
 
 def check_params(input_params, default_params):
     '''
