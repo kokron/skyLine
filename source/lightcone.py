@@ -90,7 +90,7 @@ class Lightcone(object):
         bigcat = np.array(fil[1].data)
         #Open the rest and append
         for ifile in range(1,len(fnames)):
-            fil = fits.open(fnames[i])
+            fil = fits.open(fnames[ifile])
             bigcat = np.append(bigcat, np.array(fil[1].data))
             
         self.halo_catalog = bigcat

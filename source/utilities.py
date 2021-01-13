@@ -28,9 +28,9 @@ def check_params(input_params, default_params):
         if key == 'lines':
             for line in input_value.keys():
                 if line:
-                    if input_params['models']['model_name'] == '':
+                    if input_params['models'][line]['model_name'] == '':
                         raise ValueError('Please input a "model_name" within "models" for the {} line.'.format(line))
-                    elif input_params['models']['model_pars'] == {}:
+                    elif input_params['models'][line]['model_pars'] == {}:
                         raise ValueError('Please input the parameters of the model in "model_pars" within "models" for the {} line.'.format(line))
 
 
