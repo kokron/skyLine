@@ -84,12 +84,19 @@ class Lightcone(object):
         Reads all the files from the halo catalog and appends the slices
         '''
         fnames = glob(self.halo_lightcone_dir+'/*')
+        Nfiles = len(fnames)
+        #sort the fnames
+        ind = np.zeros(Nfiles).astype(int)
+        for ifile in range(Nfiles):
+            ind[ifile] =  int(fnames[ifile].split('_')[-1].split('.')[0])
+        sort_ind = np.argsort(ind)
         #open the first one
         fil = fits.open(fnames[0])
         #Start the catalog appending everything
         bigcat = np.array(fil[1].data)
         #Open the rest and append
         for ifile in range(1,len(fnames)):
+            print(fnames[ifile])
             fil = fits.open(fnames[ifile])
             bigcat = np.append(bigcat, np.array(fil[1].data))
             
