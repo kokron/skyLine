@@ -49,3 +49,22 @@ def check_sfr(sfr):
     if sfr and not hasattr(extSFRs,sfr):
         raise ValueError('{} not found in external_sfrs.py'.format(sfr))
 
+
+def get_default_params(func):
+    '''
+    Gets the default parameters of a function or class. Output
+    is a dictionary of parameter names and values, removing any 
+    potential instance of "self"
+    '''
+    
+    args = inspect.getargspec(func)
+    
+    param_names = args.args
+    if 'self' in param_names:
+        param_names.remove('self')
+    
+    default_values = args.defaults
+    
+    default_params = dict(zip(param_names,default_values))
+
+    return default_params
