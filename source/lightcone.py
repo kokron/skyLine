@@ -7,7 +7,7 @@ from glob import glob
 from astropy.io import fits
 
 import source.line_models as LM
-import source.external_sfts as extSFRs
+import source.external_sfrs as extSFRs
 
 from source.utilities import check_params,check_models,check_sfr
 

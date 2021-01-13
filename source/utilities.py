@@ -3,7 +3,7 @@ Set of functions useful in some modules
 '''
 
 import source.line_models as LM
-import source.external_sfts as extSFRs
+import source.external_sfrs as extSFRs
 
 def check_params(input_params, default_params):
     '''

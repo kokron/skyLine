@@ -21,7 +21,8 @@ class Survey(object):
     -output_root            Root path for output products. (default: output/default)                                
     '''
     def __init__(self,
-
                  output_root = "output/default"):
+
+        return
                  
         
