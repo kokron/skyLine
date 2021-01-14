@@ -9,7 +9,7 @@ import astropy.constants as cu
 from source.lightcone import Lightcone
 from source.utilities import cached_survey_property,get_default_params,check_params
 
-class Survey(object):
+class Survey(Lightcone):
     '''
     An object controlling all relevant quantities needed to create the 
     painted LIM lightcone. It reads a lightcone catalog of halos with SFR 
