@@ -97,6 +97,14 @@ class Lightcone(object):
         self.h = 0.68
         self.cosmo = camb.get_background(camb_pars)
         
+        #Line frequencies:
+        line_nu0 = dict(CO = 115.271*u.GHz, CII = 1900.539*u.GHz, Halpha = 456805.72*u.GHz,
+                        Lyalpha = 2465398.5*u.GHz, HI = 1.4204134*u.GHz)
+        
+    #########
+    # Units #
+    #########
+    
     @cached_lightcone_property
     def Mpch(self):
         '''
@@ -110,6 +118,10 @@ class Lightcone(object):
         Msun/h unit, required for interacting with hmf outputs
         '''
         return u.Msun/self.h
+        
+    ######################
+    # Catalog Management #
+    ######################
         
     @cached_lightcone_property
     def read_halo_catalog(self):
@@ -145,9 +157,11 @@ class Lightcone(object):
     @cached_lightcone_property
     def halo_luminosity(self):
         '''
-        Computes the halo luminosity for each of the lines of interest
+        Computes the halo luminosity for each of the lines of interest, 
+        and the corresponding observed frequency for each halo and line
         '''
         L_line_halo = {}
+        nuObs_line_halo = {}
         #Get the SFR
         if self.do_external_SFR:
             #convert halo mass to Msun
@@ -157,11 +171,13 @@ class Lightcone(object):
             SFR = self.halo_catalog['SFR_HALO']
             
             
-        for line in lines.keys():
-            if lines[line]:
-                L_line_halo[line] = getattr(LM,models[line]['model_name'])(self,self.SFR,self.models[line]['model_pars'])
+        for line in self.lines.keys():
+            if self.lines[line]:
+                L_line_halo[line] = getattr(LM,models[line]['model_name'])(self,SFR,self.models[line]['model_pars'])
+                nuObs_line_halo[line] = self.line_nu0/(1+self.halo_catalog['Z'])
                 
         self.L_line_halo = L_line_halo
+        self.nuObs_line_halo = nuObs_line_halo
         
         return
     
