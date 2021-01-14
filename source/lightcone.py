@@ -54,7 +54,7 @@ class Lightcone(object):
     '''
     def __init__(self,
                  halo_lightcone_dir = '',
-                 zmin = 0., zmax = 20,
+                 zmin = 0., zmax = 20.,
                  lines = dict(CO = False, CII = False, Halpha = False, Lyalpha = False, HI = False),
                  models = dict(CO = dict(model_name = '', model_pars = {}), CII = dict(model_name = '', model_pars = {}),
                                Halpha = dict(model_name = '', model_pars = {}), Lyalpha = dict(model_name = '', model_pars = {}), 
