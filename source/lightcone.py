@@ -6,10 +6,15 @@ import numpy as np
 from glob import glob
 from astropy.io import fits
 
+import camb
+import astropy.units as u
+import astropy.constants as cu
+
 import source.line_models as LM
 import source.external_sfrs as extSFRs
 
 from source.utilities import check_params,check_models,check_sfr,get_default_params
+from source.utilities import cached_property
 
 class Lightcone(object):
     '''
@@ -27,6 +32,9 @@ class Lightcone(object):
     
     -halo_lightcone_dir     Path to the directory containing all files related to
                             the halo lightcone catalog
+                            
+    -zmin,zmax              Minimum and maximum redshifts to read from the lightcone
+                            (default: 0,20 - limited by Universe Machine)
                             
     -lines                  What lines are painted in the lightcone. Dictionary with
                             bool values (default: All false). 
@@ -46,6 +54,7 @@ class Lightcone(object):
     '''
     def __init__(self,
                  halo_lightcone_dir = '',
+                 zmin = 0., zmax = 20,
                  lines = dict(CO = False, CII = False, Halpha = False, Lyalpha = False, HI = False),
                  models = dict(CO = dict(model_name = '', model_pars = {}), CII = dict(model_name = '', model_pars = {}),
                                Halpha = dict(model_name = '', model_pars = {}), Lyalpha = dict(model_name = '', model_pars = {}), 
@@ -78,32 +87,57 @@ class Lightcone(object):
         #Placeholder
         self.L_line_halo = None
         
+        #Initialize camb (we need background only) - values used in UM
+        camb_pars = camb.set_params(H0=68.0, omch2 = 0.1188368, ombh2 = 0.02312)
+        self.h = 0.68
+        self.cosmo = camb.get_background(camb_pars)
         
+    @cached_property
+    def Mpch(self):
+        '''
+        Mpc/h unit, required for interacting with hmf outputs
+        '''
+        return u.Mpc/self.h
+        
+    @cached_property
+    def Msunh(self):
+        '''
+        Msun/h unit, required for interacting with hmf outputs
+        '''
+        return u.Msun/self.h
+        
+    @cached_property
     def read_halo_catalog(self):
         '''
         Reads all the files from the halo catalog and appends the slices
         '''
         fnames = glob(self.halo_lightcone_dir+'/*')
         Nfiles = len(fnames)
-        #sort the fnames
+        #get the sorted indices from fnames
         ind = np.zeros(Nfiles).astype(int)
         for ifile in range(Nfiles):
             ind[ifile] =  int(fnames[ifile].split('_')[-1].split('.')[0])
         sort_ind = np.argsort(ind)
+        #get the edge distances for each slice in Mpc (25 Mpc/h width each slice) 
+        dist_edges = (np.arange(Nfiles+1))*25*self.Mpch.value
+        min_dist = self.cosmo.cosmo.comoving_radial_distance(self.zmin)
+        max_dist = self.cosmo.cosmo.comoving_radial_distance(self.zmax)
+        inds_in = np.where(np.logical_and(dist_edges[:-1] >= min_dist, dist_edges[1:] <= max_dist))[0]
+        N_in = len(inds_in)
         #open the first one
-        fil = fits.open(fnames[0])
+        fil = fits.open(fnames[sort_ind[inds_in[0]]])
         #Start the catalog appending everything
         bigcat = np.array(fil[1].data)
         #Open the rest and append
-        for ifile in range(1,len(fnames)):
+        for ifile in range(1,N_in):
             print(fnames[ifile])
-            fil = fits.open(fnames[ifile])
+            fil = fits.open(fnames[sort_ind[inds_in[ifile]]])
             bigcat = np.append(bigcat, np.array(fil[1].data))
             
         self.halo_catalog = bigcat
         return
         
-        
+    @cached_property
     def halo_luminosity(self):
         '''
         Computes the halo luminosity for each of the lines of interest
@@ -111,8 +145,9 @@ class Lightcone(object):
         L_line_halo = {}
         #Get the SFR
         if self.do_external_SFR:
-            ####CHECK UNITS OF MASS!!!!#####
-            SFR = getattr(extSFRs,self.external_SFR)(self.halo_catalog['M_HALO'],self.halo_catalog['Z'])
+            #convert halo mass to Msun
+            Mhalo_Msun = self.halo_catalog['M_HALO']*self.Msunh  
+            SFR = getattr(extSFRs,self.external_SFR)(Mhalo_Msun.value,self.halo_catalog['Z'])
         else:
             SFR = self.halo_catalog['SFR_HALO']
             
@@ -125,7 +160,9 @@ class Lightcone(object):
         
         return
         
+    
         
+    
     def make_lightcone(self):
         '''
         Wrapper for "read_halo_catalog" and "halo_luminosity"
@@ -133,6 +170,7 @@ class Lightcone(object):
         self.read_halo_catalog()
         self.halo_luminosity()
         return
+    
     
     def save_lightcone(self):
         '''
