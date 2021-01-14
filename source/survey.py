@@ -43,6 +43,9 @@ class Survey(Lightcone):
                             
     -target_line:           Target line of the survey (Default: CO)
     
+    -paint_catalog:         Boolean: Paint catalog or used a painted one.               DOES THIS MAKE SENSE OR ALWAYS TRUE????
+                            (Default: True). 
+    
     -output_root            Root path for output products. (default: output/default)                                
     '''
     def __init__(self,
@@ -57,6 +60,7 @@ class Survey(Lightcone):
                  Omega_field=2.25*u.deg**2,
                  target_line = 'CO',
                  output_root = "output/default",
+                 paint_catalog = True,
                  **lightcone_kwargs):
                      
         # Initiate Lightcone() parameters
@@ -77,6 +81,10 @@ class Survey(Lightcone):
         # Combine lightcone_params with survey_params
         self._input_params.update(self._survey_params)
         self._default_params.update(self._default_survey_params)
+        
+        if self.paint_catalog:
+            self.read_halo_catalog
+            self.halo_luminosity
         
 
         

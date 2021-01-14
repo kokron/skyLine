@@ -185,8 +185,8 @@ class Lightcone(object):
         '''
         Wrapper for "read_halo_catalog" and "halo_luminosity"
         '''
-        self.read_halo_catalog()
-        self.halo_luminosity()
+        self.read_halo_catalog
+        self.halo_luminosity
         return
     
     def save_lightcone(self):
