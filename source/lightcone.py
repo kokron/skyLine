@@ -98,7 +98,7 @@ class Lightcone(object):
         self.cosmo = camb.get_background(camb_pars)
         
         #Line frequencies:
-        line_nu0 = dict(CO = 115.271*u.GHz, CII = 1900.539*u.GHz, Halpha = 456805.72*u.GHz,
+        self.line_nu0 = dict(CO = 115.271*u.GHz, CII = 1900.539*u.GHz, Halpha = 456805.72*u.GHz,
                         Lyalpha = 2465398.5*u.GHz, HI = 1.4204134*u.GHz)
         
     #########
