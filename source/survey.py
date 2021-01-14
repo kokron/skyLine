@@ -7,6 +7,7 @@ import astropy.units as u
 import astropy.constants as cu
 
 from source.lightcone import Lightcone
+from source.utilities import cached_survey_property
 
 class Survey(object):
     '''
