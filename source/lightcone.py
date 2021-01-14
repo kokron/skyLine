@@ -13,8 +13,8 @@ import astropy.constants as cu
 import source.line_models as LM
 import source.external_sfrs as extSFRs
 
-from source.utilities import check_params,check_models,check_sfr,get_default_params
-from source.utilities import cached_property
+from source.utilities import check_params,get_default_params
+from source.utilities import cached_lightcone_property
 
 class Lightcone(object):
     '''
@@ -78,11 +78,16 @@ class Lightcone(object):
         # Set all given parameters
         for key in self._lightcone_params:
             setattr(self,key,self._lightcone_params[key])
-                                
-        # Check that the input line models are included
-        check_models(self.lines,self.models)
-        if self.do_external_SFR:
-            check_sfr(self.external_SFR)
+            
+        # Create overall lists of parameters (Only used if using one of 
+        self._input_params = {} 
+        self._default_params = {}
+        self._input_params.update(self._lightcone_params)
+        self._default_params.update(self._default_lighcone_params)
+        
+        # Create list of cached properties
+        self._update_lightcone_list = []
+        self._update_survey_list = []
             
         #Placeholder
         self.L_line_halo = None
@@ -92,21 +97,21 @@ class Lightcone(object):
         self.h = 0.68
         self.cosmo = camb.get_background(camb_pars)
         
-    @cached_property
+    @cached_lightcone_property
     def Mpch(self):
         '''
         Mpc/h unit, required for interacting with hmf outputs
         '''
         return u.Mpc/self.h
         
-    @cached_property
+    @cached_lightcone_property
     def Msunh(self):
         '''
         Msun/h unit, required for interacting with hmf outputs
         '''
         return u.Msun/self.h
         
-    @cached_property
+    @cached_lightcone_property
     def read_halo_catalog(self):
         '''
         Reads all the files from the halo catalog and appends the slices
@@ -137,7 +142,7 @@ class Lightcone(object):
         self.halo_catalog = bigcat
         return
         
-    @cached_property
+    @cached_lightcone_property
     def halo_luminosity(self):
         '''
         Computes the halo luminosity for each of the lines of interest
@@ -159,9 +164,6 @@ class Lightcone(object):
         self.L_line_halo = L_line_halo
         
         return
-        
-    
-        
     
     def make_lightcone(self):
         '''
@@ -170,7 +172,6 @@ class Lightcone(object):
         self.read_halo_catalog()
         self.halo_luminosity()
         return
-    
     
     def save_lightcone(self):
         '''
@@ -181,7 +182,27 @@ class Lightcone(object):
         #IF NOT, REMOVE OUTPUT_ROOT
         return
         
-                
-                
+    ########################################################################
+    # Method for updating input parameters and resetting cached properties #
+    ########################################################################
+    def update(self, **new_params):
+        # Check if params dict contains valid parameters
+        check_params(new_params,self._default_params)
+        #update the class that corresponds
+        lightcone_params = list(self._default_lightcone_params.keys())
+        survey_params = list(self._default_survey_params.keys())
+        if any(item in lightcone_params for item in new_params.keys()):
+            for attribute in self._update_lightcone_list:
+                delattr(self,attribute)
+            self._update_lightcone_list = []
+        if any(item in survey_params for item in new_params.keys()):
+            for attribute in self._update_survey_list:
+                delattr(self,attribute)
+            self._update_survey_list = []
+        #update parameters
+        for key in new_params:
+            setattr(self, key, new_params[key])
+            
+        return
     
 

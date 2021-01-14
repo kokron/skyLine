@@ -6,7 +6,7 @@ import source.line_models as LM
 import source.external_sfrs as extSFRs
 import inspect
 
-class cached_property(object):
+class cached_lightcone_property(object):
     """
     From github.com/Django, who wrote a much better version of this than
     the one I had previously.
@@ -21,6 +21,10 @@ class cached_property(object):
         if instance is None:
             return self
 
+        # ADDED THIS CODE TO LIST PROPERTY FOR UPDATING
+        instance._update_lightcone_list.append(self.func.__name__)
+        
+        res = instance.__dict__[self.func.__name__] = self.func(instance)
         return res
 
 def check_params(input_params, default_params):
@@ -44,28 +48,19 @@ def check_params(input_params, default_params):
         # Special requirements for some parameters
         if key == 'lines':
             for line in input_value.keys():
-                if line:
+                if input_value[line]:
                     if input_params['models'][line]['model_name'] == '':
                         raise ValueError('Please input a "model_name" within "models" for the {} line.'.format(line))
-                    elif input_params['models'][line]['model_pars'] == {}:
+                    elif not hasattr(LM,input_params['models'][line]['model_name']):
+                        raise ValueError('{} not found in line_models.py'.format(input_params['models'][line]['model_name']))
+                    if input_params['models'][line]['model_pars'] == {}:
                         raise ValueError('Please input the parameters of the model in "model_pars" within "models" for the {} line.'.format(line))
-
-def check_models(lines,models):
-    '''
-    Check that incompatible likelihoods are not included at the same time
-    '''
-    for line in lines.keys():
-        if lines[line] and not hasattr(LM,models[line]['model_name']):
-            raise ValueError('{} not found in line_models.py'.format(models[line]['model_name']))
+        elif key == 'do_external_SFR':
+            if input_value and not hasattr(extSFRs,input_params['external_SFR']):
+                raise ValueError('{} not found in external_sfrs.py'.format(input_params['external_SFR']))
+                
+    return
         
-
-def check_sfr(sfr):
-    '''
-    Check that incompatible likelihoods are not included at the same time
-    '''
-    if sfr and not hasattr(extSFRs,sfr):
-        raise ValueError('{} not found in external_sfrs.py'.format(sfr))
-
 
 def get_default_params(func):
     '''
