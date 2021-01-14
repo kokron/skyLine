@@ -80,6 +80,11 @@ def check_params(input_params, default_params):
             if input_value and not hasattr(extSFRs,input_params['external_SFR']):
                 raise ValueError('{} not found in external_sfrs.py'.format(input_params['external_SFR']))
                 
+        elif key == 'target_line':
+            lines_available = ['CO','CII','Halpha','Lyalpha','HI']
+            if input_value not in lines_available:
+                raise ValueError('The target line {} must be one of the available lines: {}'.format(input_value,lines_available))
+                
     return
         
 
