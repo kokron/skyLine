@@ -14,7 +14,7 @@ import source.line_models as LM
 import source.external_sfrs as extSFRs
 
 from source.utilities import check_params,get_default_params
-from source.utilities import cached_lightcone_property
+from source.utilities import cached_lightcone_property,cached_survey_property
 
 class Lightcone(object):
     '''
