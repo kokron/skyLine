@@ -83,7 +83,7 @@ class Lightcone(object):
         self._input_params = {} 
         self._default_params = {}
         self._input_params.update(self._lightcone_params)
-        self._default_params.update(self._default_lighcone_params)
+        self._default_params.update(self._default_lightcone_params)
         
         # Create list of cached properties
         self._update_lightcone_list = []
@@ -125,8 +125,8 @@ class Lightcone(object):
         sort_ind = np.argsort(ind)
         #get the edge distances for each slice in Mpc (25 Mpc/h width each slice) 
         dist_edges = (np.arange(Nfiles+1))*25*self.Mpch.value
-        min_dist = self.cosmo.cosmo.comoving_radial_distance(self.zmin)
-        max_dist = self.cosmo.cosmo.comoving_radial_distance(self.zmax)
+        min_dist = self.cosmo.comoving_radial_distance(self.zmin)
+        max_dist = self.cosmo.comoving_radial_distance(self.zmax)
         inds_in = np.where(np.logical_and(dist_edges[:-1] >= min_dist, dist_edges[1:] <= max_dist))[0]
         N_in = len(inds_in)
         #open the first one
