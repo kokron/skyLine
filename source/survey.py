@@ -57,16 +57,16 @@ class Survey(object):
                  Omega_field=2.25*u.deg**2,
                  target_line = 'CO',
                  output_root = "output/default",
-                 **kwargs):
+                 **lightcone_kwargs):
                      
         # Initiate Lightcone() parameters
-        Lightcone.__init__(self,**kwargs)
+        Lightcone.__init__(self,**lightcone_kwargs)
         
         self._update_lightcone_list = self._update_lightcone_list
         
         self._survey_params = locals()
         self._survey_params.pop('self')
-        self._survey_params.pop('kwargs')
+        self._survey_params.pop('lightcone_kwargs')
         self._default_survey_params = get_default_params(Survey.__init__)
         check_params(self._survey_params,self._default_survey_params)
         
