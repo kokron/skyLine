@@ -3,6 +3,8 @@ Base module to make a LIM survey from painted lightcone
 '''
 
 import numpy as np
+import astropy.units as u
+import astropy.constants as cu
 
 from source.lightcone import Lightcone
 
