@@ -40,7 +40,7 @@ class Lightcone(object):
                             bool values (default: All false). 
                             Available lines: CO, CII, H-alpha, Lyman-alpha, HI
                             
-    -model                  Models for each line. Dictionary of dictionaries (first layer,
+    -models                 Models for each line. Dictionary of dictionaries (first layer,
                             same components of "lines", second layer, the following 
                             components: model_name, model_pars (depends on the model))
                             (default: empty dictionary)
@@ -173,7 +173,7 @@ class Lightcone(object):
             
         for line in self.lines.keys():
             if self.lines[line]:
-                L_line_halo[line] = getattr(LM,models[line]['model_name'])(self,SFR,self.models[line]['model_pars'])
+                L_line_halo[line] = getattr(LM,self.models[line]['model_name'])(self,SFR,self.models[line]['model_pars'])
                 nuObs_line_halo[line] = self.line_nu0/(1+self.halo_catalog['Z'])
                 
         self.L_line_halo = L_line_halo
