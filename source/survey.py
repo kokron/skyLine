@@ -58,7 +58,7 @@ class Survey(Lightcone):
                  dnu=15.6*u.MHz,
                  tobs=6000*u.hr, 
                  Omega_field=2.25*u.deg**2,
-                 target_line = 'CO',
+                 target_line = 'CO',                 
                  output_root = "output/default",
                  paint_catalog = True,
                  **lightcone_kwargs):
@@ -103,14 +103,33 @@ class Survey(Lightcone):
         return self.nuObs_max - self.nuObs_min
         
     @cached_survey_property
-    def observed_catalog(self):
+    def observed_halos(self):
         '''
         Filters the halo catalog and only takes those that have observed
         frequencies within the experimental frequency bandwitdh
         '''
-        #Start for the target line
-        inds = np.where(np.logical_and(nuObs_line_halo[self.target_line] >= self.nuObs_min,
-                                       nuObs_line_halo[self.target_line] <= self.nuObs_max))[0]
-        return 
+        #empty catalog
+        observed_catalog = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),signal=np.array([]))
+        #signal here is T*Vol or I*vol (the vol factor to be divided later with the grid for P(k) or VID. Better name than signal?
+        
+        #Loop over lines to see what halos are within nuObs
+        for line in self.lines.keys():
+            if self.lines[line]:
+                inds = np.where(np.logical_and(self.nuObs_line_halo[line] >= self.nuObs_min,
+                                               self.nuObs_line_halo[line] <= self.nuObs_max))[0]
+                observed_catalog['RA'] = np.append(observed_catalog['RA'],self.halo_catalog['RA'][inds])
+                observed_catalog['DEC'] = np.append(observed_catalog['DEC'],self.halo_catalog['DEC'][inds])
+                observed_catalog['Zobs'] = np.append(observed_catalog['Zobs'],self.line_nu0[self.target_line]/self.nuObs_line_halo[line][inds]-1)
+                zhalo = self.halo_catalog['Z'][inds]
+                Hubble = self.cosmo.hubble_parameter(zhalo)*(u.km/u.Mpc/u.s)
+                if self.do_intensity:
+                    #intensity[Jy/sr]*Volume unit
+                    observed_catalog['signal'] = np.append(observed_catalog['signal'],
+                                    (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*L_line_halo[line]).to(u.Jy*u.Mpc**3/u.sr))
+                else:
+                    observed_catalog['signal'] = np.append(observed_catalog['signal'],
+                                    (cu.c**3*(1+zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*L_line_halo[line]).to(u.uK*u.Mpc**3))
+                
+        return observed_catalog
         
         
