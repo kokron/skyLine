@@ -28,8 +28,6 @@ def CO_Li16(self,SFR,pars):
     log10_LCO = (np.log10(LIR) - beta)/alpha
     #Add normal scatter in the log10(LCO)
     LCO_samples = 10**(np.random.normal(log10_LCO, sigma_LCO))
-    #transform to Lsun and give units
-    LCO_samples *= 4.9e-5*u.Lsun
-    
-    return LCO_samples
+    #transform to Lsun and give units  
+    return LCO_samples*4.9e-5*u.Lsun
     
