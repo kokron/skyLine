@@ -125,10 +125,10 @@ class Survey(Lightcone):
                 if self.do_intensity:
                     #intensity[Jy/sr]*Volume unit
                     observed_catalog['signal'] = np.append(observed_catalog['signal'],
-                                    (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*L_line_halo[line]).to(u.Jy*u.Mpc**3/u.sr))
+                                    (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*self.L_line_halo[line]).to(u.Jy*u.Mpc**3/u.sr))
                 else:
                     observed_catalog['signal'] = np.append(observed_catalog['signal'],
-                                    (cu.c**3*(1+zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*L_line_halo[line]).to(u.uK*u.Mpc**3))
+                                    (cu.c**3*(1+zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.L_line_halo[line]).to(u.uK*u.Mpc**3))
                 
         return observed_catalog
         
