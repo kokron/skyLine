@@ -21,7 +21,7 @@ class Survey(Lightcone):
     INPUT PARAMETERS:
     ------------------
     
-    -do_Intensity           Bool, if True quantities are output in specific temperature
+    -do_intensity           Bool, if True quantities are output in specific temperature
                             (Jy/sr units) rather than brightness temperature 
                             (muK units) 
                             (Default = False)
@@ -49,7 +49,7 @@ class Survey(Lightcone):
     -output_root            Root path for output products. (default: output/default)                                
     '''
     def __init__(self,
-                 do_Intensity=False,
+                 do_intensity=False,
                  Tsys_NEFD=40*u.K,
                  Nfeeds=19,
                  beam_FWHM=4.1*u.arcmin,
