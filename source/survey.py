@@ -85,6 +85,12 @@ class Survey(Lightcone):
         if self.paint_catalog:
             self.read_halo_catalog
             self.halo_luminosity
+            
+        #Set units for observable depending on convention
+        if self.do_intensity:
+            self.unit = u.Jy/u.sr
+        else:
+            self.unit = u.uK
         
 
         
@@ -109,7 +115,7 @@ class Survey(Lightcone):
         frequencies within the experimental frequency bandwitdh
         '''
         #empty catalog
-        observed_catalog = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),signal=np.array([]))
+        observed_catalog = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),signal=np.array([])*self.unit*u.Mpc**3)
         #signal here is T*Vol or I*vol (the vol factor to be divided later with the grid for P(k) or VID. Better name than signal?
         
         #Loop over lines to see what halos are within nuObs
@@ -125,10 +131,11 @@ class Survey(Lightcone):
                 if self.do_intensity:
                     #intensity[Jy/sr]*Volume unit
                     observed_catalog['signal'] = np.append(observed_catalog['signal'],
-                                    (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*self.L_line_halo[line]).to(u.Jy*u.Mpc**3/u.sr))
+                                    (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*self.L_line_halo[line]).to(self.unit*u.Mpc**3))
                 else:
+                    #Temperature[uK]*Volume unit
                     observed_catalog['signal'] = np.append(observed_catalog['signal'],
-                                    (cu.c**3*(1+zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.L_line_halo[line]).to(u.uK*u.Mpc**3))
+                                    (cu.c**3*(1+zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.L_line_halo[line]).to(self.unit*u.Mpc**3))
                 
         return observed_catalog
         
