@@ -253,7 +253,7 @@ class Survey(Lightcone):
                 Lbox = np.zeros(3)
                 for i in range(3):
                     Lbox[i] = np.max(lategrid[:,i])-np.min(lategrid[:,i])
-                Nmesh = np.array([self.supersample*self.Nchan.decompose(), 
+                Nmesh = np.array([self.supersample*self.Nchan, 
                                   self.supersample*Lbox[1]/sigma_perp, 
                                   self.supersample*Lbox[2]/sigma_perp], dtype=int)
                 #Compute the signal in each voxel
@@ -275,7 +275,9 @@ class Survey(Lightcone):
                 #Apply the filtering to smooth mesh
                 mesh = mesh.apply(aniso_filter, mode='complex', kind='wavenumber')
                 #paint the map and resample to [Nchannel,Npix^0.5,Npix^0.5] (and rescale by change in volume)
-                maps += mesh.paint(mode='real')#,Nmesh = [self.Nchan,self.Nside,self.Nside])*Nmesh[1]*Nmesh[2]/self.Npix
+                maps += mesh.paint(mode='real',
+                                   Nmesh = [self.Nchan*self.supersample,self.Nside*self.supersample,self.Nside*self.supersample])\
+                                   *Nmesh[1]*Nmesh[2]/self.Npix
         #Add the noise contribution 
         maps += np.random.normal(0.,self.sigmaN.value,maps.shape)
         
