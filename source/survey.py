@@ -214,7 +214,7 @@ class Survey(Lightcone):
         Each line has their own Cartesian volume, zmid, and smoothing scales.
         Then, all contributions are added to the target volume
         '''
-        maps = np.zeros([self.Nchan,Nside,Nside])
+        maps = np.zeros([self.Nchan,self.Nside,self.Nside])
         #Loop over lines and add all contributions
         for line in self.lines.keys():
             if self.lines[line]:
