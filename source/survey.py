@@ -58,7 +58,7 @@ class Survey(Lightcone):
     '''
     def __init__(self,
                  do_intensity=False,
-                 Tsys_NEFD=40*u.K,
+                 Tsys=40*u.K,
                  Nfeeds=19,
                  nuObs_min = 26.*u.GHz,
                  nuObs_max = 34.*u.GHz,
