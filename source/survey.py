@@ -301,41 +301,41 @@ class Survey(Lightcone):
         
         
         
-        
-    def aniso_filter(k, v):
-        '''
-        Filter for k_perp and k_par modes separately.
-        Applies to an nbodykit mesh object as a regular filter.
+    
+def aniso_filter(k, v):
+    '''
+    Filter for k_perp and k_par modes separately.
+    Applies to an nbodykit mesh object as a regular filter.
 
-        Uses globally defined variables:
-            sigma_perp - 'angular' smoothing in the flat sky approximation
-            sigma_par - 'radial' smoothing from number of channels.
+    Uses globally defined variables:
+        sigma_perp - 'angular' smoothing in the flat sky approximation
+        sigma_par - 'radial' smoothing from number of channels.
 
-        Usage:
-            mesh.apply(perp_filter, mode='complex', kind='wavenumber')
+    Usage:
+        mesh.apply(perp_filter, mode='complex', kind='wavenumber')
 
-        NOTES:
-        k[0] *= modifies the next iteration in the loop.
-        Coordinates are fixed except for the k[1] which are
-        the coordinate that sets what slab is being altered?
+    NOTES:
+    k[0] *= modifies the next iteration in the loop.
+    Coordinates are fixed except for the k[1] which are
+    the coordinate that sets what slab is being altered?
 
-        '''
-        global sigma_perp
-        global sigma_par
-        rper = sigma_perp
-        rpar = sigma_par
-        newk = copy.deepcopy(k)
+    '''
+    global sigma_perp
+    global sigma_par
+    rper = sigma_perp
+    rpar = sigma_par
+    newk = copy.deepcopy(k)
 
 
-        #Smooth the k-modes anisotropically
-        newk[0] *= rpar
-        newk[1] *= rper
-        newk[2] *= rper
+    #Smooth the k-modes anisotropically
+    newk[0] *= rpar
+    newk[1] *= rper
+    newk[2] *= rper
 
-        #Build smoothed values
-        kk = sum(ki**2 for ki in newk)
+    #Build smoothed values
+    kk = sum(ki**2 for ki in newk)
 
-        kk[kk==0]==1
+    kk[kk==0]==1
 
-        return np.exp(-0.5*kk)*v                
+    return np.exp(-0.5*kk)*v                
                     
