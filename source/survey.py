@@ -6,6 +6,7 @@ import numpy as np
 import dask.array as da
 import astropy.units as u
 import astropy.constants as cu
+import copy
 from nbodykit.source.catalog import ArrayCatalog
 
 from source.lightcone import Lightcone
@@ -272,8 +273,8 @@ class Survey(Lightcone):
                                    resampler='tsc',compensated=True)
                 #Apply the filtering to smooth mesh
                 mesh = mesh.apply(aniso_filter, mode='complex', kind='wavenumber')
-                #paint the map and resample to [Nchannel,Npix^0.5,Npix^0.5]
-                maps += mesh.paint(mode='real',Nmesh = [self.Nchan,self.Nside,self.Nside])
+                #paint the map and resample to [Nchannel,Npix^0.5,Npix^0.5] (and rescale by change in volume)
+                maps += mesh.paint(mode='real')#,Nmesh = [self.Nchan,self.Nside,self.Nside])*Nmesh[1]*Nmesh[2]/self.Npix
         #Add the noise contribution 
         maps += np.random.normal(0.,self.sigmaN.value,maps.shape)
         
@@ -322,6 +323,7 @@ def aniso_filter(k, v):
     '''
     global sigma_perp
     global sigma_par
+    print(sigma_perp,sigma_par)
     rper = sigma_perp
     rpar = sigma_par
     newk = copy.deepcopy(k)
