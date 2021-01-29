@@ -141,11 +141,43 @@ class Survey(Lightcone):
         return self.beam_FWHM*0.4247
         
     @cached_survey_property
+    def Nside(self):
+        '''
+        Number of pixels per side of the observed map
+        '''
+        return int(np.round((self.Omega_field**0.5/(self.beam_width/self.supersample)).decompose()))
+        
+    @cached_survey_property
+    def Npix(self):
+        '''
+        Number of pixels in the observed map
+        '''
+        return self.Nside*self.Nside
+        
+    @cached_survey_property
+    def Nchan(self):
+        '''
+        Number of frequency channels in the observed map
+        '''
+        return int(np.round((self.delta_nuObs/(self.dnu/self.supersample)).decompose()))
+        
+    @cached_survey_property
     def sigmaN(self):
         '''
         Instrumental voxel noise standard deviation
         '''
-        tpix = self.tobs
+        tpix = self.tobs/self.Npix
+        if self.do_intensity:
+            #intensity[Jy/sr]
+            sig2 = self.Tsys**2/(self.Nfeeds*tpix)
+        else:
+            #Temperature[uK]
+            sig2 = self.Tsys**2/(self.Nfeeds*self.dnu*tpix)
+        return (sig2**0.5).to(self.unit)
+        
+    #########################
+    ## Create the mock map ##
+    #########################
         
     @cached_survey_property
     def halos_in_survey(self):
@@ -182,7 +214,7 @@ class Survey(Lightcone):
         Each line has their own Cartesian volume, zmid, and smoothing scales.
         Then, all contributions are added to the target volume
         '''
-        maps = 0
+        maps = np.zeros([self.Nchan,Nside,Nside])
         #Loop over lines and add all contributions
         for line in self.lines.keys():
             if self.lines[line]:
@@ -236,10 +268,12 @@ class Survey(Lightcone):
                                    resampler='tsc',compensated=True)
                 #Apply the filtering to smooth mesh
                 mesh = mesh.apply(aniso_filter, mode='complex', kind='wavenumber')
-                maps += mesh.paint(mode='real')
-        #Add the noise contribution (computed at the target redshift)
+                #paint the map and resample to [Nchannel,Npix^0.5,Npix^0.5]
+                maps += mesh.paint(mode='real',Nmesh = [self.Nchan,Nside,Nside])
+        #Add the noise contribution 
+        maps += np.random.normal(0.,self.sigmaN.value,maps.shape)
         
-
+        return maps
                 
                 
                 
