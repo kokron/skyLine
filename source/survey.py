@@ -145,23 +145,24 @@ class Survey(Lightcone):
     @cached_survey_property
     def Nside(self):
         '''
-        Number of pixels per side of the observed map
+        Number of pixels per side of the observed map. RA,DEC
         '''
-        return int(np.round((self.Omega_field**0.5/(self.beam_width/self.supersample)).decompose()))
+        return int(np.round(((self.RAObs_max-self.RAObs_min)/(self.beam_width)).decompose()))\,
+               int(np.round(((self.DECObs_max-self.DECObs_min)/(self.beam_width)).decompose()))
         
     @cached_survey_property
     def Npix(self):
         '''
         Number of pixels in the observed map
         '''
-        return self.Nside*self.Nside
+        return self.Nside[0]*self.Nside[1]
         
     @cached_survey_property
     def Nchan(self):
         '''
         Number of frequency channels in the observed map
         '''
-        return int(np.round((self.delta_nuObs/(self.dnu/self.supersample)).decompose()))
+        return int(np.round((self.delta_nuObs/(self.dnu)).decompose()))
         
     @cached_survey_property
     def sigmaN(self):
@@ -216,7 +217,7 @@ class Survey(Lightcone):
         Each line has their own Cartesian volume, zmid, and smoothing scales.
         Then, all contributions are added to the target volume
         '''
-        maps = np.zeros([self.Nchan,self.Nside,self.Nside])
+        maps = np.zeros([self.Nchan*self.supersample,self.Nside[0]*self.supersample,self.Nside[1]*self.supersample])
         #Loop over lines and add all contributions
         for line in self.lines.keys():
             if self.lines[line]:
@@ -252,7 +253,7 @@ class Survey(Lightcone):
                 Lbox = np.zeros(3)
                 for i in range(3):
                     Lbox[i] = np.max(lategrid[:,i])-np.min(lategrid[:,i])
-                Nmesh = np.array([self.supersample*(self.delta_nuObs/self.dnu).decompose(), 
+                Nmesh = np.array([self.supersample*self.Nchan.decompose(), 
                                   self.supersample*Lbox[1]/sigma_perp, 
                                   self.supersample*Lbox[2]/sigma_perp], dtype=int)
                 #Compute the signal in each voxel
