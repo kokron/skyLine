@@ -10,7 +10,6 @@ from nbodykit.source.catalog import ArrayCatalog
 
 from source.lightcone import Lightcone
 from source.utilities import cached_survey_property,get_default_params,check_params
-from source.utilities import aniso_filter
 
 class Survey(Lightcone):
     '''
@@ -196,7 +195,7 @@ class Survey(Lightcone):
         #Loop over lines to see what halos are within nuObs
         for line in self.lines.keys():
             if self.lines[line]:
-                halos_survey[line] = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),Ztrue=np.array([]),Lhalo=np.array([])*Lsun)
+                halos_survey[line] = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),Ztrue=np.array([]),Lhalo=np.array([])*u.Lsun)
                 inds = (self.nuObs_line_halo[line] >= self.nuObs_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky
                 halos_survey[line]['RA'] = np.append(halos_survey[line]['RA'],self.halo_catalog['RA'][inds])
                 halos_survey[line]['DEC'] = np.append(halos_survey[line]['DEC'],self.halo_catalog['DEC'][inds])
@@ -226,7 +225,8 @@ class Survey(Lightcone):
                 y = da.cos(dec) * da.sin(ra)
                 z = da.sin(dec)
                 pos = da.vstack([x,y,z]).T
-                redshift = da.broadcast_arrays(self.halos_in_survey[line]['Ztrue'])
+                ra,dec,redshift = da.broadcast_arrays(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'],
+                                                      self.halos_in_survey[line]['Ztrue'])
                 #radial distances in Mpch/h
                 distances = self.cosmo.comoving_radial_distance(z)*u.Mpc
                 r = redshift.map_blocks(lambda z: (((self.cosmo.comoving_radial_distance(z)*u.Mpc).to(self.Mpch)).value), 
@@ -240,16 +240,16 @@ class Survey(Lightcone):
                     else:
                         lategrid[:,n] -= np.min(lategrid[:,n])
                 #Grid, voxel size and box size
-                zmid = (self.line_nu0[line]/self.nuObs_mean).decompose()-1
-                sigma_par = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch)
-                sigma_perp = (self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch)
-                Vcell = sigma_par*sigma_perp**2
+                zmid = (self.line_nu0[line]/self.nuObs_mean).decompose().value-1
+                sigma_par = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
+                sigma_perp = (self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
+                Vcell = sigma_par*sigma_perp**2*self.Mpch**3
                 Lbox = np.zeros(3)
                 for i in range(3):
                     Lbox[i] = np.max(lategrid[:,i])-np.min(lategrid[:,i])
                 Nmesh = np.array([self.supersample*(self.delta_nuObs/self.dnu).decompose(), 
-                                  self.supersample*Lbox[1]/sigma_perp.value, 
-                                  self.supersample*Lbox[2]/sigma_perp.value], dtype=int)
+                                  self.supersample*Lbox[1]/sigma_perp, 
+                                  self.supersample*Lbox[2]/sigma_perp], dtype=int)
                 #Compute the signal in each voxel
                 Hubble = self.cosmo.hubble_parameter(self.halos_in_survey[line]['Ztrue'])*(u.km/u.Mpc/u.s)
                 if self.do_intensity:
@@ -257,19 +257,19 @@ class Survey(Lightcone):
                     signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*self.halos_in_survey[line]['Lhalo']/Vcell).to(self.unit)
                 else:
                     #Temperature[uK]
-                    signal = (cu.c**3*(1+zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo']/Vcell).to(self.unit)
+                    signal = (cu.c**3*(1+self.halos_in_survey[line]['Ztrue'])**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo']/Vcell).to(self.unit)
                 #Build Nbodykit catalog object
                 nbodycat = np.empty(len(cartesian_halopos), dtype=[('Position', ('f8', 3)), ('Weight', 'f8')])
                 nbodycat['Position'] = lategrid 
                 nbodycat['Weight'] = signal.value 
                 cat = ArrayCatalog(nbodycat, Nmesh=Nmesh, BoxSize=Lbox)
                 #Convert to a mesh, weighting by signal
-                mesh = cat.to_mesh(Nmesh=nmeshes, BoxSize=Lboxes, weight='Weight',
+                mesh = cat.to_mesh(Nmesh=Nmesh, BoxSize=Lbox, weight='Weight',
                                    resampler='tsc',compensated=True)
                 #Apply the filtering to smooth mesh
                 mesh = mesh.apply(aniso_filter, mode='complex', kind='wavenumber')
                 #paint the map and resample to [Nchannel,Npix^0.5,Npix^0.5]
-                maps += mesh.paint(mode='real',Nmesh = [self.Nchan,Nside,Nside])
+                maps += mesh.paint(mode='real',Nmesh = [self.Nchan,self.Nside,self.Nside])
         #Add the noise contribution 
         maps += np.random.normal(0.,self.sigmaN.value,maps.shape)
         
@@ -298,7 +298,38 @@ class Survey(Lightcone):
         
         
         
-        
-        Hubble = self.cosmo.hubble_parameter(zhalo)*(u.km/u.Mpc/u.s)
-                
+def aniso_filter(k, v):
+    '''
+    Filter for k_perp and k_par modes separately.
+    Applies to an nbodykit mesh object as a regular filter.
+
+    Uses globally defined variables:
+        Rperp - 'angular' smoothing in the flat sky approximation
+        Rpar - 'radial' smoothing from number of channels.
+
+    Usage:
+        mesh.apply(perp_filter, mode='complex', kind='wavenumber')
+
+    NOTES:
+    k[0] *= modifies the next iteration in the loop.
+    Coordinates are fixed except for the k[1] which are
+    the coordinate that sets what slab is being altered?
+
+    '''
+    rper = sigma_perp
+    rpar = sigma_par
+    newk = copy.deepcopy(k)
+
+
+    #Smooth the k-modes anisotropically
+    newk[0] *= rpar
+    newk[1] *= rper
+    newk[2] *= rper
+
+    #Build smoothed values
+    kk = sum(ki**2 for ki in newk)
+
+    kk[kk==0]==1
+
+    return np.exp(-0.5*kk)*v                
                 
