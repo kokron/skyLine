@@ -8,6 +8,7 @@ import astropy.units as u
 import astropy.constants as cu
 import copy
 from nbodykit.source.catalog import ArrayCatalog
+from nbodykit.algorithms import FFTPower
 
 from source.lightcone import Lightcone
 from source.utilities import cached_survey_property,get_default_params,check_params
@@ -47,9 +48,25 @@ class Survey(Lightcone):
     -tobs:                  Observing time on a single field (Default = 6000 hr)
                                 
     -target_line:           Target line of the survey (Default: CO)
+                            
+    -Tmin_VID,Tmax_VID:     Minimum and maximum values to compute the VID histogram
+                            (default: 0.01 uK, 1000 uK)
+                            
+    -Nbin_hist              Number of bins for the VID histogram
+                            (default: 100)
     
     -supersample:           Factor of supersample with respect to the survey resolution
-                            when making the grid. (Default: 10)
+                            when making the grid. (Default: 10)     
+                                                   
+    -dk:                    k spacing for the power spectrum (default: 0.003 Mpc^-1~0.005 h/Mpc)
+    
+    -kmin:                  Minimum k value for the power spectrum (default: 0.007 Mpc^-1~0.01 h/Mpc)
+                                                
+    -Nmu:                   Number of sampling in mu to compute the power spectrum
+                            (default: 10)
+                            
+    -linear_VID_bin:        Boolean, to do linear (or log) binning for the VID histogram
+                            (default: False)
     
     -paint_catalog:         Boolean: Paint catalog or used a painted one.               DOES THIS MAKE SENSE OR ALWAYS TRUE????
                             (Default: True). 
@@ -69,8 +86,15 @@ class Survey(Lightcone):
                  dnu=15.6*u.MHz,
                  beam_FWHM=4.1*u.arcmin,
                  tobs=6000*u.hr, 
-                 target_line = 'CO',        
-                 supersample = 10,         
+                 target_line = 'CO', 
+                 Tmin_VID = 1.0e-2*u.uK,
+                 Tmax_VID = 1000.*u.uK,
+                 Nbin_hist = 100,  
+                 linear_VID_bin = False,  
+                 supersample = 10,     
+                 dk = 0.003*u.Mpc**-1,
+                 kmin = 0.007*u.Mpc**-1,
+                 Nmu = 10,    
                  output_root = "output/default",
                  paint_catalog = True,
                  **lightcone_kwargs):
@@ -93,6 +117,11 @@ class Survey(Lightcone):
         # Combine lightcone_params with survey_params
         self._input_params.update(self._survey_params)
         self._default_params.update(self._default_survey_params)
+        
+        # Check that the observed footprint is contained in the lightcone
+        if self.RAObs_min < self.RA_min or self.RAObs_max > self.RA_max or
+           self.DECObs_min < self.DEC_min or self.DECObs_max > self.DEC_max:
+               raise ValueError('Please, your observed limits RA_Obs=[{},{}], DEC_Obs=[{},{}] must be within the lightcone limits RA=[{},{}], DEC=[{},{}].'.format(self.RAObs_min,self.RAObs_max,self.DECObs_min,self.DECObs_max,self.RA_min,self.RA_max,self.DEC_min,self.DEC_max))
         
         if self.paint_catalog:
             self.read_halo_catalog
@@ -244,18 +273,13 @@ class Survey(Lightcone):
                     else:
                         lategrid[:,n] -= np.min(lategrid[:,n])
                 #Grid, voxel size and box size
-                zmid = (self.line_nu0[line]/self.nuObs_mean).decompose().value-1
-                global sigma_perp
-                global sigma_par
-                sigma_par = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
-                sigma_perp = (self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
-                Vcell = sigma_par*sigma_perp**2*self.Mpch**3
                 Lbox = np.zeros(3)
                 for i in range(3):
                     Lbox[i] = np.max(lategrid[:,i])-np.min(lategrid[:,i])
                 Nmesh = np.array([self.supersample*self.Nchan, 
-                                  self.supersample*Lbox[1]/sigma_perp, 
-                                  self.supersample*Lbox[2]/sigma_perp], dtype=int)
+                                  self.supersample*self.Nside[0], 
+                                  self.supersample*self.Nside[1]], dtype=int)
+                Vcell = Lbox[0]*Lbox[1]*Lbox[2]/(Nmesh[0]*Nmesh[1]*Nmesh[2])*self.Mpch**3
                 #Compute the signal in each voxel
                 Hubble = self.cosmo.hubble_parameter(self.halos_in_survey[line]['Ztrue'])*(u.km/u.Mpc/u.s)
                 if self.do_intensity:
@@ -273,38 +297,84 @@ class Survey(Lightcone):
                 mesh = cat.to_mesh(Nmesh=Nmesh, BoxSize=Lbox, weight='Weight',
                                    resampler='tsc',compensated=True)
                 #Apply the filtering to smooth mesh
+                zmid = (self.line_nu0[line]/self.nuObs_mean).decompose().value-1
+                global sigma_perp
+                global sigma_par
+                sigma_par = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
+                sigma_perp = (self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
                 mesh = mesh.apply(aniso_filter, mode='complex', kind='wavenumber')
                 #paint the map and resample to [Nchannel,Npix^0.5,Npix^0.5] (and rescale by change in volume)
-                maps += mesh.paint(mode='real',
-                                   Nmesh = [self.Nchan*self.supersample,self.Nside[0]*self.supersample,self.Nside[1]*self.supersample])\
-                                   *Nmesh[1]*Nmesh[2]/self.Npix
+                maps += mesh.paint(mode='real')
         #Add the noise contribution 
         maps += np.random.normal(0.,self.sigmaN.value,maps.shape)
         
         return maps
+        
+################################
+## Compute summary statistics ##
+################################
+
+   @cached_survey_property
+   def Pk_2d(self):
+       '''
+       Computes the 2d power spectrum P(k,mu) of the map
+       '''
+       return FFTPower(self.obs_map, '2d', Nmu=self.Nmu, poles=[0,2,4], los=[1,0,0], 
+                       dk=self.dk.to(self.Mpch**-1).value,kmin=self.kmin.to(self.Mpch**-1).value) 
+       
+    @cached_survey_property
+    def k_Pk_poles(self):
+        '''
+        Fourier wavenumbers for the multipoles of the power spectrum
+        '''
+        return self.Pk_2d.poles['k']
+        
+    @cached_survey_property
+    def Pk_0(self):
+        '''
+        Monopole of the power spectrum
+        '''
+        return self.Pk_2d.poles['power_0'].real
+        
+    @cached_survey_property
+    def Pk_2(self):
+        '''
+        Quadrupole of the power spectrum
+        '''
+        return self.Pk_2d.poles['power_2'].real
+        
+    @cached_survey_property
+    def Pk_4(self):
+        '''
+        Hexadecapole of the power spectrum
+        '''
+        return self.Pk_2d.poles['power_4'].real
+        
+    @cached_survey_property
+    def Ti(self):
+        '''
+        Center of the VID histogram bins
+        '''
+        if self.linear_VID_bin:
+            Te = np.linespace(self.Tmin_VID.value,self.Tmax_VID.value,self.Nbin_hist+1)*self.Tmin_VID.unit
+        else:
+            Te = np.linespace(np.log10(self.Tmin_VID.value),np.log10(self.Tmax_VID.value),self.Nbin_hist+1)*self.Tmin_VID.unit
+        Ti = (Te[:-1]+Te[1:])/2.
+        return Ti
+        
+    @cached_survey_property
+    def VID(self):
+        '''
+        
+        '''
+        return
+    
+        
+
                 
-                
-                
-                
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
+#########################
+## Auxiliary functions ##
+#########################
     
 def aniso_filter(k, v):
     '''
