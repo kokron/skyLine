@@ -3,11 +3,14 @@ Base module to make a LIM survey from painted lightcone
 '''
 
 import numpy as np
+import dask.array as da
 import astropy.units as u
 import astropy.constants as cu
+from nbodykit.source.catalog import ArrayCatalog
 
 from source.lightcone import Lightcone
 from source.utilities import cached_survey_property,get_default_params,check_params
+from source.utilities import aniso_filter
 
 class Survey(Lightcone):
     '''
@@ -26,22 +29,27 @@ class Survey(Lightcone):
                             (muK units) 
                             (Default = False)
                     
-    -Tsys:                  Instrument system temperature (Default = 40 K)
+    -Tsys:                  Instrument sensitivity. System temperature for brightness temperature
+                            and noise equivalent intensitiy (NEI) for intensitiy (Default = 40 K)
     
-    -Nfeeds:                Number of feeds (Default = 19)
+    -Nfeeds:                Total number of feeds (detector*antennas*polarizations) (Default = 19)
+        
+    -nuObs_min,nuObs_max:   minimum and maximum ends of the frequency band (Default = 26-34 GHz)
     
-    -beam_FWHM:             Beam full width at half maximum (Default = 4.1")
+    -RAObs_min,RAObs_max:   minimum and maximum RA observed (Default = -65-60 deg)
     
-    -nuObs_min,nuObs_max:   Total frequency range covered by instrument (Default = 8 GHz)
+    -DECObs_min,DECObs_max: minimum and maximum DEC observed (Default = -1.25-1.25 deg)
     
     -dnu:                   Width of a single frequency channel (Default = 15.6 MHz)
     
-    -tobs:                  Observing time on a single field (Default = 6000 hr)
+    -beam_FWHM:             Beam full width at half maximum (Default = 4.1 arcmin)
     
-    -Omega_field:           Solid angle covered by a single field
-                            (Default = 2.25 deg^2)    
-                            
+    -tobs:                  Observing time on a single field (Default = 6000 hr)
+                                
     -target_line:           Target line of the survey (Default: CO)
+    
+    -supersample:           Factor of supersample with respect to the survey resolution
+                            when making the grid. (Default: 10)
     
     -paint_catalog:         Boolean: Paint catalog or used a painted one.               DOES THIS MAKE SENSE OR ALWAYS TRUE????
                             (Default: True). 
@@ -52,13 +60,17 @@ class Survey(Lightcone):
                  do_intensity=False,
                  Tsys_NEFD=40*u.K,
                  Nfeeds=19,
-                 beam_FWHM=4.1*u.arcmin,
-                 nuObs_min = 26*u.GHz,
-                 nuObs_max = 34*u.GHz,
+                 nuObs_min = 26.*u.GHz,
+                 nuObs_max = 34.*u.GHz,
+                 RAObs_min = -65.*u.deg,
+                 RAObs_max = 60.*u.deg,
+                 DECObs_min = -1.25*u.deg,
+                 DECObs_max = 1.25*u.deg,
                  dnu=15.6*u.MHz,
+                 beam_FWHM=4.1*u.arcmin,
                  tobs=6000*u.hr, 
-                 Omega_field=2.25*u.deg**2,
-                 target_line = 'CO',                 
+                 target_line = 'CO',        
+                 supersample = 10,         
                  output_root = "output/default",
                  paint_catalog = True,
                  **lightcone_kwargs):
@@ -93,13 +105,19 @@ class Survey(Lightcone):
             self.unit = u.uK
         
 
-        
     @cached_survey_property
     def nuObs_mean(self):
         '''
         Mean observed frequency
         '''
         return 0.5*(self.nuObs_min+self.nuObs_max)
+        
+    @cached_survey_property
+    def zmid(self):
+        '''
+        Effective mid redshift (obtained from nuObs_mean):
+        '''
+        return (self.line_nu0[self.target_line]/self.nuObs_mean).decompose()-1
                  
     @cached_survey_property
     def delta_nuObs(self):
@@ -109,34 +127,144 @@ class Survey(Lightcone):
         return self.nuObs_max - self.nuObs_min
         
     @cached_survey_property
-    def observed_halos(self):
+    def Omega_field(self):
+        '''
+        Solid angle covered by the survey
+        '''
+        return (self.RAObs_max-self.RAObs_min)*(self.DECObs_max-self.DECObs_min)
+        
+    @cached_obs_property
+    def beam_width(self):
+        '''
+        Beam width defined as 1-sigma width of Gaussian beam profile
+        '''
+        return self.beam_FWHM*0.4247
+        
+    @cached_survey_property
+    def sigmaN(self):
+        '''
+        Instrumental voxel noise standard deviation
+        '''
+        tpix = self.tobs/
+        
+    @cached_survey_property
+    def halos_in_survey(self):
         '''
         Filters the halo catalog and only takes those that have observed
-        frequencies within the experimental frequency bandwitdh
+        frequencies within the experimental frequency bandwitdh and lie in the 
+        observed RA - DEC ranges
         '''
         #empty catalog
-        observed_catalog = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),signal=np.array([])*self.unit*u.Mpc**3)
-        #signal here is T*Vol or I*vol (the vol factor to be divided later with the grid for P(k) or VID. Better name than signal?
+        halos_survey = {}
         
+        #halos within footprint
+        inds_RA = (self.halo_catalog['RA'] > self.RAObs_min.value)&(self.halo_catalog['RA'] < self.RAObs_max.value)
+        inds_DEC = (self.halo_catalog['DEC'] > self.DECObs_min.value)&(self.halo_catalog['DEC'] < self.DECObs_max.value)
+        inds_sky = inds_RA&inds_DEC
         #Loop over lines to see what halos are within nuObs
         for line in self.lines.keys():
             if self.lines[line]:
-                inds = np.where(np.logical_and(self.nuObs_line_halo[line] >= self.nuObs_min,
-                                               self.nuObs_line_halo[line] <= self.nuObs_max))[0]
-                observed_catalog['RA'] = np.append(observed_catalog['RA'],self.halo_catalog['RA'][inds])
-                observed_catalog['DEC'] = np.append(observed_catalog['DEC'],self.halo_catalog['DEC'][inds])
-                observed_catalog['Zobs'] = np.append(observed_catalog['Zobs'],self.line_nu0[self.target_line]/self.nuObs_line_halo[line][inds]-1)
-                zhalo = self.halo_catalog['Z'][inds]
-                Hubble = self.cosmo.hubble_parameter(zhalo)*(u.km/u.Mpc/u.s)
-                if self.do_intensity:
-                    #intensity[Jy/sr]*Volume unit
-                    observed_catalog['signal'] = np.append(observed_catalog['signal'],
-                                    (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*self.L_line_halo[line]).to(self.unit*u.Mpc**3))
-                else:
-                    #Temperature[uK]*Volume unit
-                    observed_catalog['signal'] = np.append(observed_catalog['signal'],
-                                    (cu.c**3*(1+zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.L_line_halo[line]).to(self.unit*u.Mpc**3))
+                halos_survey[line] = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),Ztrue=np.array([]),Lhalo=np.array([])*Lsun)
+                inds = (self.nuObs_line_halo[line] >= self.nuObs_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky
+                halos_survey[line]['RA'] = np.append(halos_survey[line]['RA'],self.halo_catalog['RA'][inds])
+                halos_survey[line]['DEC'] = np.append(halos_survey[line]['DEC'],self.halo_catalog['DEC'][inds])
+                halos_survey[line]['Zobs'] = np.append(halos_survey[line]['Zobs'],(self.line_nu0[self.target_line]/self.nuObs_line_halo[line][inds]).decompose()-1)
+                halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog['Z'][inds])
+                halos_survey[line]['Lhalo'] = np.append(halos_survey[line]['Lhalo'],self.L_line_halo[line][inds])
                 
-        return observed_catalog
+        return halos_survey
+        
+    @cached_survey_property
+    def obs_map(self):
+        '''
+        Generates the mock intensity map observed in Cartesian coordinates.
+        
+        Each line has their own Cartesian volume, zmid, and smoothing scales.
+        Then, all contributions are added to the target volume
+        '''
+        maps = 0
+        #Loop over lines and add all contributions
+        for line in self.lines.keys():
+            if self.lines[line]:
+                #Convert the halo position in each volume to Cartesian coordinates (from Nbodykit)
+                ra,dec = da.broadcast_arrays(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'])
+                ra,dec  = da.deg2rad(ra),da.deg2rad(dec)
+                # cartesian coordinates
+                x = da.cos(dec) * da.cos(ra)
+                y = da.cos(dec) * da.sin(ra)
+                z = da.sin(dec)
+                pos = da.vstack([x,y,z]).T
+                redshift = da.broadcast_arrays(self.halos_in_survey[line]['Ztrue'])
+                #radial distances in Mpch/h
+                distances = self.cosmo.comoving_radial_distance(z)*u.Mpc
+                r = redshift.map_blocks(lambda z: (((self.cosmo.comoving_radial_distance(z)*u.Mpc).to(self.Mpch)).value), 
+                                        dtype=redshift.dtype)
+                cartesian_halopos = r[:,None] * pos
+                #Locate the grid such that bottom left corner of the box is [0,0,0] which is the nbodykit convention.
+                lategrid = np.array(cartesian_halopos.compute())
+                for n in range(3):
+                    if np.min(lategrid[:,n]) < 0:
+                        lategrid[:,n] += np.abs(np.min(lategrid[:,n]))
+                    else:
+                        lategrid[:,n] -= np.min(lategrid[:,n])
+                #Grid, voxel size and box size
+                zmid = (self.line_nu0[line]/self.nuObs_mean).decompose()-1
+                sigma_par = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch)
+                sigma_perp = (self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch)
+                Vcell = sigma_par*sigma_perp**2
+                Lbox = np.zeros(3)
+                for i in range(3):
+                    Lbox[i] = np.max(lategrid[:,i])-np.min(lategrid[:,i])
+                Nmesh = np.array([self.supersample*(self.delta_nuObs/self.dnu).decompose(), 
+                                  self.supersample*Lbox[1]/sigma_perp.value, 
+                                  self.supersample*Lbox[2]/sigma_perp.value], dtype=int)
+                #Compute the signal in each voxel
+                Hubble = self.cosmo.hubble_parameter(self.halos_in_survey[line]['Ztrue'])*(u.km/u.Mpc/u.s)
+                if self.do_intensity:
+                    #intensity[Jy/sr]
+                    signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*self.halos_in_survey[line]['Lhalo']/Vcell).to(self.unit)
+                else:
+                    #Temperature[uK]
+                    signal = (cu.c**3*(1+zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo']/Vcell).to(self.unit)
+                #Build Nbodykit catalog object
+                nbodycat = np.empty(len(cartesian_halopos), dtype=[('Position', ('f8', 3)), ('Weight', 'f8')])
+                nbodycat['Position'] = lategrid 
+                nbodycat['Weight'] = signal.value 
+                cat = ArrayCatalog(nbodycat, Nmesh=Nmesh, BoxSize=Lbox)
+                #Convert to a mesh, weighting by signal
+                mesh = cat.to_mesh(Nmesh=nmeshes, BoxSize=Lboxes, weight='Weight',
+                                   resampler='tsc',compensated=True)
+                #Apply the filtering to smooth mesh
+                mesh = mesh.apply(aniso_filter, mode='complex', kind='wavenumber')
+                maps += mesh.paint(mode='real')
+        #Add the noise contribution (computed at the target redshift)
+        
+
+                
+                
+                
+                
         
         
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        Hubble = self.cosmo.hubble_parameter(zhalo)*(u.km/u.Mpc/u.s)
+                
+                

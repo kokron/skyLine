@@ -36,6 +36,12 @@ class Lightcone(object):
     -zmin,zmax              Minimum and maximum redshifts to read from the lightcone
                             (default: 0,20 - limited by Universe Machine)
                             
+    -RA_min,RA_max:         minimum and maximum RA to read from the lightcone 
+                            (Default = -65-60 deg)
+    
+    -DEC_min,DEC_max:       minimum and maximum DEC to read from the lightcone 
+                            (Default = -1.25-1.25 deg)
+                            
     -lines                  What lines are painted in the lightcone. Dictionary with
                             bool values (default: All false). 
                             Available lines: CO, CII, H-alpha, Lyman-alpha, HI
@@ -55,6 +61,8 @@ class Lightcone(object):
     def __init__(self,
                  halo_lightcone_dir = '',
                  zmin = 0., zmax = 20.,
+                 RA_min = -65.*u.deg,RA_max = 60.*u.deg,
+                 DEC_min = -1.25*u.deg,DEC_max = 1.25*u.deg,
                  lines = dict(CO = False, CII = False, Halpha = False, Lyalpha = False, HI = False),
                  models = dict(CO = dict(model_name = '', model_pars = {}), CII = dict(model_name = '', model_pars = {}),
                                Halpha = dict(model_name = '', model_pars = {}), Lyalpha = dict(model_name = '', model_pars = {}), 
@@ -150,7 +158,11 @@ class Lightcone(object):
         for ifile in range(1,N_in):
             print(fnames[ifile])
             fil = fits.open(fnames[sort_ind[inds_in[ifile]]])
-            bigcat = np.append(bigcat, np.array(fil[1].data))
+            data = np.array(fil[1].data)
+            inds_RA = (data['RA'] > self.RA_min.value)&(data['RA'] < self.RA_max.value)
+            inds_DEC = (data['DEC'] > self.DEC_min.value)&(data['DEC'] < self.DEC_max.value)
+            inds_sky = inds_RA&inds_DEC
+            bigcat = np.append(bigcat, data[inds_sky])
             
         self.halo_catalog = bigcat
         return
