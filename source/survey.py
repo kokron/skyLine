@@ -147,7 +147,7 @@ class Survey(Lightcone):
         '''
         Number of pixels per side of the observed map. RA,DEC
         '''
-        return int(np.round(((self.RAObs_max-self.RAObs_min)/(self.beam_width)).decompose()))\,
+        return int(np.round(((self.RAObs_max-self.RAObs_min)/(self.beam_width)).decompose())),\
                int(np.round(((self.DECObs_max-self.DECObs_min)/(self.beam_width)).decompose()))
         
     @cached_survey_property
@@ -322,8 +322,8 @@ def aniso_filter(k, v):
     the coordinate that sets what slab is being altered?
 
     '''
-    global sigma_perp
-    global sigma_par
+    #global sigma_perp
+    #global sigma_par
     print(sigma_perp,sigma_par)
     rper = sigma_perp
     rpar = sigma_par
