@@ -133,7 +133,7 @@ class Survey(Lightcone):
         '''
         return (self.RAObs_max-self.RAObs_min)*(self.DECObs_max-self.DECObs_min)
         
-    @cached_obs_property
+    @cached_survey_property
     def beam_width(self):
         '''
         Beam width defined as 1-sigma width of Gaussian beam profile
