@@ -276,7 +276,7 @@ class Survey(Lightcone):
                 mesh = mesh.apply(aniso_filter, mode='complex', kind='wavenumber')
                 #paint the map and resample to [Nchannel,Npix^0.5,Npix^0.5] (and rescale by change in volume)
                 maps += mesh.paint(mode='real',
-                                   Nmesh = [self.Nchan*self.supersample,self.Nside*self.supersample,self.Nside*self.supersample])\
+                                   Nmesh = [self.Nchan*self.supersample,self.Nside[0]*self.supersample,self.Nside[1]*self.supersample])\
                                    *Nmesh[1]*Nmesh[2]/self.Npix
         #Add the noise contribution 
         maps += np.random.normal(0.,self.sigmaN.value,maps.shape)
@@ -323,10 +323,7 @@ def aniso_filter(k, v):
     Coordinates are fixed except for the k[1] which are
     the coordinate that sets what slab is being altered?
 
-    '''
-    #global sigma_perp
-    #global sigma_par
-    print(sigma_perp,sigma_par)
+    ''' 
     rper = sigma_perp
     rpar = sigma_par
     newk = copy.deepcopy(k)
