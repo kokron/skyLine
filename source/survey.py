@@ -145,7 +145,7 @@ class Survey(Lightcone):
         '''
         Instrumental voxel noise standard deviation
         '''
-        tpix = self.tobs/
+        tpix = self.tobs
         
     @cached_survey_property
     def halos_in_survey(self):
