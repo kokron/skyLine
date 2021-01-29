@@ -102,7 +102,9 @@ class Survey(Lightcone):
             self.unit = u.Jy/u.sr
         else:
             self.unit = u.uK
-        
+            
+        sigma_perp = 0.
+        sigma_par = 0.
 
     @cached_survey_property
     def nuObs_mean(self):
@@ -241,6 +243,8 @@ class Survey(Lightcone):
                         lategrid[:,n] -= np.min(lategrid[:,n])
                 #Grid, voxel size and box size
                 zmid = (self.line_nu0[line]/self.nuObs_mean).decompose().value-1
+                global sigma_perp
+                global sigma_par
                 sigma_par = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
                 sigma_perp = (self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
                 Vcell = sigma_par*sigma_perp**2*self.Mpch**3
@@ -298,38 +302,40 @@ class Survey(Lightcone):
         
         
         
-def aniso_filter(k, v):
-    '''
-    Filter for k_perp and k_par modes separately.
-    Applies to an nbodykit mesh object as a regular filter.
+    def aniso_filter(k, v):
+        '''
+        Filter for k_perp and k_par modes separately.
+        Applies to an nbodykit mesh object as a regular filter.
 
-    Uses globally defined variables:
-        Rperp - 'angular' smoothing in the flat sky approximation
-        Rpar - 'radial' smoothing from number of channels.
+        Uses globally defined variables:
+            sigma_perp - 'angular' smoothing in the flat sky approximation
+            sigma_par - 'radial' smoothing from number of channels.
 
-    Usage:
-        mesh.apply(perp_filter, mode='complex', kind='wavenumber')
+        Usage:
+            mesh.apply(perp_filter, mode='complex', kind='wavenumber')
 
-    NOTES:
-    k[0] *= modifies the next iteration in the loop.
-    Coordinates are fixed except for the k[1] which are
-    the coordinate that sets what slab is being altered?
+        NOTES:
+        k[0] *= modifies the next iteration in the loop.
+        Coordinates are fixed except for the k[1] which are
+        the coordinate that sets what slab is being altered?
 
-    '''
-    rper = sigma_perp
-    rpar = sigma_par
-    newk = copy.deepcopy(k)
+        '''
+        global sigma_perp
+        global sigma_par
+        rper = sigma_perp
+        rpar = sigma_par
+        newk = copy.deepcopy(k)
 
 
-    #Smooth the k-modes anisotropically
-    newk[0] *= rpar
-    newk[1] *= rper
-    newk[2] *= rper
+        #Smooth the k-modes anisotropically
+        newk[0] *= rpar
+        newk[1] *= rper
+        newk[2] *= rper
 
-    #Build smoothed values
-    kk = sum(ki**2 for ki in newk)
+        #Build smoothed values
+        kk = sum(ki**2 for ki in newk)
 
-    kk[kk==0]==1
+        kk[kk==0]==1
 
-    return np.exp(-0.5*kk)*v                
-                
+        return np.exp(-0.5*kk)*v                
+                    
