@@ -248,6 +248,8 @@ class Survey(Lightcone):
         '''
         maps = np.zeros([self.Nchan*self.supersample,self.Nside[0]*self.supersample,self.Nside[1]*self.supersample])
         #Loop over lines and add all contributions
+        global sigma_par
+        global sigma_perp
         for line in self.lines.keys():
             if self.lines[line]:
                 #Convert the halo position in each volume to Cartesian coordinates (from Nbodykit)
@@ -298,16 +300,19 @@ class Survey(Lightcone):
                                    resampler='tsc',compensated=True)
                 #Apply the filtering to smooth mesh
                 zmid = (self.line_nu0[line]/self.nuObs_mean).decompose().value-1
-                global sigma_perp
-                global sigma_par
                 sigma_par = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
                 sigma_perp = (self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
                 mesh = mesh.apply(aniso_filter, mode='complex', kind='wavenumber')
                 #paint the map and resample to [Nchannel,Npix^0.5,Npix^0.5] (and rescale by change in volume)
                 maps += mesh.paint(mode='real')
         #Add the noise contribution 
+        #noise_map = maps*0. + np.random.normal(0.,self.sigmaN.value,maps.shape)
+        #zmid = (self.line_nu0[self.target_line]/self.nuObs_mean).decompose().value-1
+        #sigma_par = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
+        #sigma_perp = (self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
+        #noise_map = noise_map.apply(aniso_filter, mode='complex', kind='wavenumber')
+        #maps += noise_map.paint(mode='real')
         maps += np.random.normal(0.,self.sigmaN.value,maps.shape)
-        
         return maps
         
 ################################
@@ -399,7 +404,6 @@ def aniso_filter(k, v):
     rpar = sigma_par
     newk = copy.deepcopy(k)
 
-    print(rper,rpar)
     #Smooth the k-modes anisotropically
     newk[0] *= rpar
     newk[1] *= rper
