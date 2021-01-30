@@ -363,11 +363,12 @@ class Survey(Lightcone):
         return Ti
         
     @cached_survey_property
-    def VID(self):
+    def Bi_VID(self):
         '''
-        
+        Computes the histogram of temperatures in each voxel in hte observed map.
+        Equivalent to the VID
         '''
-        return
+        return 
     
         
 
