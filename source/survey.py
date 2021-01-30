@@ -119,7 +119,7 @@ class Survey(Lightcone):
         self._default_params.update(self._default_survey_params)
         
         # Check that the observed footprint is contained in the lightcone
-        if self.RAObs_min < self.RA_min or self.RAObs_max > self.RA_max or
+        if self.RAObs_min < self.RA_min or self.RAObs_max > self.RA_max or \
            self.DECObs_min < self.DEC_min or self.DECObs_max > self.DEC_max:
                raise ValueError('Please, your observed limits RA_Obs=[{},{}], DEC_Obs=[{},{}] must be within the lightcone limits RA=[{},{}], DEC=[{},{}].'.format(self.RAObs_min,self.RAObs_max,self.DECObs_min,self.DECObs_max,self.RA_min,self.RA_max,self.DEC_min,self.DEC_max))
         
@@ -314,8 +314,8 @@ class Survey(Lightcone):
 ## Compute summary statistics ##
 ################################
 
-   @cached_survey_property
-   def Pk_2d(self):
+    @cached_survey_property
+    def Pk_2d(self):
        '''
        Computes the 2d power spectrum P(k,mu) of the map
        '''
@@ -399,7 +399,7 @@ def aniso_filter(k, v):
     rpar = sigma_par
     newk = copy.deepcopy(k)
 
-
+    print(rper,rpar)
     #Smooth the k-modes anisotropically
     newk[0] *= rpar
     newk[1] *= rper
