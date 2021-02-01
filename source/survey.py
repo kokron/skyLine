@@ -293,11 +293,11 @@ class Survey(Lightcone):
                 #Build Nbodykit catalog object
                 nbodycat = np.empty(len(cartesian_halopos), dtype=[('Position', ('f8', 3)), ('Weight', 'f8')])
                 nbodycat['Position'] = lategrid 
-                nbodycat['Weight'] = signal.value 
+                nbodycat['Signal'] = signal.value 
                 cat = ArrayCatalog(nbodycat, Nmesh=Nmesh, BoxSize=Lbox)
                 #Convert to a mesh, weighting by signal
-                mesh = cat.to_mesh(Nmesh=Nmesh, BoxSize=Lbox, weight='Weight',
-                                   resampler='tsc',compensated=True)
+                mesh = cat.to_mesh(Nmesh=Nmesh, BoxSize=Lbox, value='Signal',
+                                   resampler='tsc',compensated=True,interlaced=True)
                 #Apply the filtering to smooth mesh
                 zmid = (self.line_nu0[line]/self.nuObs_mean).decompose().value-1
                 sigma_par = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
