@@ -291,7 +291,7 @@ class Survey(Lightcone):
                     #Temperature[uK]
                     signal = (cu.c**3*(1+self.halos_in_survey[line]['Ztrue'])**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo']/Vcell).to(self.unit)
                 #Build Nbodykit catalog object
-                nbodycat = np.empty(len(cartesian_halopos), dtype=[('Position', ('f8', 3)), ('Weight', 'f8')])
+                nbodycat = np.empty(len(cartesian_halopos), dtype=[('Position', ('f8', 3)), ('Signal', 'f8')])
                 nbodycat['Position'] = lategrid 
                 nbodycat['Signal'] = signal.value 
                 cat = ArrayCatalog(nbodycat, Nmesh=Nmesh, BoxSize=Lbox)
