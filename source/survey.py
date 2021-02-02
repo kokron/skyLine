@@ -9,7 +9,8 @@ import astropy.constants as cu
 import copy
 from nbodykit.source.catalog import ArrayCatalog
 from nbodykit.algorithms import FFTPower
-
+import pmesh
+from pmesh.pm import RealField, ComplexField
 from source.lightcone import Lightcone
 from source.utilities import cached_survey_property,get_default_params,check_params
 
@@ -290,21 +291,44 @@ class Survey(Lightcone):
                 else:
                     #Temperature[uK]
                     signal = (cu.c**3*(1+self.halos_in_survey[line]['Ztrue'])**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo']/Vcell).to(self.unit)
-                #Build Nbodykit catalog object
-                nbodycat = np.empty(len(cartesian_halopos), dtype=[('Position', ('f8', 3)), ('Signal', 'f8')])
-                nbodycat['Position'] = lategrid 
-                nbodycat['Signal'] = signal.value 
-                cat = ArrayCatalog(nbodycat, Nmesh=Nmesh, BoxSize=Lbox)
-                #Convert to a mesh, weighting by signal
-                mesh = cat.to_mesh(Nmesh=Nmesh, BoxSize=Lbox, value='Signal',
-                                   resampler='tsc',compensated=True,interlaced=True)
-                #Apply the filtering to smooth mesh
+
                 zmid = (self.line_nu0[line]/self.nuObs_mean).decompose().value-1
                 sigma_par = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
                 sigma_perp = (self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
-                mesh = mesh.apply(aniso_filter, mode='complex', kind='wavenumber')
-                #paint the map and resample to [Nchannel,Npix^0.5,Npix^0.5] (and rescale by change in volume)
-                maps += mesh.paint(mode='real')
+
+                if self.pmeshpaint:
+                    #Alternative painting using pmesh directly instead of nbk
+                    pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler='cic')
+                    #Make realfield object
+                    realfield = pm.create(type='real')
+                    layout = pm.decompose(lategrid)
+                    #Exchange positions between different MPI ranks 
+                    p = layout.exchange(lategrid)
+                    #Assign weights following the layout of particles
+                    m = layout.exchange(signal.value)
+
+                    pm.paint(p, out=realfield, mass=m, resampler='cic')
+
+                    realfield = realfield.r2c()
+                    #Fourier-transformed fields. 
+                    realfield = realfield.apply(aniso_filter, mode='complex', kind='wavenumber')
+
+                    #Now assumes maps is in Fourier-space
+                    maps+=realfield
+                else:
+                #Build Nbodykit catalog object
+                    nbodycat = np.empty(len(cartesian_halopos), dtype=[('Position', ('f8', 3)), ('Signal', 'f8')])
+                    nbodycat['Position'] = lategrid 
+                    nbodycat['Signal'] = signal.value 
+                    cat = ArrayCatalog(nbodycat, Nmesh=Nmesh, BoxSize=Lbox)
+                    #Convert to a mesh, weighting by signal
+                    mesh = cat.to_mesh(Nmesh=Nmesh, BoxSize=Lbox, value='Signal',
+                                       resampler='tsc',compensated=True,interlaced=True)
+                #Apply the filtering to smooth mesh
+
+                    mesh = mesh.apply(aniso_filter, mode='complex', kind='wavenumber')
+                    #paint the map and resample to [Nchannel,Npix^0.5,Npix^0.5] (and rescale by change in volume)
+                    maps += mesh.paint(mode='real')
         #Add the noise contribution 
         #noise_map = maps*0. + np.random.normal(0.,self.sigmaN.value,maps.shape)
         #zmid = (self.line_nu0[self.target_line]/self.nuObs_mean).decompose().value-1
@@ -312,7 +336,7 @@ class Survey(Lightcone):
         #sigma_perp = (self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
         #noise_map = noise_map.apply(aniso_filter, mode='complex', kind='wavenumber')
         #maps += noise_map.paint(mode='real')
-        maps += np.random.normal(0.,self.sigmaN.value,maps.shape)
+                    maps += np.random.normal(0.,self.sigmaN.value,maps.shape)
         return maps
         
 ################################
