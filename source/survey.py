@@ -98,6 +98,7 @@ class Survey(Lightcone):
                  Nmu = 10,    
                  output_root = "output/default",
                  paint_catalog = True,
+                 pmeshpaint = True,
                  **lightcone_kwargs):
                      
         # Initiate Lightcone() parameters
@@ -247,7 +248,12 @@ class Survey(Lightcone):
         Each line has their own Cartesian volume, zmid, and smoothing scales.
         Then, all contributions are added to the target volume
         '''
-        maps = np.zeros([self.Nchan*self.supersample,self.Nside[0]*self.supersample,self.Nside[1]*self.supersample])
+
+        if self.pmeshpaint:
+            maps = np.zeros([self.Nchan*self.supersample,self.Nside[0]*self.supersample,self.Nside[1]*self.supersample//2 + 1],dtype='complex64')
+        else:
+
+            maps = np.zeros([self.Nchan*self.supersample,self.Nside[0]*self.supersample,self.Nside[1]*self.supersample],dtype='float32')
         #Loop over lines and add all contributions
         global sigma_par
         global sigma_perp
@@ -311,8 +317,7 @@ class Survey(Lightcone):
 
                     realfield = realfield.r2c()
                     #Fourier-transformed fields. 
-                    realfield = realfield.apply(aniso_filter, mode='complex', kind='wavenumber')
-
+                    realfield = realfield.apply(aniso_filter, kind='wavenumber')
                     #Now assumes maps is in Fourier-space
                     maps+=realfield
                 else:
