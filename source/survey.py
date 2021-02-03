@@ -241,6 +241,111 @@ class Survey(Lightcone):
         return halos_survey
         
     @cached_survey_property
+    def obs_fourier_map(self):
+        '''
+        Generates the mock intensity map observed in Fourier space,
+        obtained from Cartesian coordinates.
+        
+        Use obs_fourier_map.c2r() to get the real field
+        '''
+        #Define the mesh divisions
+        Nmesh = np.array([self.supersample*self.Nchan, 
+                  self.supersample*self.Nside[0], 
+                  self.supersample*self.Nside[1]], dtype=int)
+        #box angular limits
+        RAlims = np.array([self.RAObs_min.value,self.RAObs_max.value])
+        DEClims = np.array([self.DECObs_min.value,self.DECObs_max.value])
+        ra,dec  = np.deg2rad(RAlims),np.deg2rad(DEClims)
+        x = np.cos(dec) * np.cos(ra)
+        y = np.cos(dec) * np.sin(ra)
+        z = np.sin(dec)
+        pos_lims = np.vstack([x,y,z]).T
+        #box size in observed redshift
+        Zlims = (self.line_nu0[self.target_line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
+        r = ((self.cosmo.comoving_radial_distance(Zlims)*u.Mpc).to(self.Mpch)).value
+        grid_lim = r*pos_lims
+        Lbox = np.zeros(3)
+        for i in range(3):
+            Lbox[i] = np.max(grid_lim[:,i])-np.min(lategrid[:,i])
+        #Loop over lines and add all contributions        
+        global sigma_par
+        global sigma_perp
+        maps = np.zeros([Nmesh[0],Nmesh[1],Nmes[2]//2 + 1],dtype='complex64')
+        for line in self.lines.keys():
+            if self.lines[line]:
+                #Get true cell volume
+                Zlims = (self.line_nu0[lines].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
+                r = ((self.cosmo.comoving_radial_distance(Zlims)*u.Mpc).to(self.Mpch)).value
+                grid_lim = r*pos_lims
+                Lbox_true = np.zeros(3)
+                for i in range(3):
+                    Lbox_true[i] = np.max(grid_lim[:,i])-np.min(lategrid[:,i])
+                Vcell_true = Lbox_true[0]*Lbox_true[1]*Lbox_true[2]/(Nmesh[0]*Nmesh[1]*Nmesh[2])*(self.Mpch**3).to(self.Mpch**3)
+                #Get positions using the observed redshift
+                #Convert the halo position in each volume to Cartesian coordinates (from Nbodykit)
+                ra,dec = da.broadcast_arrays(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'])
+                ra,dec  = da.deg2rad(ra),da.deg2rad(dec)
+                # cartesian coordinates
+                x = da.cos(dec) * da.cos(ra)
+                y = da.cos(dec) * da.sin(ra)
+                z = da.sin(dec)
+                pos = da.vstack([x,y,z]).T
+                ra,dec,redshift = da.broadcast_arrays(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'],
+                                                      self.halos_in_survey[line]['Zobs'])
+                #radial distances in Mpch/h
+                r = redshift.map_blocks(lambda zz: (((self.cosmo.comoving_radial_distance(zz)*u.Mpc).to(self.Mpch)).value), 
+                                        dtype=redshift.dtype)
+                cartesian_halopos = r[:,None] * pos
+                #Locate the grid such that bottom left corner of the box is [0,0,0] which is the nbodykit convention.
+                lategrid = np.array(cartesian_halopos.compute())
+                for n in range(3):
+                    if np.min(lategrid[:,n]) < 0:
+                        lategrid[:,n] += np.abs(np.min(lategrid[:,n]))
+                    else:
+                        lategrid[:,n] -= np.min(lategrid[:,n])
+                #Compute the signal in each voxel (with Ztrue and Vcell_true)
+                Hubble = self.cosmo.hubble_parameter(self.halos_in_survey[line]['Ztrue'])*(u.km/u.Mpc/u.s)
+                if self.do_intensity:
+                    #intensity[Jy/sr]
+                    signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
+                else:
+                    #Temperature[uK]
+                    signal = (cu.c**3*(1+self.halos_in_survey[line]['Ztrue'])**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
+                #compute scales for the anisotropic filter (in Ztrue -> zmid)
+                zmid = (self.line_nu0[line]/self.nuObs_mean).decompose().value-1
+                sigma_par = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
+                sigma_perp = (self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
+                #Set the emitter in the grid and paint using pmesh directly instead of nbk
+                pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler='tsc')
+                #Make realfield object
+                field = pm.create(type='real')
+                layout = pm.decompose(lategrid)
+                #Exchange positions between different MPI ranks 
+                p = layout.exchange(lategrid)
+                #Assign weights following the layout of particles
+                m = layout.exchange(signal.value)
+                pm.paint(p, out=field, mass=m, resampler='tsc')
+                #Add noise in the cosmic volume probed by target line
+                if line == self.target_line:
+                    #distribution is positive gaussian with 0 mean
+                    vec = np.linspace(0.,6*self.sigmaN,1024)
+                    exparg = -0.5*(vec/self.sigmaN)**2.
+                    PDF = np.exp(exparg)
+                    PDF *= 1./(np.sum(PDF))
+                    field += np.random.choice(vec,field.shape,p=PDF)
+                #Fourier transform fields and apply the filter
+                field = field.r2c()
+                field = field.apply(aniso_filter, kind='wavenumber')
+                #Add this contribution to the total maps
+                maps+=field
+        return maps
+                    
+                
+    
+    
+    
+    
+    @cached_survey_property
     def obs_map(self):
         '''
         Generates the mock intensity map observed in Cartesian coordinates.
@@ -301,6 +406,7 @@ class Survey(Lightcone):
                 zmid = (self.line_nu0[line]/self.nuObs_mean).decompose().value-1
                 sigma_par = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
                 sigma_perp = (self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
+                
 
                 if self.pmeshpaint:
                     #Alternative painting using pmesh directly instead of nbk
