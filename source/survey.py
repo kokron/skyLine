@@ -263,7 +263,7 @@ class Survey(Lightcone):
         #box size in observed redshift
         Zlims = (self.line_nu0[self.target_line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
         r = ((self.cosmo.comoving_radial_distance(Zlims)*u.Mpc).to(self.Mpch)).value
-        grid_lim = r*pos_lims
+        grid_lim = rr[:,None]*pos_lims
         Lbox = np.zeros(3)
         for i in range(3):
             Lbox[i] = np.max(grid_lim[:,i])-np.min(lategrid[:,i])
