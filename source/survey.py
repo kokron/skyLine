@@ -318,10 +318,6 @@ class Survey(Lightcone):
                 else:
                     #Temperature[uK]
                     signal = (cu.c**3*(1+self.halos_in_survey[line]['Ztrue'])**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
-                #compute scales for the anisotropic filter (in Ztrue -> zmid)
-                zmid = (self.line_nu0[line]/self.nuObs_mean).decompose().value-1
-                sigma_par = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
-                sigma_perp = (self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
                 #Set the emitter in the grid and paint using pmesh directly instead of nbk
                 pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler='tsc')
                 #Make realfield object
@@ -343,9 +339,13 @@ class Survey(Lightcone):
                 #Fourier transform fields and apply the filter
                 field = field.r2c()
                 if self.do_smooth:
+                    #compute scales for the anisotropic filter (in Ztrue -> zmid)
+                    zmid = (self.line_nu0[line]/self.nuObs_mean).decompose().value-1
+                    sigma_par = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
+                    sigma_perp = (self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
                     field = field.apply(aniso_filter, kind='wavenumber')
                 #Add noise in the cosmic volume probed by target line
-                if line == self.target_line and self.Tsys > 0.:
+                if line == self.target_line and self.Tsys.value > 0.:
                     #distribution is positive gaussian with 0 mean
                     vec = np.linspace(0.,6*self.sigmaN,1024)
                     exparg = -0.5*(vec/self.sigmaN)**2.
