@@ -339,7 +339,7 @@ class Survey(Lightcone):
                 #    field += np.random.choice(vec,field.shape,p=PDF)
                 #Fourier transform fields and apply the filter
                 field = field.r2c()
-                field = field.apply(aniso_filter, kind='wavenumber')
+                #field = field.apply(aniso_filter, kind='wavenumber')
                 #Add noise in the cosmic volume probed by target line
                 if line == self.target_line and self.Tsys > 0.:
                     #distribution is positive gaussian with 0 mean
