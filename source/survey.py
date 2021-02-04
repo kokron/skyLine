@@ -72,6 +72,9 @@ class Survey(Lightcone):
     
     -paint_catalog:         Boolean: Paint catalog or used a painted one.               DOES THIS MAKE SENSE OR ALWAYS TRUE????
                             (Default: True). 
+                            
+    -do_smooth:             Boolean: apply smoothing filter to implement resolution
+                            limitations. (Default: True)
     
     -output_root            Root path for output products. (default: output/default)                                
     '''
@@ -100,7 +103,7 @@ class Survey(Lightcone):
                  Nmu = 5,    
                  output_root = "output/default",
                  paint_catalog = True,
-                 pmeshpaint = True,
+                 do_smooth = True,                 
                  **lightcone_kwargs):
                      
         # Initiate Lightcone() parameters
@@ -339,7 +342,8 @@ class Survey(Lightcone):
                 #    field += np.random.choice(vec,field.shape,p=PDF)
                 #Fourier transform fields and apply the filter
                 field = field.r2c()
-                #field = field.apply(aniso_filter, kind='wavenumber')
+                if self.do_smooth:
+                    field = field.apply(aniso_filter, kind='wavenumber')
                 #Add noise in the cosmic volume probed by target line
                 if line == self.target_line and self.Tsys > 0.:
                     #distribution is positive gaussian with 0 mean
