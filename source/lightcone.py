@@ -101,8 +101,8 @@ class Lightcone(object):
         self.L_line_halo = None
         
         #Initialize camb (we need background only) - values used in UM
-        camb_pars = camb.set_params(H0=68.0, omch2 = 0.1188368, ombh2 = 0.02312)
-        self.h = 0.68
+        camb_pars = camb.set_params(H0=67.8, omch2 = 0.118002988, ombh2 = 0.02312)
+        self.h = 0.678
         self.cosmo = camb.get_background(camb_pars)
         
         #Line frequencies:
