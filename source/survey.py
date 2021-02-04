@@ -59,9 +59,10 @@ class Survey(Lightcone):
     -supersample:           Factor of supersample with respect to the survey resolution
                             when making the grid. (Default: 10)     
                                                    
-    -dk:                    k spacing for the power spectrum (default: 0.003 Mpc^-1~0.005 h/Mpc)
+    -dk:                    k spacing for the power spectrum (default: 0.02 Mpc^-1~0.01 h/Mpc)
     
-    -kmin:                  Minimum k value for the power spectrum (default: 0.007 Mpc^-1~0.01 h/Mpc)
+    -kmin,kmax:             Minimum and maximum k values for the power spectrum 
+                            (default: 0., 3 Mpc^-1 ~ 5 h/Mpc)
                                                 
     -Nmu:                   Number of sampling in mu to compute the power spectrum
                             (default: 10)
@@ -93,9 +94,10 @@ class Survey(Lightcone):
                  Nbin_hist = 100,  
                  linear_VID_bin = False,  
                  supersample = 10,     
-                 dk = 0.003*u.Mpc**-1,
-                 kmin = 0.007*u.Mpc**-1,
-                 Nmu = 10,    
+                 dk = 0.02*u.Mpc**-1,
+                 kmin = 0.0*u.Mpc**-1,
+                 kmax = 3.*u.Mpc**-1,
+                 Nmu = 5,    
                  output_root = "output/default",
                  paint_catalog = True,
                  pmeshpaint = True,
@@ -328,16 +330,26 @@ class Survey(Lightcone):
                 m = layout.exchange(signal.value)
                 pm.paint(p, out=field, mass=m, resampler='tsc')
                 #Add noise in the cosmic volume probed by target line
+                #if line == self.target_line and self.Tsys > 0.:
+                #    #distribution is positive gaussian with 0 mean
+                #    vec = np.linspace(0.,6*self.sigmaN,1024)
+                #    exparg = -0.5*(vec/self.sigmaN)**2.
+                #    PDF = np.exp(exparg)
+                #    PDF *= 1./(np.sum(PDF))
+                #    field += np.random.choice(vec,field.shape,p=PDF)
+                #Fourier transform fields and apply the filter
+                field = field.r2c()
+                field = field.apply(aniso_filter, kind='wavenumber')
+                #Add noise in the cosmic volume probed by target line
                 if line == self.target_line and self.Tsys > 0.:
                     #distribution is positive gaussian with 0 mean
                     vec = np.linspace(0.,6*self.sigmaN,1024)
                     exparg = -0.5*(vec/self.sigmaN)**2.
                     PDF = np.exp(exparg)
                     PDF *= 1./(np.sum(PDF))
+                    field = field.c2r()
                     field += np.random.choice(vec,field.shape,p=PDF)
-                #Fourier transform fields and apply the filter
-                field = field.r2c()
-                field = field.apply(aniso_filter, kind='wavenumber')
+                    field = field.r2c()
                 #Add this contribution to the total maps
                 maps+=field
         return maps
