@@ -253,33 +253,38 @@ class Survey(Lightcone):
                   self.supersample*self.Nside[0], 
                   self.supersample*self.Nside[1]], dtype=int)
         #box angular limits
-        RAlims = np.array([self.RAObs_min.value,self.RAObs_max.value])
-        DEClims = np.array([self.DECObs_min.value,self.DECObs_max.value])
-        ra,dec  = np.deg2rad(RAlims),np.deg2rad(DEClims)
+        RAlims = np.array([self.RAObs_min.value,self.RAObs_max.value,0.5*(self.RAObs_min+self.RAObs_max).value])
+        DEClims = np.array([self.DECObs_min.value,self.DECObs_max.value,0.5*(self.DECObs_min+self.DECObs_max).value])
+        Zlims = (self.line_nu0[self.target_line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value,self.nuObs_min.value])-1
+        lim = np.meshgrid(RAlims,DEClims,Zlims)
+        ralim = lim[0].flatten()
+        declim = lim[1].flatten()
+        zlim = lim[2].flatten()
+        ra,dec  = np.deg2rad(ralim),np.deg2rad(declim)
         x = np.cos(dec) * np.cos(ra)
         y = np.cos(dec) * np.sin(ra)
         z = np.sin(dec)
         pos_lims = np.vstack([x,y,z]).T
         #box size in observed redshift
-        Zlims = (self.line_nu0[self.target_line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
-        r = ((self.cosmo.comoving_radial_distance(Zlims)*u.Mpc).to(self.Mpch)).value
-        grid_lim = rr[:,None]*pos_lims
+        r = ((self.cosmo.comoving_radial_distance(zlim)*u.Mpc).to(self.Mpch)).value
+        grid_lim = r[:,None]*pos_lims
         Lbox = np.zeros(3)
         for i in range(3):
-            Lbox[i] = np.max(grid_lim[:,i])-np.min(lategrid[:,i])
+            Lbox[i] = np.max(grid_lim[:,i])-np.min(grid_lim[:,i])
         #Loop over lines and add all contributions        
         global sigma_par
         global sigma_perp
-        maps = np.zeros([Nmesh[0],Nmesh[1],Nmes[2]//2 + 1],dtype='complex64')
+        maps = np.zeros([Nmesh[0],Nmesh[1],Nmesh[2]//2 + 1],dtype='complex64')
         for line in self.lines.keys():
             if self.lines[line]:
                 #Get true cell volume
-                Zlims = (self.line_nu0[lines].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
-                r = ((self.cosmo.comoving_radial_distance(Zlims)*u.Mpc).to(self.Mpch)).value
-                grid_lim = r*pos_lims
+                Zlims = (self.line_nu0[line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value,self.nuObs_min.value])-1
+                zlim = np.concatenate((Zlims,Zlims,Zlims,Zlims,Zlims,Zlims,Zlims,Zlims,Zlims))
+                r = ((self.cosmo.comoving_radial_distance(zlim)*u.Mpc).to(self.Mpch)).value
+                grid_lim_true = r[:,None]*pos_lims
                 Lbox_true = np.zeros(3)
                 for i in range(3):
-                    Lbox_true[i] = np.max(grid_lim[:,i])-np.min(lategrid[:,i])
+                    Lbox_true[i] = np.max(grid_lim_true[:,i])-np.min(grid_lim_true[:,i])
                 Vcell_true = Lbox_true[0]*Lbox_true[1]*Lbox_true[2]/(Nmesh[0]*Nmesh[1]*Nmesh[2])*(self.Mpch**3).to(self.Mpch**3)
                 #Get positions using the observed redshift
                 #Convert the halo position in each volume to Cartesian coordinates (from Nbodykit)
@@ -299,10 +304,7 @@ class Survey(Lightcone):
                 #Locate the grid such that bottom left corner of the box is [0,0,0] which is the nbodykit convention.
                 lategrid = np.array(cartesian_halopos.compute())
                 for n in range(3):
-                    if np.min(lategrid[:,n]) < 0:
-                        lategrid[:,n] += np.abs(np.min(lategrid[:,n]))
-                    else:
-                        lategrid[:,n] -= np.min(lategrid[:,n])
+                    lategrid[:,n] -= np.min(grid_lim[:,n])
                 #Compute the signal in each voxel (with Ztrue and Vcell_true)
                 Hubble = self.cosmo.hubble_parameter(self.halos_in_survey[line]['Ztrue'])*(u.km/u.Mpc/u.s)
                 if self.do_intensity:
@@ -326,7 +328,7 @@ class Survey(Lightcone):
                 m = layout.exchange(signal.value)
                 pm.paint(p, out=field, mass=m, resampler='tsc')
                 #Add noise in the cosmic volume probed by target line
-                if line == self.target_line:
+                if line == self.target_line and self.Tsys > 0.:
                     #distribution is positive gaussian with 0 mean
                     vec = np.linspace(0.,6*self.sigmaN,1024)
                     exparg = -0.5*(vec/self.sigmaN)**2.
