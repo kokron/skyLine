@@ -346,7 +346,7 @@ class Survey(Lightcone):
                     field = field.apply(aniso_filter, kind='wavenumber')
                 #Add noise in the cosmic volume probed by target line
                 if line == self.target_line and self.Tsys.value > 0.:
-                    #distribution is positive gaussian with 0 mean
+                    #distribution is positive gaussian with 0 mean 
                     vec = np.linspace(0.,6*self.sigmaN,1024)
                     exparg = -0.5*(vec/self.sigmaN)**2.
                     PDF = np.exp(exparg)
