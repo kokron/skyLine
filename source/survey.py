@@ -329,19 +329,11 @@ class Survey(Lightcone):
                 #Assign weights following the layout of particles
                 m = layout.exchange(signal.value)
                 pm.paint(p, out=field, mass=m, resampler='tsc')
-                #Add noise in the cosmic volume probed by target line
-                #if line == self.target_line and self.Tsys > 0.:
-                #    #distribution is positive gaussian with 0 mean
-                #    vec = np.linspace(0.,6*self.sigmaN,1024)
-                #    exparg = -0.5*(vec/self.sigmaN)**2.
-                #    PDF = np.exp(exparg)
-                #    PDF *= 1./(np.sum(PDF))
-                #    field += np.random.choice(vec,field.shape,p=PDF)
                 #Fourier transform fields and apply the filter
                 field = field.r2c()
                 #Compensate the field for the TSC window function we apply
                 field = field.apply(CompensateTSC, kind='circular')
-                #This smoothing comes from the window function. 
+                #This smoothing comes from the resolution window function. 
                 if self.do_smooth:
                     #compute scales for the anisotropic filter (in Ztrue -> zmid)
                     zmid = (self.line_nu0[line]/self.nuObs_mean).decompose().value-1
