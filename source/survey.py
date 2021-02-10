@@ -9,6 +9,7 @@ import astropy.constants as cu
 import copy
 from nbodykit.source.catalog import ArrayCatalog
 from nbodykit.algorithms import FFTPower
+from nbodykit.source.mesh import CompensateTSC
 import pmesh
 from pmesh.pm import RealField, ComplexField
 from source.lightcone import Lightcone
@@ -338,6 +339,9 @@ class Survey(Lightcone):
                 #    field += np.random.choice(vec,field.shape,p=PDF)
                 #Fourier transform fields and apply the filter
                 field = field.r2c()
+                #Compensate the field for the TSC window function we apply
+                field = field.apply(CompensateTSC, kind='circular')
+                #This smoothing comes from the window function. 
                 if self.do_smooth:
                     #compute scales for the anisotropic filter (in Ztrue -> zmid)
                     zmid = (self.line_nu0[line]/self.nuObs_mean).decompose().value-1
