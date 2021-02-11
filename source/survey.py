@@ -291,7 +291,7 @@ class Survey(Lightcone):
                 Lbox_true = np.zeros(3)
                 for i in range(3):
                     Lbox_true[i] = np.max(grid_lim_true[:,i])-np.min(grid_lim_true[:,i])
-                Vcell_true = Lbox_true[0]*Lbox_true[1]*Lbox_true[2]/(Nmesh[0]*Nmesh[1]*Nmesh[2])*(self.Mpch**3).to(self.Mpch**3)
+                Vcell_true = Lbox_true[0]*Lbox_true[1]*Lbox_true[2]/(self.Nchan*self.Nside[0]*self.Nside[1])*(self.Mpch**3).to(self.Mpch**3)
                 #Get positions using the observed redshift
                 #Convert the halo position in each volume to Cartesian coordinates (from Nbodykit)
                 ra,dec = da.broadcast_arrays(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'])
@@ -340,19 +340,27 @@ class Survey(Lightcone):
                     sigma_par = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
                     sigma_perp = (self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
                     field = field.apply(aniso_filter, kind='wavenumber')
-                #Add noise in the cosmic volume probed by target line
-                if line == self.target_line and self.Tsys.value > 0.:
-                    #distribution is positive gaussian with 0 mean 
-                    vec = np.linspace(0.,6*self.sigmaN,1024)
-                    exparg = -0.5*(vec/self.sigmaN)**2.
-                    PDF = np.exp(exparg)
-                    PDF *= 1./(np.sum(PDF))
-                    field = field.c2r()
-                    field += np.random.choice(vec,field.shape,p=PDF)
-                    field = field.r2c()
                 #Add this contribution to the total maps
                 maps+=field
+        
+        #Add noise in the cosmic volume probed by target line
+        if self.Tsys.value > 0.:
+            #get the proper shape for the observed map
+            if self.supersample > 1:
+                pm_noise = pmesh.pm.ParticleMesh(np.array([self.Nchan,self.Nside[0],self.Nside[1]], dtype=int),
+                                                 BoxSize=Lbox, dtype='float32', resampler='tsc')
+                maps = pm_noise.downsample(maps.c2r(),keep_mean=True)
+            else:
+                maps = maps.c2r()
+            #distribution is positive gaussian with 0 mean 
+            vec = np.linspace(0.,6*self.sigmaN,1024)
+            exparg = -0.5*(vec/self.sigmaN)**2.
+            PDF = np.exp(exparg)
+            PDF *= 1./(np.sum(PDF))
+            maps += np.random.choice(vec,maps.shape,p=PDF)
+            maps = maps.r2c()
         return maps
+        
         
 ################################
 ## Compute summary statistics ##
@@ -364,7 +372,8 @@ class Survey(Lightcone):
        Computes the 2d power spectrum P(k,mu) of the map
        '''
        return FFTPower(self.obs_fourier_map, '2d', Nmu=self.Nmu, poles=[0,2,4], los=[1,0,0], 
-                       dk=self.dk.to(self.Mpch**-1).value,kmin=self.kmin.to(self.Mpch**-1).value) 
+                       dk=self.dk.to(self.Mpch**-1).value,kmin=self.kmin.to(self.Mpch**-1).value,
+                       kmax=self.kmax.to(self.Mpch**-1).value) 
        
     @cached_survey_property
     def k_Pk_poles(self):
