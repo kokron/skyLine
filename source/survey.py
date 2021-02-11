@@ -291,7 +291,7 @@ class Survey(Lightcone):
                 Lbox_true = np.zeros(3)
                 for i in range(3):
                     Lbox_true[i] = np.max(grid_lim_true[:,i])-np.min(grid_lim_true[:,i])
-                Vcell_true = Lbox_true[0]*Lbox_true[1]*Lbox_true[2]/(self.Nchan*self.Nside[0]*self.Nside[1])*(self.Mpch**3).to(self.Mpch**3)
+                Vcell_true = Lbox_true[0]*Lbox_true[1]*Lbox_true[2]/(self.Nchan*self.Nside[0]*self.Nside[1])/self.supersample**3*(self.Mpch**3).to(self.Mpch**3)
                 #Get positions using the observed redshift
                 #Convert the halo position in each volume to Cartesian coordinates (from Nbodykit)
                 ra,dec = da.broadcast_arrays(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'])
