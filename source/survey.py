@@ -9,7 +9,7 @@ import astropy.constants as cu
 import copy
 from nbodykit.source.catalog import ArrayCatalog
 from nbodykit.algorithms import FFTPower
-from nbodykit.source.mesh.catalog import CompensateTSCShotnoise
+from nbodykit.source.mesh.catalog import CompensateCICShotnoise
 import pmesh
 from pmesh.pm import RealField, ComplexField
 from source.lightcone import Lightcone
@@ -283,7 +283,7 @@ class Survey(Lightcone):
         maps = np.zeros([Nmesh[0],Nmesh[1],Nmesh[2]//2 + 1],dtype='complex64')
         for line in self.lines.keys():
             if self.lines[line]:
-                #Get true cell volume
+                #Get true cell volume  
                 Zlims = (self.line_nu0[line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value,self.nuObs_min.value])-1
                 zlim = np.concatenate((Zlims,Zlims,Zlims,Zlims,Zlims,Zlims,Zlims,Zlims,Zlims))
                 r = ((self.cosmo.comoving_radial_distance(zlim)*u.Mpc).to(self.Mpch)).value
@@ -291,7 +291,7 @@ class Survey(Lightcone):
                 Lbox_true = np.zeros(3)
                 for i in range(3):
                     Lbox_true[i] = np.max(grid_lim_true[:,i])-np.min(grid_lim_true[:,i])
-                Vcell_true = Lbox_true[0]*Lbox_true[1]*Lbox_true[2]/(self.Nchan*self.Nside[0]*self.Nside[1])/self.supersample**3*(self.Mpch**3).to(self.Mpch**3)
+                Vcell_true = (Lbox_true/Nmesh).prod()*(self.Mpch**3).to(self.Mpch**3)
                 #Get positions using the observed redshift
                 #Convert the halo position in each volume to Cartesian coordinates (from Nbodykit)
                 ra,dec = da.broadcast_arrays(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'])
@@ -320,7 +320,7 @@ class Survey(Lightcone):
                     #Temperature[uK]
                     signal = (cu.c**3*(1+self.halos_in_survey[line]['Ztrue'])**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
                 #Set the emitter in the grid and paint using pmesh directly instead of nbk
-                pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler='tsc')
+                pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler='cic')
                 #Make realfield object
                 field = pm.create(type='real')
                 layout = pm.decompose(lategrid)
@@ -328,11 +328,11 @@ class Survey(Lightcone):
                 p = layout.exchange(lategrid)
                 #Assign weights following the layout of particles
                 m = layout.exchange(signal.value)
-                pm.paint(p, out=field, mass=m, resampler='tsc')
+                pm.paint(p, out=field, mass=m, resampler='cic')
                 #Fourier transform fields and apply the filter
                 field = field.r2c()
-                #Compensate the field for the TSC window function we apply
-                field = field.apply(CompensateTSCShotnoise, kind='circular')
+                #Compensate the field for the CIC window function we apply
+                field = field.apply(CompensateCICShotnoise, kind='circular')
                 #This smoothing comes from the resolution window function. 
                 if self.do_smooth:
                     #compute scales for the anisotropic filter (in Ztrue -> zmid)
@@ -348,18 +348,17 @@ class Survey(Lightcone):
             #get the proper shape for the observed map
             if self.supersample > 1:
                 pm_noise = pmesh.pm.ParticleMesh(np.array([self.Nchan,self.Nside[0],self.Nside[1]], dtype=int),
-                                                 BoxSize=Lbox, dtype='float32', resampler='tsc')
+                                                  BoxSize=Lbox, dtype='float32', resampler='cic')
                 maps = pm_noise.downsample(maps.c2r(),keep_mean=True)
             else:
                 maps = maps.c2r()
             #distribution is positive gaussian with 0 mean 
-            vec = np.linspace(0.,6*self.sigmaN,1024)
-            exparg = -0.5*(vec/self.sigmaN)**2.
-            PDF = np.exp(exparg)
-            PDF *= 1./(np.sum(PDF))
-            maps += np.random.choice(vec,maps.shape,p=PDF)
-            maps = maps.r2c()
-        return maps
+            #add the noise
+            maps += np.random.normal(0.,self.sigmaN.value,maps.shape))
+          
+            return maps.r2c()
+        else:
+            return maps
         
         
 ################################
