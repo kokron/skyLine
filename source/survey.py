@@ -318,6 +318,8 @@ class Survey(Lightcone):
         y = np.cos(dec) * np.sin(ra)
         z = np.sin(dec)
         pos_lims = np.vstack([x,y,z]).T
+        r = ((self.cosmo.comoving_radial_distance(zlim)*u.Mpc).to(self.Mpch)).value
+        grid_lim = r[:,None]*pos_lims
         #Loop over lines and add all contributions        
         global sigma_par
         global sigma_perp
@@ -351,7 +353,7 @@ class Survey(Lightcone):
                 #Locate the grid such that bottom left corner of the box is [0,0,0] which is the nbodykit convention.
                 lategrid = np.array(cartesian_halopos.compute())
                 for n in range(3):
-                    lategrid[:,n] -= np.min(grid_lim_true[:,n])
+                    lategrid[:,n] -= np.min(grid_lim[:,n])
                 #Compute the signal in each voxel (with Ztrue and Vcell_true)
                 Hubble = self.cosmo.hubble_parameter(self.halos_in_survey[line]['Ztrue'])*(u.km/u.Mpc/u.s)
                 if self.do_intensity:
