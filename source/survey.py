@@ -415,7 +415,7 @@ class Survey(Lightcone):
        '''
        return FFTPower(self.obs_fourier_map, '2d', Nmu=self.Nmu, poles=[0,2,4], los=[1,0,0], 
                        dk=self.dk.to(self.Mpch**-1).value,kmin=self.kmin.to(self.Mpch**-1).value,
-                       kmax=self.kmax.to(self.Mpch**-1).value,Boxsize=self.Lbox.value) 
+                       kmax=self.kmax.to(self.Mpch**-1).value,BoxSize=self.Lbox.value) 
        
     @cached_survey_property
     def k_Pk_poles(self):
