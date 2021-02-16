@@ -247,7 +247,7 @@ class Survey(Lightcone):
         for i in range(3):
             Lbox[i] = np.max(grid_lim[:,i])-np.min(grid_lim[:,i])
             
-        return Lbox*self.Mpch
+        return (Lbox*self.Mpch).to(self.Mpch)
         
     @cached_survey_property
     def Vvox(self):
