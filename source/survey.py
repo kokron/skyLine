@@ -304,6 +304,20 @@ class Survey(Lightcone):
                   self.supersample*self.Nside[0], 
                   self.supersample*self.Nside[1]], dtype=int)
         Lbox = self.Lbox.value
+        #angular limits
+        RAlims = np.array([self.RAObs_min.value,self.RAObs_max.value,0.5*(self.RAObs_min+self.RAObs_max).value])
+        DEClims = np.array([self.DECObs_min.value,self.DECObs_max.value,0.5*(self.DECObs_min+self.DECObs_max).value])
+        #transform Frequency band into redshift range for the target line
+        Zlims = (self.line_nu0[self.target_line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value,self.nuObs_min.value])-1
+        lim = np.meshgrid(RAlims,DEClims,Zlims)
+        ralim = lim[0].flatten()
+        declim = lim[1].flatten()
+        zlim = lim[2].flatten()
+        ra,dec  = np.deg2rad(ralim),np.deg2rad(declim)
+        x = np.cos(dec) * np.cos(ra)
+        y = np.cos(dec) * np.sin(ra)
+        z = np.sin(dec)
+        pos_lims = np.vstack([x,y,z]).T
         #Loop over lines and add all contributions        
         global sigma_par
         global sigma_perp
