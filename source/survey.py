@@ -351,7 +351,7 @@ class Survey(Lightcone):
                 #Locate the grid such that bottom left corner of the box is [0,0,0] which is the nbodykit convention.
                 lategrid = np.array(cartesian_halopos.compute())
                 for n in range(3):
-                    lategrid[:,n] -= np.min(grid_lim[:,n])
+                    lategrid[:,n] -= np.min(grid_lim_true[:,n])
                 #Compute the signal in each voxel (with Ztrue and Vcell_true)
                 Hubble = self.cosmo.hubble_parameter(self.halos_in_survey[line]['Ztrue'])*(u.km/u.Mpc/u.s)
                 if self.do_intensity:
@@ -413,7 +413,7 @@ class Survey(Lightcone):
        '''
        return FFTPower(self.obs_fourier_map, '2d', Nmu=self.Nmu, poles=[0,2,4], los=[1,0,0], 
                        dk=self.dk.to(self.Mpch**-1).value,kmin=self.kmin.to(self.Mpch**-1).value,
-                       kmax=self.kmax.to(self.Mpch**-1).value) 
+                       kmax=self.kmax.to(self.Mpch**-1).value,Boxsize=self.Lbox.value) 
        
     @cached_survey_property
     def k_Pk_poles(self):
