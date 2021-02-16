@@ -68,6 +68,10 @@ class Survey(Lightcone):
     -Nmu:                   Number of sampling in mu to compute the power spectrum
                             (default: 10)
                             
+    -remove_noise:          Remove the expected instrumental noise power spectrum (sigma_N^2*Vvox) 
+                            from the observed power spectrum (and adds it to the covariance).
+                            (default: False)
+                            
     -linear_VID_bin:        Boolean, to do linear (or log) binning for the VID histogram
                             (default: False)
     
@@ -102,6 +106,7 @@ class Survey(Lightcone):
                  kmin = 0.0*u.Mpc**-1,
                  kmax = 3.*u.Mpc**-1,
                  Nmu = 5,    
+                 remove_noise = False,
                  output_root = "output/default",
                  paint_catalog = True,
                  do_smooth = True,                 
@@ -215,6 +220,46 @@ class Survey(Lightcone):
             sig2 = self.Tsys**2/(self.Nfeeds*self.dnu*tpix)
         return (sig2**0.5).to(self.unit)
         
+    @cached_survey_property
+    def Lbox(self):
+        '''
+        Sides of the field observed (approximated to be a rectangular cube),
+        for the assumed redshift (the one corresponding to the target line)
+        '''
+        #box angular limits
+        RAlims = np.array([self.RAObs_min.value,self.RAObs_max.value,0.5*(self.RAObs_min+self.RAObs_max).value])
+        DEClims = np.array([self.DECObs_min.value,self.DECObs_max.value,0.5*(self.DECObs_min+self.DECObs_max).value])
+        #transform Frequency band into redshift range for the target line
+        Zlims = (self.line_nu0[self.target_line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value,self.nuObs_min.value])-1
+        lim = np.meshgrid(RAlims,DEClims,Zlims)
+        ralim = lim[0].flatten()
+        declim = lim[1].flatten()
+        zlim = lim[2].flatten()
+        ra,dec  = np.deg2rad(ralim),np.deg2rad(declim)
+        x = np.cos(dec) * np.cos(ra)
+        y = np.cos(dec) * np.sin(ra)
+        z = np.sin(dec)
+        pos_lims = np.vstack([x,y,z]).T
+        #box size in observed redshift
+        r = ((self.cosmo.comoving_radial_distance(zlim)*u.Mpc).to(self.Mpch)).value
+        grid_lim = r[:,None]*pos_lims
+        Lbox = np.zeros(3)
+        for i in range(3):
+            Lbox[i] = np.max(grid_lim[:,i])-np.min(grid_lim[:,i])
+            
+        return Lbox*self.Mpch
+        
+    @cached_survey_property
+    def Vvox(self):
+        '''
+        Voxel volume (approximated as a rectangular cube) for the assumed redshift
+        (the one corresponding to the target line).
+         
+        Voxel dimensions given by the resolution of the experiment.
+        '''
+        Nmesh = np.array([self.Nchan,self.Nside[0], self.Nside[1]], dtype=int)
+        return (self.Lbox/Nmesh).prod()
+        
     #########################
     ## Create the mock map ##
     #########################
@@ -254,29 +299,11 @@ class Survey(Lightcone):
         
         Use obs_fourier_map.c2r() to get the real field
         '''
-        #Define the mesh divisions
+        #Define the mesh divisions and the box size
         Nmesh = np.array([self.supersample*self.Nchan, 
                   self.supersample*self.Nside[0], 
                   self.supersample*self.Nside[1]], dtype=int)
-        #box angular limits
-        RAlims = np.array([self.RAObs_min.value,self.RAObs_max.value,0.5*(self.RAObs_min+self.RAObs_max).value])
-        DEClims = np.array([self.DECObs_min.value,self.DECObs_max.value,0.5*(self.DECObs_min+self.DECObs_max).value])
-        Zlims = (self.line_nu0[self.target_line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value,self.nuObs_min.value])-1
-        lim = np.meshgrid(RAlims,DEClims,Zlims)
-        ralim = lim[0].flatten()
-        declim = lim[1].flatten()
-        zlim = lim[2].flatten()
-        ra,dec  = np.deg2rad(ralim),np.deg2rad(declim)
-        x = np.cos(dec) * np.cos(ra)
-        y = np.cos(dec) * np.sin(ra)
-        z = np.sin(dec)
-        pos_lims = np.vstack([x,y,z]).T
-        #box size in observed redshift
-        r = ((self.cosmo.comoving_radial_distance(zlim)*u.Mpc).to(self.Mpch)).value
-        grid_lim = r[:,None]*pos_lims
-        Lbox = np.zeros(3)
-        for i in range(3):
-            Lbox[i] = np.max(grid_lim[:,i])-np.min(grid_lim[:,i])
+        Lbox = self.Lbox.value
         #Loop over lines and add all contributions        
         global sigma_par
         global sigma_perp
@@ -386,7 +413,10 @@ class Survey(Lightcone):
         '''
         Monopole of the power spectrum
         '''
-        return self.Pk_2d.poles['power_0'].real
+        if self.remove_noise:
+            return self.Pk_2d.poles['power_0'].real - self.sigmaN**2*self.Vvox
+        else:
+            return self.Pk_2d.poles['power_0'].real
         
     @cached_survey_property
     def Pk_2(self):
