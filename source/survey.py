@@ -381,7 +381,7 @@ class Survey(Lightcone):
                 maps = maps.c2r()
             #distribution is positive gaussian with 0 mean 
             #add the noise
-            maps += np.random.normal(0.,self.sigmaN.value,maps.shape))
+            maps += np.random.normal(0.,self.sigmaN.value,maps.shape)
           
             return maps.r2c()
         else:
@@ -451,6 +451,13 @@ class Survey(Lightcone):
         Equivalent to the VID
         '''
         return 
+        
+    @cached_survey_property
+    def Bi_VID_covariance(self):
+        '''
+        Covariance matrix of the VID histograms
+        '''
+        return np.diag(self.Bi_VID)
     
         
 
