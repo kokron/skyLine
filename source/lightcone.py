@@ -187,7 +187,7 @@ class Lightcone(object):
         for line in self.lines.keys():
             if self.lines[line]:
                 L_line_halo[line] = getattr(LM,self.models[line]['model_name'])(self,SFR,self.models[line]['model_pars'])
-                nuObs_line_halo[line] = self.line_nu0[line]/(1+self.halo_catalog['Z'])
+                nuObs_line_halo[line] = self.line_nu0[line]/(1+self.halo_catalog['Z']+self.halo_catalog['DZ'])
                 
         self.L_line_halo = L_line_halo
         self.nuObs_line_halo = nuObs_line_halo
