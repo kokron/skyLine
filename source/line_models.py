@@ -52,7 +52,7 @@ def CII_Silva15(self,SFR,pars):
             -aLCII,bLCII    Fit to log10(L_CII/Lsun) = aLCII*log10(SFR/(Msun/yr)) + bLCII
     '''
     try:
-        a,b = pars['aLCII'],pars['bLCII']
+        aLCII,bLCII = pars['aLCII'],pars['bLCII']
     except:
         raise ValueError('The model_pars for CII_Silva15 are "aLCII","bLCII", but {} were provided'.format(pars.keys()))
     # LCII relation
