@@ -5,6 +5,8 @@ Set of functions useful in some modules
 import source.line_models as LM
 import source.external_sfrs as extSFRs
 import inspect
+from lim import lim
+
 
 class cached_lightcone_property(object):
     """
@@ -106,4 +108,59 @@ def get_default_params(func):
     default_params = dict(zip(param_names,default_values))
 
     return default_params
+    
+
+def merge_dicts(D):
+    '''
+    Merges dictionaries
+    '''
+    dic = {}
+    for k in D:
+        dic.update(k)
+    return dic
+    
+    
+def dict_lines(name,pars):
+    '''
+    Translates between the conventions of this code and lim, and returns
+    the model name and model parameters for each case
+    '''
+    
+    return
+    
+    
+def set_lim(self,line):
+    '''
+    Calls to lim to compute theoretical lim quantities
+    '''
+    fid = dict(cosmo_input_camb={'H0':67.8,'ombh2':0.02312,'omch2':0.118002988,
+                      'As':2.23832e-9,'ns':0.96,'mnu':0.06})
+    kvec = self.k_Pk_poles[np.isnan(self.k_Pk_poles)==False]*self.Mpch
+    dk = np.diff(kvec)
+    krange = {'nk':len(kvec),'kmin':kvec[0]-dk[0]/2.,'kmax':kvec[-1]+dk[-1]/2.,'k_kind':'linear','nmu':10000,'smooth':self.do_smooth}
+    line_model,line_pars = dict_lines(line)
+    if 'sigma_LCO' in self.models[line]['model_pars']:
+        sigma_scatter = .models[line]['model_pars']['sigma_LCO']
+    #ANY OTHER CASE?
+    else:
+        sigma_scatter = 0.
+    
+    astromodel = dict(model_type='ML',model_name=line_model,model_par=line_pars,
+                      sigma_scatter = sigma_scatter, Mmin = 1e10*self.Msunh, Mmax=1e15*self.Msunh,
+                      hmf_model='Tinker',bias_model='Tinker10',nu=self.line_nu0[line],do_onehalo=True)
+    survey = dict(Tsys_NEFD=Tsys,do_Jysr=self.do_intensity,tobs=self.tobs,Omega_field=self.Omega_field,
+                  nuObs=self.nuObs_mean,Delta_nu=self.delta_nuObs,dnu=self.dnu,beam_FWHM=self.beam_FWHM,
+                  Nfeeds=self.Nfeeds,Nfield=1)
+    M = lim(merge_dicts([fid,krange,astromodel,survey]))
+    M.update(sigma_NL=((np.trapz(M.PKint(M.z,M.k.value)*u.Mpc**3,M.k)/6./np.pi**2)**0.5).to(u.Mpc))
+    
+    return M
+                  
+                      
+
+    
+    
+    
+
+    
     
