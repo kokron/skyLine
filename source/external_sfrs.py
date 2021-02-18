@@ -8,7 +8,7 @@ import os
 
 def Behroozi_SFR(M, z):
     '''
-    Returns SFR(M,z) interpolated from Behroozi et al.
+    Returns SFR(M,z) interpolated from Behroozi et al. 2013
     '''
     SFR_folder = os.path.dirname(os.path.realpath(__file__)).split("source")[0]+'SFR_tables/'
     x = np.loadtxt(SFR_folder+'sfr_table_Behroozi.dat')

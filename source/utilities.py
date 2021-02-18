@@ -120,47 +120,80 @@ def merge_dicts(D):
     return dic
     
     
-def dict_lines(name,pars):
+def dict_lines(self,name,pars):
     '''
     Translates between the conventions of this code and lim, and returns
     the model name and model parameters for each case
     '''
+    if name == 'CO_Li16':
+        model_name = 'TonyLi'
+        model_pars = dict(alpha=pars['alpha'],beta=pars['beta'],
+                          dMF=pars['delta_mf'],sig_SFR=0.3)
+        if self.do_external_SFR:
+            model_pars['BehrooziFile'] = '../SFR_tables/sfr_release.dat'
+        else:
+            model_pars['BehrooziFile'] = '../SFR_tables/UniverseMachine.dat'
+    elif name == 'CII_Silva15':
+        model_name = 'SilvaCII'
+        model_pars = dict(a=pars['aLCII'],beta=pars['bLCII'])
+        if self.do_external_SFR:
+            model_pars['SFR_file'] = '../SFR_tables/Silva15_SFR_params.dat'
+        else:
+            model_pars['SFR_file'] = '../SFR_tables/UniverseMachine.dat'
+    elif name == 'Halpha_Gong17':
+        model_name = 'GongHalpha'
+        model_pars = dict(K_Halpha=pars['K_Halpha'],Aext=pars['Aext_Halpha'])
+        if self.do_external_SFR:
+            model_pars['SFR_file'] = '../SFR_tables/Gong16_SFR_params.dat'
+        else:
+            model_pars['SFR_file'] = '../SFR_tables/UniverseMachine.dat'
+    elif name == 'Hbeta_Gong17':
+        model_name = 'GongHbeta'
+        model_pars = dict(K_Hbeta=pars['K_Hbeta'],Aext=pars['Aext_Hbeta'])
+        if self.do_external_SFR:
+            model_pars['SFR_file'] = '../SFR_tables/Gong16_SFR_params.dat'
+        else:
+            model_pars['SFR_file'] = '../SFR_tables/UniverseMachine.dat'
+    elif name == 'OIII_Gong17':
+        model_name = 'GongOIII'
+        model_pars = dict(K_OIII=pars['K_OIII'],Aext=pars['Aext_OIII'])
+        if self.do_external_SFR:
+            model_pars['SFR_file'] = '../SFR_tables/Gong16_SFR_params.dat'
+        else:
+            model_pars['SFR_file'] = '../SFR_tables/UniverseMachine.dat'
+    elif name == 'OII_Gong17':
+        model_name = 'GongOII'
+        model_pars = dict(K_OII=pars['K_OII'],Aext=pars['Aext_OII'])
+        if self.do_external_SFR:
+            model_pars['SFR_file'] = '../SFR_tables/Gong16_SFR_params.dat'
+        else:
+            model_pars['SFR_file'] = '../SFR_tables/UniverseMachine.dat'
+    else:
+        raise ValueError('The input astrophysical model has no equivalent in the lim code.')
+            
     
-    return
+    return model_name, model_pars
     
     
-def set_lim(self,line):
+def set_lim(self):
     '''
     Calls to lim to compute theoretical lim quantities
     '''
     fid = dict(cosmo_input_camb={'H0':67.8,'ombh2':0.02312,'omch2':0.118002988,
                       'As':2.23832e-9,'ns':0.96,'mnu':0.06})
-    kvec = self.k_Pk_poles[np.isnan(self.k_Pk_poles)==False]*self.Mpch
-    dk = np.diff(kvec)
-    krange = {'nk':len(kvec),'kmin':kvec[0]-dk[0]/2.,'kmax':kvec[-1]+dk[-1]/2.,'k_kind':'linear','nmu':10000,'smooth':self.do_smooth}
-    line_model,line_pars = dict_lines(line)
-    if 'sigma_LCO' in self.models[line]['model_pars']:
-        sigma_scatter = .models[line]['model_pars']['sigma_LCO']
-    #ANY OTHER CASE?
-    else:
-        sigma_scatter = 0.
-    
-    astromodel = dict(model_type='ML',model_name=line_model,model_par=line_pars,
-                      sigma_scatter = sigma_scatter, Mmin = 1e10*self.Msunh, Mmax=1e15*self.Msunh,
-                      hmf_model='Tinker',bias_model='Tinker10',nu=self.line_nu0[line],do_onehalo=True)
+    krange = {'nk':512.,'kmin':1e-5*u.Mpc**-1,'kmax':10*u.Mpc**-1,'k_kind':'log','nmu':10000,'smooth':self.do_smooth}
+    hmf = dict(model_type='ML', Mmin = 1e10*self.Msunh, Mmax=1e15*self.Msunh,
+                      hmf_model='Tinker',bias_model='Tinker10',do_onehalo=True)
     survey = dict(Tsys_NEFD=Tsys,do_Jysr=self.do_intensity,tobs=self.tobs,Omega_field=self.Omega_field,
                   nuObs=self.nuObs_mean,Delta_nu=self.delta_nuObs,dnu=self.dnu,beam_FWHM=self.beam_FWHM,
                   Nfeeds=self.Nfeeds,Nfield=1)
     M = lim(merge_dicts([fid,krange,astromodel,survey]))
-    M.update(sigma_NL=((np.trapz(M.PKint(M.z,M.k.value)*u.Mpc**3,M.k)/6./np.pi**2)**0.5).to(u.Mpc))
     
     return M
                   
                       
+                      
 
-    
-    
-    
 
     
     

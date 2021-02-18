@@ -3,6 +3,8 @@ Base module to make a LIM survey from painted lightcone
 '''
 
 import numpy as np
+from scipy.interpolate import interp2d,interp1d
+from scipy.special import legendre
 import dask.array as da
 import astropy.units as u
 import astropy.constants as cu
@@ -14,6 +16,7 @@ import pmesh
 from pmesh.pm import RealField, ComplexField
 from source.lightcone import Lightcone
 from source.utilities import cached_survey_property,get_default_params,check_params
+from source.utilities import set_lim, dict_lines
 
 class Survey(Lightcone):
     '''
@@ -422,7 +425,7 @@ class Survey(Lightcone):
         '''
         Fourier wavenumbers for the multipoles of the power spectrum
         '''
-        return self.Pk_2d.poles['k']
+        return self.Pk_2d.poles['k']*self.Mpch**-1
         
     @cached_survey_property
     def Pk_0(self):
@@ -430,23 +433,176 @@ class Survey(Lightcone):
         Monopole of the power spectrum
         '''
         if self.remove_noise:
-            return self.Pk_2d.poles['power_0'].real - self.sigmaN**2*self.Vvox
+            return self.Pk_2d.poles['power_0'].real*self.Mpch**3*self.unit**2 - self.sigmaN**2*self.Vvox
         else:
-            return self.Pk_2d.poles['power_0'].real
+            return self.Pk_2d.poles['power_0'].real*self.Mpch**3*self.unit**2
         
     @cached_survey_property
     def Pk_2(self):
         '''
         Quadrupole of the power spectrum
         '''
-        return self.Pk_2d.poles['power_2'].real
+        return self.Pk_2d.poles['power_2'].real*self.Mpch**3*self.unit**2
         
     @cached_survey_property
     def Pk_4(self):
         '''
         Hexadecapole of the power spectrum
         '''
-        return self.Pk_2d.poles['power_4'].real
+        return self.Pk_2d.poles['power_4'].real*self.Mpch**3*self.unit**2
+        
+    @cached_survey_property
+    def Pk_2d_theo(self):
+        '''
+        Computes the anisotropic power spectrum from theory, using lim. 
+        Neglects potential cross-correlations between lines if volumes probed overlap.
+        Returns k_obs,mu_obs,Pk
+        '''
+        #Call lim, and prepare it for the target line
+        M = set_lim(self)
+        line_model,line_pars = dict_lines(self,self.models[self.target_line]['model_name'],
+                                          self.models[self.target_line]['model_pars'])
+        if 'sigma_LCO' in self.models[self.target_line]['model_pars']:
+            sigma_scatter = self.models[self.target_line]['model_pars']['sigma_LCO']
+        #ANY OTHER CASE?
+        else:
+            sigma_scatter = 0.
+        M.update(nu=self.line_nu0[self.target_line],model_name=line_model,model_par=line_pars,
+                      sigma_scatter = sigma_scatter)
+        M.update(sigma_NL=((np.trapz(M.PKint(M.z,M.k.value)*u.Mpc**3,M.k)/6./np.pi**2)**0.5).to(u.Mpc))
+        
+        PK_2d = M.Pk
+        
+        for line in self.lines.keys():
+            if self.lines[line]:
+                if line == self.target_line:
+                    #already done above
+                    continue
+                #Repeat for all line interlopers
+                line_model,line_pars = dict_lines(self,self.models[line]['model_name'],
+                                          self.models[line]['model_pars'])
+                if 'sigma_LCO' in self.models[line]['model_pars']:
+                    sigma_scatter = self.models[line]['model_pars']['sigma_LCO']
+                #ANY OTHER CASE?
+                else:
+                    sigma_scatter = 0.
+                M.update(nu=self.line_nu0[line],model_name=line_model,model_par=line_pars,
+                              sigma_scatter = sigma_scatter)
+                M.update(sigma_NL=((np.trapz(M.PKint(M.z,M.k.value)*u.Mpc**3,M.k)/6./np.pi**2)**0.5).to(u.Mpc))
+                #Projection effects in the scales
+                q_perp = M.cosmo.angular_diameter_distance(M.z)*(1+M.z)/(M.cosmo.angular_diameter_distance(self.zmid)*(1+self.zmid))
+                q_par = (1.+M.z)/M.cosmo.hubble_parameter(M.z)/((1.+self.zmid)/M.cosmo.hubble_parameter(self.zmid))
+                F = q_par/q_perp
+                prefac = 1./q_perp**2/q_par
+                #Get "real" k and mu
+                kprime = np.zeros((len(M.mu),len(M.k)))*M.k.unit
+                mu_prime = M.mui_grid/F/np.sqrt(1.+M.mui_grid**2.*(1./F/F-1))
+                for imu in range(M.nmu):
+                    kprime[imu,:] = M.k/q_perp*np.sqrt(1.+M.mu[imu]**2*(1./F/F-1))
+                #Get the measured Pk contribution and add it to the rest
+                PK_2d += interp2d(M.k,M.mu,M.Pk)(kprime,mu_prime)*PK_2d.unit
+        
+        return M.k.to(M.Mpch**-1),M.mu,PK_2d.to(self.Mpch**3*self.unit**2)
+    
+    @cached_survey_property
+    def covmat_00(self):
+        '''
+        00 term of the total covariance matrix
+        '''
+        integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
+        cov = 0.5*np.trapz(integrand**2,self.Pk_2d_theo[1],axis=0)
+        return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6*self.unit**4
+        
+        
+    @cached_survey_property
+    def covmat_02(self):
+        '''
+        02 term of the total covariance matrix
+        '''
+        mui_grid = np.meshgrid(self.Pk_2d_theo[0],self.Pk_2d_theo[1])[1]
+        L2 = legendre(2)(mui_grid)
+        integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
+        cov = 5./2.*np.trapz(integrand**2*L2,self.Pk_2d_theo[1],axis=0)
+        return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6*self.unit**4
+        
+        
+    @cached_survey_property
+    def covmat_04(self):
+        '''
+        04 term of the total covariance matrix
+        '''
+        mui_grid = np.meshgrid(self.Pk_2d_theo[0],self.Pk_2d_theo[1])[1]
+        L4 = legendre(4)(mui_grid)
+        integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
+        cov = 9./2.*np.trapz(integrand**2*L4,self.Pk_2d_theo[1],axis=0)
+        return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6*self.unit**4
+        
+        
+    @cached_survey_property
+    def covmat_22(self):
+        '''
+        22 term of the total covariance matrix
+        '''
+        mui_grid = np.meshgrid(self.Pk_2d_theo[0],self.Pk_2d_theo[1])[1]
+        L2 = legendre(2)(mui_grid)
+        integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
+        cov = 25./2.*np.trapz(integrand**2*L2*L2,self.Pk_2d_theo[1],axis=0)
+        return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6*self.unit**4
+        
+        
+    @cached_survey_property
+    def covmat_24(self):
+        '''
+        24 term of the total covariance matrix
+        '''
+        mui_grid = np.meshgrid(self.Pk_2d_theo[0],self.Pk_2d_theo[1])[1]
+        L2 = legendre(2)(mui_grid)
+        L4 = legendre(4)(mui_grid)
+        integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
+        cov = 45./2.*np.trapz(integrand**2*L2*L4,self.Pk_2d_theo[1],axis=0)
+        return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6*self.unit**4
+        
+        
+    @cached_survey_property
+    def covmat_44(self):
+        '''
+        44 term of the total covariance matrix
+        '''
+        mui_grid = np.meshgrid(self.Pk_2d_theo[0],self.Pk_2d_theo[1])[1]
+        L4 = legendre(4)(mui_grid)
+        integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
+        cov = 81./2.*np.trapz(integrand**2*L4*L4,self.Pk_2d_theo[1],axis=0)
+        return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6*self.unit**4
+        
+        
+    def get_covmat(self,Nmul):
+        '''
+        Get the covariance matrix for a given number of multipoles 
+        (starting always from the monopole and without skipping any pair
+        multipole)
+        '''
+        if Nmul > 3:
+            raise ValueError('Not implemented yet!\
+            Implement covmat_66 and expand this function')
+            
+        nk = len(self.k_Pk_poles)
+        covmat = np.zeros((nk*Nmul,nk*Nmul))*self.covmat_00.unit
+        covmat[:nk,:nk] = np.diag(self.covmat_00)
+        
+        if Nmul > 1:
+            covmat[:nk,nk:nk*2] = np.diag(self.covmat_02)
+            covmat[nk:nk*2,:nk] = np.diag(self.covmat_02)
+            covmat[nk:nk*2,nk:nk*2] = np.diag(self.covmat_22)
+            covmat[:nk,nk:nk*2] = np.diag(self.covmat_02)
+        if Nmul > 2:
+            covmat[:nk,nk*2:nk*3] = np.diag(self.covmat_04)
+            covmat[nk:nk*2,nk*2:nk*3] = np.diag(self.covmat_24)
+            covmat[nk*2:nk*3,:nk] = np.diag(self.covmat_04)
+            covmat[nk*2:nk*3,nk:nk*2] = np.diag(self.covmat_24)
+            covmat[nk*2:nk*3,nk*2:nk*3] = np.diag(self.covmat_44)
+
+        return covmat
+    
         
     @cached_survey_property
     def Ti(self):
