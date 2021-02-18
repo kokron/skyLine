@@ -55,6 +55,8 @@ class Lightcone(object):
                             (default:False)
                             
     -external_SFR           SFR interpolation
+    
+    -sig_extSFR             log-scatter for an external SFR
                             
     -output_root            Root path for output products. (default: output/default)                                
     '''
@@ -67,7 +69,7 @@ class Lightcone(object):
                  models = dict(CO = dict(model_name = '', model_pars = {}), CII = dict(model_name = '', model_pars = {}),
                                Halpha = dict(model_name = '', model_pars = {}), Lyalpha = dict(model_name = '', model_pars = {}), 
                                HI = dict(model_name = '', model_pars = {})),
-                 do_external_SFR = False, external_SFR = '',
+                 do_external_SFR = False, external_SFR = '',sig_extSFR = 0.3,
                  output_root = "output/default"):
                  
         # Get list of input values to check type and units
@@ -180,6 +182,7 @@ class Lightcone(object):
             #convert halo mass to Msun
             Mhalo_Msun = self.halo_catalog['M_HALO']*self.Msunh  
             SFR = getattr(extSFRs,self.external_SFR)(Mhalo_Msun.value,self.halo_catalog['Z'])
+            SFR = 10**(np.random.normal(np.log10(SFR), self.sig_extSFR))
         else:
             SFR = self.halo_catalog['SFR_HALO']
             

@@ -128,7 +128,7 @@ def dict_lines(self,name,pars):
     if name == 'CO_Li16':
         model_name = 'TonyLi'
         model_pars = dict(alpha=pars['alpha'],beta=pars['beta'],
-                          dMF=pars['delta_mf'],sig_SFR=0.3)
+                          dMF=pars['delta_mf'],sig_SFR=self.sig_extSFR)
         if self.do_external_SFR:
             model_pars['BehrooziFile'] = '../SFR_tables/sfr_release.dat'
         else:
