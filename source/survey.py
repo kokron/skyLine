@@ -603,18 +603,23 @@ class Survey(Lightcone):
 
         return covmat
     
+    @cached_survey_property
+    def Ti_edge(self):
+        '''
+        Edges of the VID histogram bins
+        '''
+        if self.linear_VID_bin:
+            Te = np.linspace(self.Tmin_VID.value,self.Tmax_VID.value,self.Nbin_hist+1)*self.Tmin_VID.unit
+        else:
+            Te = np.logspace(np.log10(self.Tmin_VID.value),np.log10(self.Tmax_VID.value),self.Nbin_hist+1)*self.Tmin_VID.unit
+        return Te
         
     @cached_survey_property
     def Ti(self):
         '''
         Center of the VID histogram bins
         '''
-        if self.linear_VID_bin:
-            Te = np.linespace(self.Tmin_VID.value,self.Tmax_VID.value,self.Nbin_hist+1)*self.Tmin_VID.unit
-        else:
-            Te = np.linespace(np.log10(self.Tmin_VID.value),np.log10(self.Tmax_VID.value),self.Nbin_hist+1)*self.Tmin_VID.unit
-        Ti = (Te[:-1]+Te[1:])/2.
-        return Ti
+        return (self.Ti_edge[:-1]+self.Ti_edge[1:])/2.
         
     @cached_survey_property
     def Bi_VID(self):
@@ -622,7 +627,8 @@ class Survey(Lightcone):
         Computes the histogram of temperatures in each voxel in hte observed map.
         Equivalent to the VID
         '''
-        return 
+        return np.histogram(np.array(self.obs_fourier_map.c2r()).flatten(),
+                            bins=self.Ti_edge.value)[0]
         
     @cached_survey_property
     def Bi_VID_covariance(self):
