@@ -20,71 +20,71 @@ from source.utilities import set_lim, dict_lines
 
 class Survey(Lightcone):
     '''
-    An object controlling all relevant quantities needed to create the 
-    painted LIM lightcone. It reads a lightcone catalog of halos with SFR 
+    An object controlling all relevant quantities needed to create the
+    painted LIM lightcone. It reads a lightcone catalog of halos with SFR
     quantities and paint it with as many lines as desired.
-    
-    Allows to compute summary statistics as power spectrum and the VID for 
+
+    Allows to compute summary statistics as power spectrum and the VID for
     the signal (i.e., without including observational effects).
-        
+
     INPUT PARAMETERS:
     ------------------
-    
+
     -do_intensity           Bool, if True quantities are output in specific temperature
-                            (Jy/sr units) rather than brightness temperature 
-                            (muK units) 
+                            (Jy/sr units) rather than brightness temperature
+                            (muK units)
                             (Default = False)
-                    
+
     -Tsys:                  Instrument sensitivity. System temperature for brightness temperature
                             and noise equivalent intensitiy (NEI) for intensitiy (Default = 40 K)
-    
+
     -Nfeeds:                Total number of feeds (detector*antennas*polarizations) (Default = 19)
-        
+
     -nuObs_min,nuObs_max:   minimum and maximum ends of the frequency band (Default = 26-34 GHz)
-    
+
     -RAObs_min,RAObs_max:   minimum and maximum RA observed (Default = -65-60 deg)
-    
+
     -DECObs_min,DECObs_max: minimum and maximum DEC observed (Default = -1.25-1.25 deg)
-    
+
     -dnu:                   Width of a single frequency channel (Default = 15.6 MHz)
-    
+
     -beam_FWHM:             Beam full width at half maximum (Default = 4.1 arcmin)
-    
+
     -tobs:                  Observing time on a single field (Default = 6000 hr)
-                                
+
     -target_line:           Target line of the survey (Default: CO)
-                            
+
     -Tmin_VID,Tmax_VID:     Minimum and maximum values to compute the VID histogram
                             (default: 0.01 uK, 1000 uK)
-                            
+
     -Nbin_hist              Number of bins for the VID histogram
                             (default: 100)
-    
+
     -supersample:           Factor of supersample with respect to the survey resolution
-                            when making the grid. (Default: 10)     
-                                                   
+                            when making the grid. (Default: 10)
+
     -dk:                    k spacing for the power spectrum (default: 0.02 Mpc^-1~0.01 h/Mpc)
-    
-    -kmin,kmax:             Minimum and maximum k values for the power spectrum 
+
+    -kmin,kmax:             Minimum and maximum k values for the power spectrum
                             (default: 0., 3 Mpc^-1 ~ 5 h/Mpc)
-                                                
+
     -Nmu:                   Number of sampling in mu to compute the power spectrum
                             (default: 10)
-                            
-    -remove_noise:          Remove the expected instrumental noise power spectrum (sigma_N^2*Vvox) 
+
+    -remove_noise:          Remove the expected instrumental noise power spectrum (sigma_N^2*Vvox)
                             from the observed power spectrum (and adds it to the covariance).
                             (default: False)
-                            
+
     -linear_VID_bin:        Boolean, to do linear (or log) binning for the VID histogram
                             (default: False)
-    
+
     -paint_catalog:         Boolean: Paint catalog or used a painted one.               DOES THIS MAKE SENSE OR ALWAYS TRUE????
-                            (Default: True). 
-                            
+                            (Default: True).
+
     -do_smooth:             Boolean: apply smoothing filter to implement resolution
                             limitations. (Default: True)
-    
-    -output_root            Root path for output products. (default: output/default)                                
+
+    -output_root            Root path for output products. (default: output/default)
     '''
     def __init__(self,
                  do_intensity=False,
@@ -98,57 +98,57 @@ class Survey(Lightcone):
                  DECObs_max = 1.25*u.deg,
                  dnu=15.6*u.MHz,
                  beam_FWHM=4.1*u.arcmin,
-                 tobs=6000*u.hr, 
-                 target_line = 'CO', 
+                 tobs=6000*u.hr,
+                 target_line = 'CO',
                  Tmin_VID = 1.0e-2*u.uK,
                  Tmax_VID = 1000.*u.uK,
-                 Nbin_hist = 100,  
-                 linear_VID_bin = False,  
-                 supersample = 10,     
+                 Nbin_hist = 100,
+                 linear_VID_bin = False,
+                 supersample = 10,
                  dk = 0.02*u.Mpc**-1,
                  kmin = 0.0*u.Mpc**-1,
                  kmax = 3.*u.Mpc**-1,
-                 Nmu = 5,    
+                 Nmu = 5,
                  remove_noise = False,
                  output_root = "output/default",
                  paint_catalog = True,
-                 do_smooth = True,                 
+                 do_smooth = True,
                  **lightcone_kwargs):
-                     
+
         # Initiate Lightcone() parameters
         Lightcone.__init__(self,**lightcone_kwargs)
-        
+
         self._update_lightcone_list = self._update_lightcone_list
-        
+
         self._survey_params = locals()
         self._survey_params.pop('self')
         self._survey_params.pop('lightcone_kwargs')
         self._default_survey_params = get_default_params(Survey.__init__)
         check_params(self._survey_params,self._default_survey_params)
-        
+
         # Set survey parameters
         for key in self._survey_params:
             setattr(self,key,self._survey_params[key])
-        
+
         # Combine lightcone_params with survey_params
         self._input_params.update(self._survey_params)
         self._default_params.update(self._default_survey_params)
-        
+
         # Check that the observed footprint is contained in the lightcone
         if self.RAObs_min < self.RA_min or self.RAObs_max > self.RA_max or \
            self.DECObs_min < self.DEC_min or self.DECObs_max > self.DEC_max:
                raise ValueError('Please, your observed limits RA_Obs=[{},{}], DEC_Obs=[{},{}] must be within the lightcone limits RA=[{},{}], DEC=[{},{}].'.format(self.RAObs_min,self.RAObs_max,self.DECObs_min,self.DECObs_max,self.RA_min,self.RA_max,self.DEC_min,self.DEC_max))
-        
+
         if self.paint_catalog:
             self.read_halo_catalog
             self.halo_luminosity
-            
+
         #Set units for observable depending on convention
         if self.do_intensity:
             self.unit = u.Jy/u.sr
         else:
             self.unit = u.uK
-            
+
         sigma_perp = 0.
         sigma_par = 0.
 
@@ -158,35 +158,35 @@ class Survey(Lightcone):
         Mean observed frequency
         '''
         return 0.5*(self.nuObs_min+self.nuObs_max)
-        
+
     @cached_survey_property
     def zmid(self):
         '''
         Effective mid redshift (obtained from nuObs_mean):
         '''
         return (self.line_nu0[self.target_line]/self.nuObs_mean).decompose()-1
-                 
+
     @cached_survey_property
     def delta_nuObs(self):
         '''
         Experimental frequency bandwith
         '''
         return self.nuObs_max - self.nuObs_min
-        
+
     @cached_survey_property
     def Omega_field(self):
         '''
         Solid angle covered by the survey
         '''
         return (self.RAObs_max-self.RAObs_min)*(self.DECObs_max-self.DECObs_min)
-        
+
     @cached_survey_property
     def beam_width(self):
         '''
         Beam width defined as 1-sigma width of Gaussian beam profile
         '''
         return self.beam_FWHM*0.4247
-        
+
     @cached_survey_property
     def Nside(self):
         '''
@@ -194,21 +194,21 @@ class Survey(Lightcone):
         '''
         return int(np.round(((self.RAObs_max-self.RAObs_min)/(self.beam_width)).decompose())),\
                int(np.round(((self.DECObs_max-self.DECObs_min)/(self.beam_width)).decompose()))
-        
+
     @cached_survey_property
     def Npix(self):
         '''
         Number of pixels in the observed map
         '''
         return self.Nside[0]*self.Nside[1]
-        
+
     @cached_survey_property
     def Nchan(self):
         '''
         Number of frequency channels in the observed map
         '''
         return int(np.round((self.delta_nuObs/(self.dnu)).decompose()))
-        
+
     @cached_survey_property
     def sigmaN(self):
         '''
@@ -222,7 +222,7 @@ class Survey(Lightcone):
             #Temperature[uK]
             sig2 = self.Tsys**2/(self.Nfeeds*self.dnu*tpix)
         return (sig2**0.5).to(self.unit)
-        
+
     @cached_survey_property
     def Lbox(self):
         '''
@@ -249,34 +249,35 @@ class Survey(Lightcone):
         Lbox = np.zeros(3)
         for i in range(3):
             Lbox[i] = np.max(grid_lim[:,i])-np.min(grid_lim[:,i])
-            
+
         return (Lbox*self.Mpch).to(self.Mpch)
-        
+
     @cached_survey_property
     def Vvox(self):
         '''
         Voxel volume (approximated as a rectangular cube) for the assumed redshift
         (the one corresponding to the target line).
-         
+
         Voxel dimensions given by the resolution of the experiment.
         '''
         Nmesh = np.array([self.Nchan,self.Nside[0], self.Nside[1]], dtype=int)
-        return (self.Lbox/Nmesh).prod()
-        
+        #return (self.Lbox.value/Nmesh).prod()*self.Lbox.unit**3
+        return self.Lbox.value/Nmesh)
+
     #########################
     ## Create the mock map ##
     #########################
-        
+
     @cached_survey_property
     def halos_in_survey(self):
         '''
         Filters the halo catalog and only takes those that have observed
-        frequencies within the experimental frequency bandwitdh and lie in the 
+        frequencies within the experimental frequency bandwitdh and lie in the
         observed RA - DEC ranges
         '''
         #empty catalog
         halos_survey = {}
-        
+
         #halos within footprint
         inds_RA = (self.halo_catalog['RA'] > self.RAObs_min.value)&(self.halo_catalog['RA'] < self.RAObs_max.value)
         inds_DEC = (self.halo_catalog['DEC'] > self.DECObs_min.value)&(self.halo_catalog['DEC'] < self.DECObs_max.value)
@@ -291,20 +292,20 @@ class Survey(Lightcone):
                 halos_survey[line]['Zobs'] = np.append(halos_survey[line]['Zobs'],(self.line_nu0[self.target_line]/self.nuObs_line_halo[line][inds]).decompose()-1)
                 halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog['Z'][inds]+self.halo_catalog['DZ'][inds])
                 halos_survey[line]['Lhalo'] = np.append(halos_survey[line]['Lhalo'],self.L_line_halo[line][inds])
-                
+
         return halos_survey
-        
+
     @cached_survey_property
     def obs_fourier_map(self):
         '''
         Generates the mock intensity map observed in Fourier space,
         obtained from Cartesian coordinates.
-        
+
         Use obs_fourier_map.c2r() to get the real field
         '''
         #Define the mesh divisions and the box size
-        Nmesh = np.array([self.supersample*self.Nchan, 
-                  self.supersample*self.Nside[0], 
+        Nmesh = np.array([self.supersample*self.Nchan,
+                  self.supersample*self.Nside[0],
                   self.supersample*self.Nside[1]], dtype=int)
         Lbox = self.Lbox.value
         #angular limits
@@ -323,13 +324,13 @@ class Survey(Lightcone):
         pos_lims = np.vstack([x,y,z]).T
         r = ((self.cosmo.comoving_radial_distance(zlim)*u.Mpc).to(self.Mpch)).value
         grid_lim = r[:,None]*pos_lims
-        #Loop over lines and add all contributions        
+        #Loop over lines and add all contributions
         global sigma_par
         global sigma_perp
         maps = np.zeros([Nmesh[0],Nmesh[1],Nmesh[2]//2 + 1],dtype='complex64')
         for line in self.lines.keys():
             if self.lines[line]:
-                #Get true cell volume  
+                #Get true cell volume
                 Zlims = (self.line_nu0[line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value,self.nuObs_min.value])-1
                 zlim = np.concatenate((Zlims,Zlims,Zlims,Zlims,Zlims,Zlims,Zlims,Zlims,Zlims))
                 r = ((self.cosmo.comoving_radial_distance(zlim)*u.Mpc).to(self.Mpch)).value
@@ -350,7 +351,7 @@ class Survey(Lightcone):
                 ra,dec,redshift = da.broadcast_arrays(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'],
                                                       self.halos_in_survey[line]['Zobs'])
                 #radial distances in Mpch/h
-                r = redshift.map_blocks(lambda zz: (((self.cosmo.comoving_radial_distance(zz)*u.Mpc).to(self.Mpch)).value), 
+                r = redshift.map_blocks(lambda zz: (((self.cosmo.comoving_radial_distance(zz)*u.Mpc).to(self.Mpch)).value),
                                         dtype=redshift.dtype)
                 cartesian_halopos = r[:,None] * pos
                 #Locate the grid such that bottom left corner of the box is [0,0,0] which is the nbodykit convention.
@@ -370,7 +371,7 @@ class Survey(Lightcone):
                 #Make realfield object
                 field = pm.create(type='real')
                 layout = pm.decompose(lategrid)
-                #Exchange positions between different MPI ranks 
+                #Exchange positions between different MPI ranks
                 p = layout.exchange(lategrid)
                 #Assign weights following the layout of particles
                 m = layout.exchange(signal.value)
@@ -379,7 +380,7 @@ class Survey(Lightcone):
                 field = field.r2c()
                 #Compensate the field for the CIC window function we apply
                 field = field.apply(CompensateCICShotnoise, kind='circular')
-                #This smoothing comes from the resolution window function. 
+                #This smoothing comes from the resolution window function.
                 if self.do_smooth:
                     #compute scales for the anisotropic filter (in Ztrue -> zmid)
                     zmid = (self.line_nu0[line]/self.nuObs_mean).decompose().value-1
@@ -388,7 +389,7 @@ class Survey(Lightcone):
                     field = field.apply(aniso_filter, kind='wavenumber')
                 #Add this contribution to the total maps
                 maps+=field
-        
+
         #Add noise in the cosmic volume probed by target line
         if self.Tsys.value > 0.:
             #get the proper shape for the observed map
@@ -398,15 +399,15 @@ class Survey(Lightcone):
                 maps = pm_noise.downsample(maps.c2r(),keep_mean=True)
             else:
                 maps = maps.c2r()
-            #distribution is positive gaussian with 0 mean 
+            #distribution is positive gaussian with 0 mean
             #add the noise
             maps += np.random.normal(0.,self.sigmaN.value,maps.shape)
-          
+
             return maps.r2c()
         else:
             return maps
-        
-        
+
+
 ################################
 ## Compute summary statistics ##
 ################################
@@ -416,17 +417,17 @@ class Survey(Lightcone):
        '''
        Computes the 2d power spectrum P(k,mu) of the map
        '''
-       return FFTPower(self.obs_fourier_map, '2d', Nmu=self.Nmu, poles=[0,2,4], los=[1,0,0], 
+       return FFTPower(self.obs_fourier_map, '2d', Nmu=self.Nmu, poles=[0,2,4], los=[1,0,0],
                        dk=self.dk.to(self.Mpch**-1).value,kmin=self.kmin.to(self.Mpch**-1).value,
-                       kmax=self.kmax.to(self.Mpch**-1).value,BoxSize=self.Lbox.value) 
-       
+                       kmax=self.kmax.to(self.Mpch**-1).value,BoxSize=self.Lbox.value)
+
     @cached_survey_property
     def k_Pk_poles(self):
         '''
         Fourier wavenumbers for the multipoles of the power spectrum
         '''
         return self.Pk_2d.poles['k']*self.Mpch**-1
-        
+
     @cached_survey_property
     def Pk_0(self):
         '''
@@ -436,25 +437,25 @@ class Survey(Lightcone):
             return self.Pk_2d.poles['power_0'].real*self.Mpch**3*self.unit**2 - self.sigmaN**2*self.Vvox
         else:
             return self.Pk_2d.poles['power_0'].real*self.Mpch**3*self.unit**2
-        
+
     @cached_survey_property
     def Pk_2(self):
         '''
         Quadrupole of the power spectrum
         '''
         return self.Pk_2d.poles['power_2'].real*self.Mpch**3*self.unit**2
-        
+
     @cached_survey_property
     def Pk_4(self):
         '''
         Hexadecapole of the power spectrum
         '''
         return self.Pk_2d.poles['power_4'].real*self.Mpch**3*self.unit**2
-        
+
     @cached_survey_property
     def Pk_2d_theo(self):
         '''
-        Computes the anisotropic power spectrum from theory, using lim. 
+        Computes the anisotropic power spectrum from theory, using lim.
         Neglects potential cross-correlations between lines if volumes probed overlap.
         Returns k_obs,mu_obs,Pk
         '''
@@ -470,9 +471,8 @@ class Survey(Lightcone):
         M.update(nu=self.line_nu0[self.target_line],model_name=line_model,model_par=line_pars,
                       sigma_scatter = sigma_scatter)
         M.update(sigma_NL=((np.trapz(M.PKint(M.z,M.k.value)*u.Mpc**3,M.k)/6./np.pi**2)**0.5).to(u.Mpc))
-        
+
         PK_2d = M.Pk
-        
         for line in self.lines.keys():
             if self.lines[line]:
                 if line == self.target_line:
@@ -490,20 +490,20 @@ class Survey(Lightcone):
                               sigma_scatter = sigma_scatter)
                 M.update(sigma_NL=((np.trapz(M.PKint(M.z,M.k.value)*u.Mpc**3,M.k)/6./np.pi**2)**0.5).to(u.Mpc))
                 #Projection effects in the scales
-                q_perp = M.cosmo.angular_diameter_distance(M.z)*(1+M.z)/(M.cosmo.angular_diameter_distance(self.zmid)*(1+self.zmid))
-                q_par = (1.+M.z)/M.cosmo.hubble_parameter(M.z)/((1.+self.zmid)/M.cosmo.hubble_parameter(self.zmid))
+                q_perp = M.cosmo.angular_diameter_distance([M.z])*(1+M.z)/(M.cosmo.angular_diameter_distance([self.zmid])*(1+self.zmid))
+                q_par = (1.+M.z)/M.cosmo.hubble_parameter([M.z])/((1.+self.zmid)/M.cosmo.hubble_parameter([self.zmid]))
                 F = q_par/q_perp
                 prefac = 1./q_perp**2/q_par
                 #Get "real" k and mu
                 kprime = np.zeros((len(M.mu),len(M.k)))*M.k.unit
-                mu_prime = M.mui_grid/F/np.sqrt(1.+M.mui_grid**2.*(1./F/F-1))
+                mu_prime = M.mui_gridco/F/np.sqrt(1.+M.mui_grid**2.*(1./F/F-1))
                 for imu in range(M.nmu):
                     kprime[imu,:] = M.k/q_perp*np.sqrt(1.+M.mu[imu]**2*(1./F/F-1))
                 #Get the measured Pk contribution and add it to the rest
                 PK_2d += interp2d(M.k,M.mu,M.Pk)(kprime,mu_prime)*PK_2d.unit
-        
+
         return M.k.to(M.Mpch**-1),M.mu,PK_2d.to(self.Mpch**3*self.unit**2)
-    
+
     @cached_survey_property
     def covmat_00(self):
         '''
@@ -511,9 +511,9 @@ class Survey(Lightcone):
         '''
         integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
         cov = 0.5*np.trapz(integrand**2,self.Pk_2d_theo[1],axis=0)
-        return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6*self.unit**4
-        
-        
+        return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles[1:])/self.Pk_2d.poles['modes'][1:]*self.Mpch**6*self.unit**4
+
+
     @cached_survey_property
     def covmat_02(self):
         '''
@@ -524,8 +524,8 @@ class Survey(Lightcone):
         integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
         cov = 5./2.*np.trapz(integrand**2*L2,self.Pk_2d_theo[1],axis=0)
         return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6*self.unit**4
-        
-        
+
+
     @cached_survey_property
     def covmat_04(self):
         '''
@@ -536,8 +536,8 @@ class Survey(Lightcone):
         integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
         cov = 9./2.*np.trapz(integrand**2*L4,self.Pk_2d_theo[1],axis=0)
         return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6*self.unit**4
-        
-        
+
+
     @cached_survey_property
     def covmat_22(self):
         '''
@@ -548,8 +548,8 @@ class Survey(Lightcone):
         integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
         cov = 25./2.*np.trapz(integrand**2*L2*L2,self.Pk_2d_theo[1],axis=0)
         return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6*self.unit**4
-        
-        
+
+
     @cached_survey_property
     def covmat_24(self):
         '''
@@ -561,8 +561,8 @@ class Survey(Lightcone):
         integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
         cov = 45./2.*np.trapz(integrand**2*L2*L4,self.Pk_2d_theo[1],axis=0)
         return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6*self.unit**4
-        
-        
+
+
     @cached_survey_property
     def covmat_44(self):
         '''
@@ -573,22 +573,22 @@ class Survey(Lightcone):
         integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
         cov = 81./2.*np.trapz(integrand**2*L4*L4,self.Pk_2d_theo[1],axis=0)
         return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6*self.unit**4
-        
-        
+
+
     def get_covmat(self,Nmul):
         '''
-        Get the covariance matrix for a given number of multipoles 
+        Get the covariance matrix for a given number of multipoles
         (starting always from the monopole and without skipping any pair
         multipole)
         '''
         if Nmul > 3:
             raise ValueError('Not implemented yet!\
             Implement covmat_66 and expand this function')
-            
+
         nk = len(self.k_Pk_poles)
         covmat = np.zeros((nk*Nmul,nk*Nmul))*self.covmat_00.unit
         covmat[:nk,:nk] = np.diag(self.covmat_00)
-        
+
         if Nmul > 1:
             covmat[:nk,nk:nk*2] = np.diag(self.covmat_02)
             covmat[nk:nk*2,:nk] = np.diag(self.covmat_02)
@@ -602,7 +602,7 @@ class Survey(Lightcone):
             covmat[nk*2:nk*3,nk*2:nk*3] = np.diag(self.covmat_44)
 
         return covmat
-    
+
     @cached_survey_property
     def Ti_edge(self):
         '''
@@ -613,14 +613,14 @@ class Survey(Lightcone):
         else:
             Te = np.logspace(np.log10(self.Tmin_VID.value),np.log10(self.Tmax_VID.value),self.Nbin_hist+1)*self.Tmin_VID.unit
         return Te
-        
+
     @cached_survey_property
     def Ti(self):
         '''
         Center of the VID histogram bins
         '''
         return (self.Ti_edge[:-1]+self.Ti_edge[1:])/2.
-        
+
     @cached_survey_property
     def Bi_VID(self):
         '''
@@ -629,21 +629,21 @@ class Survey(Lightcone):
         '''
         return np.histogram(np.array(self.obs_fourier_map.c2r()).flatten(),
                             bins=self.Ti_edge.value)[0]
-        
+
     @cached_survey_property
     def Bi_VID_covariance(self):
         '''
         Covariance matrix of the VID histograms
         '''
         return np.diag(self.Bi_VID)
-    
-        
 
-                
+
+
+
 #########################
 ## Auxiliary functions ##
 #########################
-    
+
 def aniso_filter(k, v):
     '''
     Filter for k_perp and k_par modes separately.
@@ -661,7 +661,7 @@ def aniso_filter(k, v):
     Coordinates are fixed except for the k[1] which are
     the coordinate that sets what slab is being altered?
 
-    ''' 
+    '''
     rper = sigma_perp
     rpar = sigma_par
     newk = copy.deepcopy(k)
@@ -676,5 +676,4 @@ def aniso_filter(k, v):
 
     kk[kk==0]==1
 
-    return np.exp(-0.5*kk)*v                
-                    
+    return np.exp(-0.5*kk)*v
