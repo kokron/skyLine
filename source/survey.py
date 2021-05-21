@@ -262,7 +262,7 @@ class Survey(Lightcone):
         '''
         Nmesh = np.array([self.Nchan,self.Nside[0], self.Nside[1]], dtype=int)
         #return (self.Lbox.value/Nmesh).prod()*self.Lbox.unit**3
-        return self.Lbox.value/Nmesh)
+        return (self.Lbox.value/Nmesh).prod()*self.Lbox.unit**3
 
     #########################
     ## Create the mock map ##

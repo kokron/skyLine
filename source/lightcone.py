@@ -18,47 +18,47 @@ from source.utilities import cached_lightcone_property,cached_survey_property
 
 class Lightcone(object):
     '''
-    An object controlling all relevant quantities needed to create the 
-    painted LIM lightcone. It reads a lightcone catalog of halos with SFR 
+    An object controlling all relevant quantities needed to create the
+    painted LIM lightcone. It reads a lightcone catalog of halos with SFR
     quantities and paint it with as many lines as desired.
-    
-    Allows to compute summary statistics as power spectrum and the VID for 
+
+    Allows to compute summary statistics as power spectrum and the VID for
     the signal (i.e., without including observational effects).
-    
+
     Lines included: CO
-    
+
     INPUT PARAMETERS:
     ------------------
-    
+
     -halo_lightcone_dir     Path to the directory containing all files related to
                             the halo lightcone catalog
-                            
+
     -zmin,zmax              Minimum and maximum redshifts to read from the lightcone
                             (default: 0,20 - limited by Universe Machine)
-                            
-    -RA_min,RA_max:         minimum and maximum RA to read from the lightcone 
+
+    -RA_min,RA_max:         minimum and maximum RA to read from the lightcone
                             (Default = -65-60 deg)
-    
-    -DEC_min,DEC_max:       minimum and maximum DEC to read from the lightcone 
+
+    -DEC_min,DEC_max:       minimum and maximum DEC to read from the lightcone
                             (Default = -1.25-1.25 deg)
-                            
+
     -lines                  What lines are painted in the lightcone. Dictionary with
-                            bool values (default: All false). 
+                            bool values (default: All false).
                             Available lines: CO, CII, H-alpha, Lyman-alpha, HI
-                            
+
     -models                 Models for each line. Dictionary of dictionaries (first layer,
-                            same components of "lines", second layer, the following 
+                            same components of "lines", second layer, the following
                             components: model_name, model_pars (depends on the model))
                             (default: empty dictionary)
-                            
+
     -do_external_SFR        Boolean, whether to use a SFR different than Universe Machine
                             (default:False)
-                            
+
     -external_SFR           SFR interpolation
-    
+
     -sig_extSFR             log-scatter for an external SFR
-                            
-    -output_root            Root path for output products. (default: output/default)                                
+
+    -output_root            Root path for output products. (default: output/default)
     '''
     def __init__(self,
                  halo_lightcone_dir = '',
@@ -67,15 +67,15 @@ class Lightcone(object):
                  DEC_min = -1.25*u.deg,DEC_max = 1.25*u.deg,
                  lines = dict(CO = False, CII = False, Halpha = False, Lyalpha = False, HI = False),
                  models = dict(CO = dict(model_name = '', model_pars = {}), CII = dict(model_name = '', model_pars = {}),
-                               Halpha = dict(model_name = '', model_pars = {}), Lyalpha = dict(model_name = '', model_pars = {}), 
+                               Halpha = dict(model_name = '', model_pars = {}), Lyalpha = dict(model_name = '', model_pars = {}),
                                HI = dict(model_name = '', model_pars = {})),
                  do_external_SFR = False, external_SFR = '',sig_extSFR = 0.3,
                  output_root = "output/default"):
-                 
+
         # Get list of input values to check type and units
         self._lightcone_params = locals()
         self._lightcone_params.pop('self')
-        
+
         # Get list of input names and default values
         self._default_lightcone_params = get_default_params(Lightcone.__init__)
         # Check that input values have the correct type and units
@@ -84,56 +84,56 @@ class Lightcone(object):
         for key in list(self._default_lightcone_params['lines'].keys()):
             if key not in self._lightcone_params['lines'].keys():
                 self._lightcone_params['lines'][key] = False
-        
+
         # Set all given parameters
         for key in self._lightcone_params:
             setattr(self,key,self._lightcone_params[key])
-            
-        # Create overall lists of parameters (Only used if using one of 
-        self._input_params = {} 
+
+        # Create overall lists of parameters (Only used if using one of
+        self._input_params = {}
         self._default_params = {}
         self._input_params.update(self._lightcone_params)
         self._default_params.update(self._default_lightcone_params)
-        
+
         # Create list of cached properties
         self._update_lightcone_list = []
         self._update_survey_list = []
-            
+
         #Placeholder
         self.L_line_halo = None
-        
+
         #Initialize camb (we need background only) - values used in UM
         camb_pars = camb.set_params(H0=67.8, omch2 = 0.118002988, ombh2 = 0.02312)
         self.h = 0.678
         self.cosmo = camb.get_background(camb_pars)
-        
+
         #Line frequencies:
         self.line_nu0 = dict(CO = 115.271*u.GHz, CII = 1900.539*u.GHz, HI = 1.4204134*u.GHz,
-                        Lyalpha = 2465398.5*u.GHz, Halpha = 456805.72*u.GHz, Hbeta = 616730.01028595*u.GHz, 
+                        Lyalpha = 2465398.5*u.GHz, Halpha = 456805.72*u.GHz, Hbeta = 616730.01028595*u.GHz,
                         OII = 804380.08585994*u.GHz, OIII = 598746.67066107*u.GHz)
-        
+
     #########
     # Units #
     #########
-    
+
     @cached_lightcone_property
     def Mpch(self):
         '''
         Mpc/h unit, required for interacting with hmf outputs
         '''
         return u.Mpc/self.h
-        
+
     @cached_lightcone_property
     def Msunh(self):
         '''
         Msun/h unit, required for interacting with hmf outputs
         '''
         return u.Msun/self.h
-        
+
     ######################
     # Catalog Management #
     ######################
-        
+
     @cached_lightcone_property
     def read_halo_catalog(self):
         '''
@@ -146,7 +146,7 @@ class Lightcone(object):
         for ifile in range(Nfiles):
             ind[ifile] =  int(fnames[ifile].split('_')[-1].split('.')[0])
         sort_ind = np.argsort(ind)
-        #get the edge distances for each slice in Mpc (25 Mpc/h width each slice) 
+        #get the edge distances for each slice in Mpc (25 Mpc/h width each slice)
         dist_edges = (np.arange(Nfiles+1))*25*self.Mpch.value
         min_dist = self.cosmo.comoving_radial_distance(self.zmin)
         max_dist = self.cosmo.comoving_radial_distance(self.zmax)
@@ -165,14 +165,14 @@ class Lightcone(object):
             inds_DEC = (data['DEC'] > self.DEC_min.value)&(data['DEC'] < self.DEC_max.value)
             inds_sky = inds_RA&inds_DEC
             bigcat = np.append(bigcat, data[inds_sky])
-            
+
         self.halo_catalog = bigcat
         return
-        
+
     @cached_lightcone_property
     def halo_luminosity(self):
         '''
-        Computes the halo luminosity for each of the lines of interest, 
+        Computes the halo luminosity for each of the lines of interest,
         and the corresponding observed frequency for each halo and line
         '''
         L_line_halo = {}
@@ -180,23 +180,23 @@ class Lightcone(object):
         #Get the SFR
         if self.do_external_SFR:
             #convert halo mass to Msun
-            Mhalo_Msun = self.halo_catalog['M_HALO']*self.Msunh  
+            Mhalo_Msun = (self.halo_catalog['M_HALO']*self.Msunh).to(u.Msun)
             SFR = getattr(extSFRs,self.external_SFR)(Mhalo_Msun.value,self.halo_catalog['Z'])
             SFR = 10**(np.random.normal(np.log10(SFR), self.sig_extSFR))
         else:
             SFR = self.halo_catalog['SFR_HALO']
-            
-            
+
+
         for line in self.lines.keys():
             if self.lines[line]:
                 L_line_halo[line] = getattr(LM,self.models[line]['model_name'])(self,SFR,self.models[line]['model_pars'])
                 nuObs_line_halo[line] = self.line_nu0[line]/(1+self.halo_catalog['Z']+self.halo_catalog['DZ'])
-                
+
         self.L_line_halo = L_line_halo
         self.nuObs_line_halo = nuObs_line_halo
-        
+
         return
-    
+
     def make_lightcone(self):
         '''
         Wrapper for "read_halo_catalog" and "halo_luminosity"
@@ -204,16 +204,16 @@ class Lightcone(object):
         self.read_halo_catalog
         self.halo_luminosity
         return
-    
+
     def save_lightcone(self):
         '''
         Saves the lightcone in a fits file
         '''
         #DO WE WANT TO DO THIS OR ONLY AFTER MAKE SURVEY??? MAYBE TOO LARGE?
-        
+
         #IF NOT, REMOVE OUTPUT_ROOT
         return
-        
+
     ########################################################################
     # Method for updating input parameters and resetting cached properties #
     ########################################################################
@@ -234,7 +234,5 @@ class Lightcone(object):
         #update parameters
         for key in new_params:
             setattr(self, key, new_params[key])
-            
-        return
-    
 
+        return
