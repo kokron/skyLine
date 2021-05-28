@@ -139,35 +139,35 @@ def dict_lines(self,name,pars):
         if self.do_external_SFR:
             model_pars['SFR_file'] = '../SFR_tables/Silva15_SFR_params.dat'
         else:
-            model_pars['SFR_file'] = '../SFR_tables/UniverseMachine.dat'
+            model_pars['SFR_file'] = '../SFR_tables/UM_sfr.dat'
     elif name == 'Halpha_Gong17':
         model_name = 'GongHalpha'
         model_pars = dict(K_Halpha=pars['K_Halpha'],Aext=pars['Aext_Halpha'])
         if self.do_external_SFR:
             model_pars['SFR_file'] = '../SFR_tables/Gong16_SFR_params.dat'
         else:
-            model_pars['SFR_file'] = '../SFR_tables/UniverseMachine.dat'
+            model_pars['SFR_file'] = '../SFR_tables/UM_sfr.dat'
     elif name == 'Hbeta_Gong17':
         model_name = 'GongHbeta'
         model_pars = dict(K_Hbeta=pars['K_Hbeta'],Aext=pars['Aext_Hbeta'])
         if self.do_external_SFR:
             model_pars['SFR_file'] = '../SFR_tables/Gong16_SFR_params.dat'
         else:
-            model_pars['SFR_file'] = '../SFR_tables/UniverseMachine.dat'
+            model_pars['SFR_file'] = '../SFR_tables/UM_sfr.dat'
     elif name == 'OIII_Gong17':
         model_name = 'GongOIII'
         model_pars = dict(K_OIII=pars['K_OIII'],Aext=pars['Aext_OIII'])
         if self.do_external_SFR:
             model_pars['SFR_file'] = '../SFR_tables/Gong16_SFR_params.dat'
         else:
-            model_pars['SFR_file'] = '../SFR_tables/UniverseMachine.dat'
+            model_pars['SFR_file'] = '../SFR_tables/UM_sfr.dat'
     elif name == 'OII_Gong17':
         model_name = 'GongOII'
         model_pars = dict(K_OII=pars['K_OII'],Aext=pars['Aext_OII'])
         if self.do_external_SFR:
             model_pars['SFR_file'] = '../SFR_tables/Gong16_SFR_params.dat'
         else:
-            model_pars['SFR_file'] = '../SFR_tables/UniverseMachine.dat'
+            model_pars['SFR_file'] = '../SFR_tables/UM_sfr.dat'
     else:
         raise ValueError('The input astrophysical model has no equivalent in the lim code.')
 
