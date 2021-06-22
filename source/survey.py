@@ -251,6 +251,7 @@ class Survey(Lightcone):
             Lbox[i] = np.max(grid_lim[:,i])-np.min(grid_lim[:,i])
             
         self.grid_lim = grid_lim
+        self.pos_lims = pos_lims
 
         return (Lbox*self.Mpch).to(self.Mpch)
 
@@ -311,6 +312,7 @@ class Survey(Lightcone):
                   self.supersample*self.Nside[1]], dtype=int)
         Lbox = self.Lbox.value
         grid_lim = self.grid_lim
+        pos_lims = self.pos_lims
         # ~ #angular limits
         # ~ RAlims = np.array([self.RAObs_min.value,self.RAObs_max.value,0.5*(self.RAObs_min+self.RAObs_max).value])
         # ~ DEClims = np.array([self.DECObs_min.value,self.DECObs_max.value,0.5*(self.DECObs_min+self.DECObs_max).value])
