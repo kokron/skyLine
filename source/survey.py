@@ -148,7 +148,7 @@ class Survey(Lightcone):
             if self.lines[line]:
                 #Get true cell volume
                 zlims = (self.line_nu0[line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
-                if zlims[0] <= self.zmin or zlims [1] >= self.zmaz:
+                if zlims[0] <= self.zmin or zlims [1] >= self.zmax:
                     raise ValueError('The line {} on the bandwidth [{},{}] corresponds to z range [{},{}], while the included redshifts in the lightcone are within [{},{}]. Please remove the line, increase the zmin,zmax range or reduce the bandwith.'.format(line,self.nuObs_max,self.nuObs_min,zlims[0],zlims[1],zmin,zmax))
         if self.paint_catalog:
             self.read_halo_catalog
@@ -254,7 +254,7 @@ class Survey(Lightcone):
         else:
             raside = 2*rlim[1]*np.sin(0.5*(ralim[1]-ralim[0]))
             decside = 2*rlim[1]*np.sin(0.5*(declim[1]-declim[0]))
-            zside = rlim[1]-rlim[0]
+            zside = rlim[1]-rlim[0]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))
         Lbox = np.array([zside,raside,decside])
             
         self.raside_lim = rlim[0]*np.sin(ralim) #min, max
@@ -338,10 +338,12 @@ class Survey(Lightcone):
                     raside = 2*rlim[0]*np.sin(0.5*(ralim[1]-ralim[0]))
                     decside = 2*rlim[0]*np.sin(0.5*(declim[1]-declim[0]))
                     zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
+                    rside_lim = np.array([rlim[0],rlim[0]+zside])
                 else:
                     raside = 2*rlim[1]*np.sin(0.5*(ralim[1]-ralim[0]))
                     decside = 2*rlim[1]*np.sin(0.5*(declim[1]-declim[0]))
-                    zside = rlim[1]-rlim[0]
+                    zside = rlim[1]-rlim[0]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))
+                    rside_lim = np.array([rlim[1]-zside,rlim[1]])
                 Lbox_true = np.array([zside,raside,decside])
                 Vcell_true = (Lbox_true/Nmesh).prod()*(self.Mpch**3).to(self.Mpch**3)
                 #Get positions using the observed redshift
