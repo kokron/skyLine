@@ -221,12 +221,12 @@ class Survey(Lightcone):
         rlim = ((self.cosmo.comoving_radial_distance(zlims)*u.Mpc).to(self.Mpch)).value
         #Get the side of the box
         if self.do_inner_cut:
-            raside = 2*rlim[0]*np.sin(0.5*(ralim[1]-ralim[0]))
-            decside = 2*rlim[0]*np.sin(0.5*(declim[1]-declim[0]))
+            raside = 2*rlim[0]*np.tan(0.5*(ralim[1]-ralim[0]))
+            decside = 2*rlim[0]*np.tan(0.5*(declim[1]-declim[0]))
             zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
         else:
-            raside = 2*rlim[1]*np.sin(0.5*(ralim[1]-ralim[0]))
-            decside = 2*rlim[1]*np.sin(0.5*(declim[1]-declim[0]))
+            raside = 2*rlim[1]*np.tan(0.5*(ralim[1]-ralim[0]))
+            decside = 2*rlim[1]*np.tan(0.5*(declim[1]-declim[0]))
             zside = rlim[1]-rlim[0]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))
         Lbox = np.array([zside,raside,decside])
 
@@ -306,13 +306,13 @@ class Survey(Lightcone):
                 rlim = ((self.cosmo.comoving_radial_distance(zlims)*u.Mpc).to(self.Mpch)).value
                 #Get the side of the box
                 if self.do_inner_cut:
-                    raside = 2*rlim[0]*np.sin(0.5*(ralim[1]-ralim[0]))
-                    decside = 2*rlim[0]*np.sin(0.5*(declim[1]-declim[0]))
+                    raside = 2*rlim[0]*np.tan(0.5*(ralim[1]-ralim[0]))
+                    decside = 2*rlim[0]*np.tan(0.5*(declim[1]-declim[0]))
                     zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
                     rside_lim = np.array([rlim[0],rlim[0]+zside])
                 else:
-                    raside = 2*rlim[1]*np.sin(0.5*(ralim[1]-ralim[0]))
-                    decside = 2*rlim[1]*np.sin(0.5*(declim[1]-declim[0]))
+                    raside = 2*rlim[1]*np.tan(0.5*(ralim[1]-ralim[0]))
+                    decside = 2*rlim[1]*np.tan(0.5*(declim[1]-declim[0]))
                     zside = rlim[1]-rlim[0]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))
                     rside_lim = np.array([rlim[1]-zside,rlim[1]])
                 Lbox_true = np.array([zside,raside,decside])
