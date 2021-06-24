@@ -3,17 +3,11 @@ Base module to make a LIM survey from painted lightcone
 '''
 
 import numpy as np
-from scipy.interpolate import interp2d,interp1d
-from scipy.special import legendre
 import dask.array as da
 import astropy.units as u
 import astropy.constants as cu
 import copy
-from nbodykit.source.catalog import ArrayCatalog
-from nbodykit.algorithms import FFTPower
-from nbodykit.source.mesh.catalog import CompensateCICShotnoise
 import pmesh
-from pmesh.pm import RealField, ComplexField
 from source.lightcone import Lightcone
 from source.utilities import cached_survey_property,get_default_params,check_params
 from source.utilities import set_lim, dict_lines
@@ -24,8 +18,7 @@ class Survey(Lightcone):
     painted LIM lightcone. It reads a lightcone catalog of halos with SFR
     quantities and paint it with as many lines as desired.
 
-    Allows to compute summary statistics as power spectrum and the VID for
-    the signal (i.e., without including observational effects).
+    It will be called by the class measure, to compute summary statistics
 
     INPUT PARAMETERS:
     ------------------
@@ -54,29 +47,8 @@ class Survey(Lightcone):
 
     -target_line:           Target line of the survey (Default: CO)
 
-    -Tmin_VID,Tmax_VID:     Minimum and maximum values to compute the VID histogram
-                            (default: 0.01 uK, 1000 uK)
-
-    -Nbin_hist              Number of bins for the VID histogram
-                            (default: 100)
-
     -supersample:           Factor of supersample with respect to the survey resolution
                             when making the grid. (Default: 10)
-
-    -dk:                    k spacing for the power spectrum (default: 0.02 Mpc^-1~0.01 h/Mpc)
-
-    -kmin,kmax:             Minimum and maximum k values for the power spectrum
-                            (default: 0., 3 Mpc^-1 ~ 5 h/Mpc)
-
-    -Nmu:                   Number of sampling in mu to compute the power spectrum
-                            (default: 10)
-
-    -remove_noise:          Remove the expected instrumental noise power spectrum (sigma_N^2*Vvox)
-                            from the observed power spectrum (and adds it to the covariance).
-                            (default: False)
-
-    -linear_VID_bin:        Boolean, to do linear (or log) binning for the VID histogram
-                            (default: False)
 
     -paint_catalog:         Boolean: Paint catalog or used a painted one.               DOES THIS MAKE SENSE OR ALWAYS TRUE????
                             (Default: True).
@@ -88,6 +60,9 @@ class Survey(Lightcone):
     
     -do_inner_cut           Get a box for which there are no empty spaces, but discards some haloes.
                             (Default: True). Do this *only* for narrow fields
+                            
+    -do_angular             Create an angular survey (healpy map)
+                            (Default: False)
     '''
     def __init__(self,
                  do_intensity=False,
@@ -103,20 +78,12 @@ class Survey(Lightcone):
                  beam_FWHM=4.1*u.arcmin,
                  tobs=6000*u.hr,
                  target_line = 'CO',
-                 Tmin_VID = 1.0e-2*u.uK,
-                 Tmax_VID = 1000.*u.uK,
-                 Nbin_hist = 100,
-                 linear_VID_bin = False,
                  supersample = 10,
-                 dk = 0.02*u.Mpc**-1,
-                 kmin = 0.0*u.Mpc**-1,
-                 kmax = 3.*u.Mpc**-1,
-                 Nmu = 5,
-                 remove_noise = False,
                  output_root = "output/default",
                  paint_catalog = True,
                  do_smooth = True,
                  do_inner_cut = True,
+                 do_angular = False,
                  **lightcone_kwargs):
 
         # Initiate Lightcone() parameters
@@ -150,6 +117,7 @@ class Survey(Lightcone):
                 zlims = (self.line_nu0[line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
                 if zlims[0] <= self.zmin or zlims [1] >= self.zmax:
                     raise ValueError('The line {} on the bandwidth [{},{}] corresponds to z range [{},{}], while the included redshifts in the lightcone are within [{},{}]. Please remove the line, increase the zmin,zmax range or reduce the bandwith.'.format(line,self.nuObs_max,self.nuObs_min,zlims[0],zlims[1],zmin,zmax))
+        
         if self.paint_catalog:
             self.read_halo_catalog
             self.halo_luminosity
@@ -223,7 +191,7 @@ class Survey(Lightcone):
     @cached_survey_property
     def sigmaN(self):
         '''
-        Instrumental voxel noise standard deviation
+        Instrumental voxel/pixel (depending on do_angular) noise standard deviation
         '''
         tpix = self.tobs/self.Npix
         if self.do_intensity:
@@ -232,7 +200,11 @@ class Survey(Lightcone):
         else:
             #Temperature[uK]
             sig2 = self.Tsys**2/(self.Nfeeds*self.dnu*tpix)
-        return (sig2**0.5).to(self.unit)
+            
+        if self.do_angular:
+            return ((sig2/self.Nchan)**0.5).to(self.unit)
+        else:
+            return (sig2**0.5).to(self.unit)
 
     @cached_survey_property
     def Lbox(self):
@@ -306,12 +278,10 @@ class Survey(Lightcone):
         return halos_survey
 
     @cached_survey_property
-    def obs_fourier_map(self):
+    def obs_map(self):
         '''
         Generates the mock intensity map observed in Fourier space,
-        obtained from Cartesian coordinates.
-
-        Use obs_fourier_map.c2r() to get the real field
+        obtained from Cartesian coordinates. It does not include noise.
         '''
         #Define the mesh divisions and the box size
         Nmesh = np.array([self.supersample*self.Nchan,
@@ -326,7 +296,7 @@ class Survey(Lightcone):
         
         global sigma_par
         global sigma_perp
-        maps = np.zeros([Nmesh[0],Nmesh[1],Nmesh[2]//2 + 1],dtype='complex64')
+        maps = np.zeros([Nmesh[0],Nmesh[1],Nmesh[2]]//2 + 1, dtype='complex64')
         
         for line in self.lines.keys():
             if self.lines[line]:
@@ -386,8 +356,9 @@ class Survey(Lightcone):
                         #Temperature[uK]
                         signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
                 #Locate the grid such that bottom left corner of the box is [0,0,0] which is the nbodykit convention.
+                mins = np.array([rside_lim[0],raside_lim[0],decside_lim[0]])
                 for n in range(3):
-                    lategrid[:,n] -= np.min(lategrid[:,n])
+                    lategrid[:,n] -= mins
                 #Set the emitter in the grid and paint using pmesh directly instead of nbk
                 pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler='cic')
                 #Make realfield object
@@ -400,8 +371,6 @@ class Survey(Lightcone):
                 pm.paint(p, out=field, mass=m, resampler='cic')
                 #Fourier transform fields and apply the filter
                 field = field.r2c()
-                #Compensate the field for the CIC window function we apply
-                field = field.apply(CompensateCICShotnoise, kind='circular')
                 #This smoothing comes from the resolution window function.
                 if self.do_smooth:
                     #compute scales for the anisotropic filter (in Ztrue -> zmid)
@@ -411,256 +380,27 @@ class Survey(Lightcone):
                     field = field.apply(aniso_filter, kind='wavenumber')
                 #Add this contribution to the total maps
                 maps+=field
+                
+        #Compensate the field for the CIC window function we apply
+        maps = maps.apply(CompensateCICShotnoise, kind='circular')
 
         #Add noise in the cosmic volume probed by target line
-        if self.Tsys.value > 0.:
-            #get the proper shape for the observed map
-            if self.supersample > 1:
-                pm_noise = pmesh.pm.ParticleMesh(np.array([self.Nchan,self.Nside[0],self.Nside[1]], dtype=int),
-                                                  BoxSize=Lbox, dtype='float32', resampler='cic')
-                maps = pm_noise.downsample(maps.c2r(),keep_mean=True)
-            else:
+        if not do_angular:
+            if self.Tsys.value > 0.:
+                #get the proper shape for the observed map
+                if self.supersample > 1:
+                    pm_noise = pmesh.pm.ParticleMesh(np.array([self.Nchan,self.Nside[0],self.Nside[1]], dtype=int),
+                                                      BoxSize=Lbox, dtype='float32', resampler='cic')
+                    maps = pm_noise.downsample(maps.c2r(),keep_mean=True)
+                    maps = (maps.r2c()).apply(CompensateCICShotnoise, kind='circular')
+                    
                 maps = maps.c2r()
-            #distribution is positive gaussian with 0 mean
-            #add the noise
-            maps += np.random.normal(0.,self.sigmaN.value,maps.shape)
+                #add the noise, distribution is gaussian with 0 mean
+                maps += np.random.normal(0.,self.sigmaN.value,maps.shape)
 
-            return maps.r2c()
-        else:
             return maps
-
-
-################################
-## Compute summary statistics ##
-################################
-
-    @cached_survey_property
-    def Pk_2d(self):
-       '''
-       Computes the 2d power spectrum P(k,mu) of the map
-       '''
-       return FFTPower(self.obs_fourier_map, '2d', Nmu=self.Nmu, poles=[0,2,4], los=[1,0,0],
-                       dk=self.dk.to(self.Mpch**-1).value,kmin=self.kmin.to(self.Mpch**-1).value,
-                       kmax=self.kmax.to(self.Mpch**-1).value,BoxSize=self.Lbox.value)
-
-    @cached_survey_property
-    def k_Pk_poles(self):
-        '''
-        Fourier wavenumbers for the multipoles of the power spectrum
-        '''
-        return self.Pk_2d.poles['k']*self.Mpch**-1
-
-    @cached_survey_property
-    def Pk_0(self):
-        '''
-        Monopole of the power spectrum
-        '''
-        if self.remove_noise:
-            return self.Pk_2d.poles['power_0'].real*self.Mpch**3*self.unit**2 - self.sigmaN**2*self.Vvox
         else:
-            return self.Pk_2d.poles['power_0'].real*self.Mpch**3*self.unit**2
-
-    @cached_survey_property
-    def Pk_2(self):
-        '''
-        Quadrupole of the power spectrum
-        '''
-        return self.Pk_2d.poles['power_2'].real*self.Mpch**3*self.unit**2
-
-    @cached_survey_property
-    def Pk_4(self):
-        '''
-        Hexadecapole of the power spectrum
-        '''
-        return self.Pk_2d.poles['power_4'].real*self.Mpch**3*self.unit**2
-
-    @cached_survey_property
-    def Pk_2d_theo(self):
-        '''
-        Computes the anisotropic power spectrum from theory, using lim.
-        Neglects potential cross-correlations between lines if volumes probed overlap.
-        Returns k_obs,mu_obs,Pk
-        '''
-        #Call lim, and prepare it for the target line
-        M = set_lim(self)
-        line_model,line_pars = dict_lines(self,self.models[self.target_line]['model_name'],
-                                          self.models[self.target_line]['model_pars'])
-        if 'sigma_LCO' in self.models[self.target_line]['model_pars']:
-            sigma_scatter = self.models[self.target_line]['model_pars']['sigma_LCO']
-        #ANY OTHER CASE?
-        else:
-            sigma_scatter = 0.
-        M.update(nu=self.line_nu0[self.target_line],model_name=line_model,model_par=line_pars,
-                      sigma_scatter = sigma_scatter)
-        M.update(sigma_NL=((np.trapz(M.PKint(M.z,M.k.value)*u.Mpc**3,M.k)/6./np.pi**2)**0.5).to(u.Mpc))
-
-        PK_2d = M.Pk
-        for line in self.lines.keys():
-            if self.lines[line]:
-                if line == self.target_line:
-                    #already done above
-                    continue
-                #Repeat for all line interlopers
-                line_model,line_pars = dict_lines(self,self.models[line]['model_name'],
-                                          self.models[line]['model_pars'])
-                if 'sigma_LCO' in self.models[line]['model_pars']:
-                    sigma_scatter = self.models[line]['model_pars']['sigma_LCO']
-                #ANY OTHER CASE?
-                else:
-                    sigma_scatter = 0.
-                M.update(nu=self.line_nu0[line],model_name=line_model,model_par=line_pars,
-                              sigma_scatter = sigma_scatter)
-                M.update(sigma_NL=((np.trapz(M.PKint(M.z,M.k.value)*u.Mpc**3,M.k)/6./np.pi**2)**0.5).to(u.Mpc))
-                #Projection effects in the scales
-                q_perp = M.cosmo.angular_diameter_distance([M.z])*(1+M.z)/(M.cosmo.angular_diameter_distance([self.zmid])*(1+self.zmid))
-                q_par = (1.+M.z)/M.cosmo.hubble_parameter([M.z])/((1.+self.zmid)/M.cosmo.hubble_parameter([self.zmid]))
-                F = q_par/q_perp
-                prefac = 1./q_perp**2/q_par
-                #Get "real" k and mu
-                kprime = np.zeros((len(M.mu),len(M.k)))*M.k.unit
-                mu_prime = M.mui_gridco/F/np.sqrt(1.+M.mui_grid**2.*(1./F/F-1))
-                for imu in range(M.nmu):
-                    kprime[imu,:] = M.k/q_perp*np.sqrt(1.+M.mu[imu]**2*(1./F/F-1))
-                #Get the measured Pk contribution and add it to the rest
-                PK_2d += interp2d(M.k,M.mu,M.Pk)(kprime,mu_prime)*PK_2d.unit
-
-        return M.k.to(M.Mpch**-1),M.mu,PK_2d.to(self.Mpch**3*self.unit**2)
-
-    @cached_survey_property
-    def covmat_00(self):
-        '''
-        00 term of the total covariance matrix
-        '''
-        integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
-        cov = 0.5*np.trapz(integrand**2,self.Pk_2d_theo[1],axis=0)
-        return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles[1:])/self.Pk_2d.poles['modes'][1:]*self.Mpch**6*self.unit**4
-
-
-    @cached_survey_property
-    def covmat_02(self):
-        '''
-        02 term of the total covariance matrix
-        '''
-        mui_grid = np.meshgrid(self.Pk_2d_theo[0],self.Pk_2d_theo[1])[1]
-        L2 = legendre(2)(mui_grid)
-        integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
-        cov = 5./2.*np.trapz(integrand**2*L2,self.Pk_2d_theo[1],axis=0)
-        return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6*self.unit**4
-
-
-    @cached_survey_property
-    def covmat_04(self):
-        '''
-        04 term of the total covariance matrix
-        '''
-        mui_grid = np.meshgrid(self.Pk_2d_theo[0],self.Pk_2d_theo[1])[1]
-        L4 = legendre(4)(mui_grid)
-        integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
-        cov = 9./2.*np.trapz(integrand**2*L4,self.Pk_2d_theo[1],axis=0)
-        return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6*self.unit**4
-
-
-    @cached_survey_property
-    def covmat_22(self):
-        '''
-        22 term of the total covariance matrix
-        '''
-        mui_grid = np.meshgrid(self.Pk_2d_theo[0],self.Pk_2d_theo[1])[1]
-        L2 = legendre(2)(mui_grid)
-        integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
-        cov = 25./2.*np.trapz(integrand**2*L2*L2,self.Pk_2d_theo[1],axis=0)
-        return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6*self.unit**4
-
-
-    @cached_survey_property
-    def covmat_24(self):
-        '''
-        24 term of the total covariance matrix
-        '''
-        mui_grid = np.meshgrid(self.Pk_2d_theo[0],self.Pk_2d_theo[1])[1]
-        L2 = legendre(2)(mui_grid)
-        L4 = legendre(4)(mui_grid)
-        integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
-        cov = 45./2.*np.trapz(integrand**2*L2*L4,self.Pk_2d_theo[1],axis=0)
-        return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6*self.unit**4
-
-
-    @cached_survey_property
-    def covmat_44(self):
-        '''
-        44 term of the total covariance matrix
-        '''
-        mui_grid = np.meshgrid(self.Pk_2d_theo[0],self.Pk_2d_theo[1])[1]
-        L4 = legendre(4)(mui_grid)
-        integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
-        cov = 81./2.*np.trapz(integrand**2*L4*L4,self.Pk_2d_theo[1],axis=0)
-        return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6*self.unit**4
-
-
-    def get_covmat(self,Nmul):
-        '''
-        Get the covariance matrix for a given number of multipoles
-        (starting always from the monopole and without skipping any pair
-        multipole)
-        '''
-        if Nmul > 3:
-            raise ValueError('Not implemented yet!\
-            Implement covmat_66 and expand this function')
-
-        nk = len(self.k_Pk_poles)
-        covmat = np.zeros((nk*Nmul,nk*Nmul))*self.covmat_00.unit
-        covmat[:nk,:nk] = np.diag(self.covmat_00)
-
-        if Nmul > 1:
-            covmat[:nk,nk:nk*2] = np.diag(self.covmat_02)
-            covmat[nk:nk*2,:nk] = np.diag(self.covmat_02)
-            covmat[nk:nk*2,nk:nk*2] = np.diag(self.covmat_22)
-            covmat[:nk,nk:nk*2] = np.diag(self.covmat_02)
-        if Nmul > 2:
-            covmat[:nk,nk*2:nk*3] = np.diag(self.covmat_04)
-            covmat[nk:nk*2,nk*2:nk*3] = np.diag(self.covmat_24)
-            covmat[nk*2:nk*3,:nk] = np.diag(self.covmat_04)
-            covmat[nk*2:nk*3,nk:nk*2] = np.diag(self.covmat_24)
-            covmat[nk*2:nk*3,nk*2:nk*3] = np.diag(self.covmat_44)
-
-        return covmat
-
-    @cached_survey_property
-    def Ti_edge(self):
-        '''
-        Edges of the VID histogram bins
-        '''
-        if self.linear_VID_bin:
-            Te = np.linspace(self.Tmin_VID.value,self.Tmax_VID.value,self.Nbin_hist+1)*self.Tmin_VID.unit
-        else:
-            Te = np.logspace(np.log10(self.Tmin_VID.value),np.log10(self.Tmax_VID.value),self.Nbin_hist+1)*self.Tmin_VID.unit
-        return Te
-
-    @cached_survey_property
-    def Ti(self):
-        '''
-        Center of the VID histogram bins
-        '''
-        return (self.Ti_edge[:-1]+self.Ti_edge[1:])/2.
-
-    @cached_survey_property
-    def Bi_VID(self):
-        '''
-        Computes the histogram of temperatures in each voxel in hte observed map.
-        Equivalent to the VID
-        '''
-        return np.histogram(np.array(self.obs_fourier_map.c2r()).flatten(),
-                            bins=self.Ti_edge.value)[0]
-
-    @cached_survey_property
-    def Bi_VID_covariance(self):
-        '''
-        Covariance matrix of the VID histograms
-        '''
-        return np.diag(self.Bi_VID)
-
-
-
+            raise ValueError("Angular maps still not implemented")
 
 #########################
 ## Auxiliary functions ##

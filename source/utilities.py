@@ -49,6 +49,27 @@ class cached_survey_property(object):
 
         res = instance.__dict__[self.func.__name__] = self.func(instance)
         return res
+        
+class cached_measure_property(object):
+    """
+    From github.com/Django, who wrote a much better version of this than
+    the one I had previously.
+
+    Decorator that converts a self.func with a single self argument into a
+    property cached on the instance.
+    """
+    def __init__(self, func):
+        self.func = func
+
+    def __get__(self, instance, type=None):
+        if instance is None:
+            return self
+
+        # ADDED THIS CODE TO LIST PROPERTY FOR UPDATING
+        instance._update_measure_list.append(self.func.__name__)
+
+        res = instance.__dict__[self.func.__name__] = self.func(instance)
+        return res
 
 def check_params(input_params, default_params):
     '''

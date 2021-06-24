@@ -98,6 +98,7 @@ class Lightcone(object):
         # Create list of cached properties
         self._update_lightcone_list = []
         self._update_survey_list = []
+        self._update_measure_list = []
 
         #Placeholder
         self.L_line_halo = None
