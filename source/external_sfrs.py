@@ -48,3 +48,10 @@ def UniverseMachine_SFR(M,z):
         SFR = 10.**logSFR_interp(logM,z)
 
     return SFR
+
+def Custom_SFR(M,z,pars):
+    try:
+        M0,Ma,Mb,a,b,c = pars['M0'],pars['Ma'],pars['Mb'],pars['a'],pars['b'],pars['c']
+    except:
+        raise ValueError('The model_pars for Custom_SFR are M0,Ma,Mb,a,b,c, but {} were provided'.format(pars.keys()))
+    return M0*((M/Ma)**a)*(1+(M/Mb)**b)**c

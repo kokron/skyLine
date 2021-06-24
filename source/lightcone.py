@@ -69,7 +69,7 @@ class Lightcone(object):
                  models = dict(CO = dict(model_name = '', model_pars = {}), CII = dict(model_name = '', model_pars = {}),
                                Halpha = dict(model_name = '', model_pars = {}), Lyalpha = dict(model_name = '', model_pars = {}),
                                HI = dict(model_name = '', model_pars = {})),
-                 do_external_SFR = False, external_SFR = '',sig_extSFR = 0.3,
+                 do_external_SFR = False, external_SFR = '',sig_extSFR = 0.3, SFR_pars=dict(M0=1e-6, Ma=10**8, Mb=10**12.3, a=1.9, b=3.0, c=-1.4),
                  output_root = "output/default"):
 
         # Get list of input values to check type and units
@@ -155,11 +155,13 @@ class Lightcone(object):
         N_in = len(inds_in)
         #open the first one
         fil = fits.open(fnames[sort_ind[inds_in[0]]])
+        print(fnames[sort_ind[inds_in[0]]])
+
         #Start the catalog appending everything
         bigcat = np.array(fil[1].data)
         #Open the rest and append
         for ifile in range(1,N_in):
-            print(fnames[ifile])
+            print(fnames[sort_ind[inds_in[ifile]]])
             fil = fits.open(fnames[sort_ind[inds_in[ifile]]])
             data = np.array(fil[1].data)
             inds_RA = (data['RA'] > self.RA_min.value)&(data['RA'] < self.RA_max.value)
@@ -182,8 +184,12 @@ class Lightcone(object):
         if self.do_external_SFR:
             #convert halo mass to Msun
             Mhalo_Msun = (self.halo_catalog['M_HALO']*self.Msunh).to(u.Msun)
-            SFR = getattr(extSFRs,self.external_SFR)(Mhalo_Msun.value,self.halo_catalog['Z'])
-            SFR = 10**(np.random.normal(np.log10(SFR), self.sig_extSFR))
+            if self.external_SFR == 'Custom_SFR':
+                SFR = getattr(extSFRs,self.external_SFR)(Mhalo_Msun.value,self.halo_catalog['Z'], self.SFR_pars)
+                SFR = 10**(np.random.normal(np.log10(SFR), self.sig_extSFR))
+            else:
+                SFR = getattr(extSFRs,self.external_SFR)(Mhalo_Msun.value,self.halo_catalog['Z'])
+                SFR = 10**(np.random.normal(np.log10(SFR), self.sig_extSFR))
         else:
             SFR = self.halo_catalog['SFR_HALO']
 
@@ -234,18 +240,18 @@ class Lightcone(object):
             self._update_survey_list = []
             for attribute in self._update_measure_list:
                 delattr(self,attribute)
-            self._update_measure_list = [] 
+            self._update_measure_list = []
         if any(item in survey_params for item in new_params.keys()):
             for attribute in self._update_survey_list:
                 delattr(self,attribute)
             self._update_survey_list = []
             for attribute in self._update_measure_list:
                 delattr(self,attribute)
-            self._update_measure_list = [] 
+            self._update_measure_list = []
         if any (item in measure_params for item in new_params.keys()):
             for attribute in self._update_measure_list:
                 delattr(self,attribute)
-            self._update_measure_list = [] 
+            self._update_measure_list = []
         #update parameters
         for key in new_params:
             setattr(self, key, new_params[key])
