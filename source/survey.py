@@ -58,10 +58,10 @@ class Survey(Lightcone):
                             limitations. (Default: True)
 
     -output_root            Root path for output products. (default: output/default)
-    
+
     -do_inner_cut           Get a box for which there are no empty spaces, but discards some haloes.
                             (Default: True). Do this *only* for narrow fields
-                            
+
     -do_angular             Create an angular survey (healpy map)
                             (Default: False)
     '''
@@ -110,15 +110,15 @@ class Survey(Lightcone):
         if self.RAObs_min < self.RA_min or self.RAObs_max > self.RA_max or \
            self.DECObs_min < self.DEC_min or self.DECObs_max > self.DEC_max:
                raise ValueError('Please, your observed limits RA_Obs=[{},{}], DEC_Obs=[{},{}] must be within the lightcone limits RA=[{},{}], DEC=[{},{}].'.format(self.RAObs_min,self.RAObs_max,self.DECObs_min,self.DECObs_max,self.RA_min,self.RA_max,self.DEC_min,self.DEC_max))
-               
+
         # Check that the bandwidth and lines used are included in the lightcone limits
         for line in self.lines.keys():
             if self.lines[line]:
                 #Get true cell volume
                 zlims = (self.line_nu0[line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
                 if zlims[0] <= self.zmin or zlims [1] >= self.zmax:
-                    raise ValueError('The line {} on the bandwidth [{},{}] corresponds to z range [{},{}], while the included redshifts in the lightcone are within [{},{}]. Please remove the line, increase the zmin,zmax range or reduce the bandwith.'.format(line,self.nuObs_max,self.nuObs_min,zlims[0],zlims[1],zmin,zmax))
-        
+                    raise ValueError('The line {} on the bandwidth [{},{}] corresponds to z range [{},{}], while the included redshifts in the lightcone are within [{},{}]. Please remove the line, increase the zmin,zmax range or reduce the bandwith.'.format(line,self.nuObs_max,self.nuObs_min,zlims[0],zlims[1],self.zmin,self.zmax))
+
         if self.paint_catalog:
             self.read_halo_catalog
             self.halo_luminosity
@@ -201,7 +201,7 @@ class Survey(Lightcone):
         else:
             #Temperature[uK]
             sig2 = self.Tsys**2/(self.Nfeeds*self.dnu*tpix)
-            
+
         if self.do_angular:
             return ((sig2/self.Nchan)**0.5).to(self.unit)
         else:
@@ -229,7 +229,7 @@ class Survey(Lightcone):
             decside = 2*rlim[1]*np.sin(0.5*(declim[1]-declim[0]))
             zside = rlim[1]-rlim[0]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))
         Lbox = np.array([zside,raside,decside])
-            
+
         self.raside_lim = rlim[0]*np.sin(ralim) #min, max
         self.decside_lim = rlim[0]*np.sin(declim) #min, max
 
@@ -289,16 +289,16 @@ class Survey(Lightcone):
                   self.supersample*self.Nside[0],
                   self.supersample*self.Nside[1]], dtype=int)
         Lbox = self.Lbox.value
-        
+
         ralim = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_max.value]))
         declim = np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value]))
         raside_lim = self.raside_lim
         decside_lim = self.decside_lim
-        
+
         global sigma_par
         global sigma_perp
         maps = np.zeros([Nmesh[0],Nmesh[1],Nmesh[2]//2 + 1], dtype='complex64')
-        
+
         for line in self.lines.keys():
             if self.lines[line]:
                 #Get true cell volume
@@ -381,7 +381,7 @@ class Survey(Lightcone):
                     field = field.apply(aniso_filter, kind='wavenumber')
                 #Add this contribution to the total maps
                 maps+=field
-                
+
         #Compensate the field for the CIC window function we apply
         maps = maps.apply(CompensateCICShotnoise, kind='circular')
 
@@ -396,7 +396,7 @@ class Survey(Lightcone):
                     #Check if compensation is required agai
                     #Check if compensation is required againn
                     maps = (maps.r2c()).apply(CompensateCICShotnoise, kind='circular')
-                    
+
                 maps = maps.c2r()
                 #add the noise, distribution is gaussian with 0 mean
                 maps += np.random.normal(0.,self.sigmaN.value,maps.shape)
