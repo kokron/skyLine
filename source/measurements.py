@@ -3,6 +3,8 @@ Base module to make LIM measurements from a mock LIM survey from painted lightco
 '''
 
 import numpy as np
+import astropy.units as u
+import astropy.constants as cu
 from scipy.interpolate import interp2d,interp1d
 from scipy.special import legendre
 from nbodykit.algorithms import FFTPower
@@ -53,7 +55,7 @@ class Measure(Survey):
                  Tmax_VID = 1000.*u.uK,
                  linear_VID_bin = False,
                  Nbin_hist = 100,
-                 **lightcone_survey_kwargs)
+                 **lightcone_survey_kwargs):
                  
         # Initiate Survey() parameters
         Survey.__init__(self,**lightcone_survey_kwargs)
@@ -86,9 +88,10 @@ class Measure(Survey):
         Computes the 2d power spectrum P(k,mu) of the map
         '''
         if not self.do_inner_cut:
-            raise ValueError("Fourier power spectrum measurements are only available if 'do_inner_cut == True'")
+            print("ERROR!!: Fourier power spectrum measurements are only available if 'do_inner_cut == True'")
+            return None
         else:
-            return FFTPower(self.obs_fourier_map, '2d', Nmu=self.Nmu, poles=[0,2,4], los=[1,0,0],
+            return FFTPower(self.obs_map, '2d', Nmu=self.Nmu, poles=[0,2,4], los=[1,0,0],
                             dk=self.dk.to(self.Mpch**-1).value,kmin=self.kmin.to(self.Mpch**-1).value,
                             kmax=self.kmax.to(self.Mpch**-1).value,BoxSize=self.Lbox.value)
 
@@ -306,7 +309,7 @@ class Measure(Survey):
         Computes the histogram of temperatures in each voxel in hte observed map.
         Equivalent to the VID
         '''
-        return np.histogram(np.array(self.obs_fourier_map.c2r()).flatten(),
+        return np.histogram(np.array(self.obs_map).flatten(),
                             bins=self.Ti_edge.value)[0]
 
     @cached_measure_property

@@ -8,6 +8,7 @@ import astropy.units as u
 import astropy.constants as cu
 import copy
 import pmesh
+from nbodykit.source.mesh.catalog import CompensateCICShotnoise
 from source.lightcone import Lightcone
 from source.utilities import cached_survey_property,get_default_params,check_params
 from source.utilities import set_lim, dict_lines
@@ -296,7 +297,7 @@ class Survey(Lightcone):
         
         global sigma_par
         global sigma_perp
-        maps = np.zeros([Nmesh[0],Nmesh[1],Nmesh[2]]//2 + 1, dtype='complex64')
+        maps = np.zeros([Nmesh[0],Nmesh[1],Nmesh[2]//2 + 1], dtype='complex64')
         
         for line in self.lines.keys():
             if self.lines[line]:
@@ -358,7 +359,7 @@ class Survey(Lightcone):
                 #Locate the grid such that bottom left corner of the box is [0,0,0] which is the nbodykit convention.
                 mins = np.array([rside_lim[0],raside_lim[0],decside_lim[0]])
                 for n in range(3):
-                    lategrid[:,n] -= mins
+                    lategrid[:,n] -= mins[n]
                 #Set the emitter in the grid and paint using pmesh directly instead of nbk
                 pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler='cic')
                 #Make realfield object
@@ -385,22 +386,26 @@ class Survey(Lightcone):
         maps = maps.apply(CompensateCICShotnoise, kind='circular')
 
         #Add noise in the cosmic volume probed by target line
-        if not do_angular:
+        if not self.do_angular:
             if self.Tsys.value > 0.:
                 #get the proper shape for the observed map
                 if self.supersample > 1:
                     pm_noise = pmesh.pm.ParticleMesh(np.array([self.Nchan,self.Nside[0],self.Nside[1]], dtype=int),
                                                       BoxSize=Lbox, dtype='float32', resampler='cic')
                     maps = pm_noise.downsample(maps.c2r(),keep_mean=True)
+                    #Check if compensation is required agai
+                    #Check if compensation is required againn
                     maps = (maps.r2c()).apply(CompensateCICShotnoise, kind='circular')
                     
                 maps = maps.c2r()
                 #add the noise, distribution is gaussian with 0 mean
                 maps += np.random.normal(0.,self.sigmaN.value,maps.shape)
-
+            else:
+                maps = maps.c2r()
             return maps
         else:
-            raise ValueError("Angular maps still not implemented")
+            print("ERROR!!: Angular maps still not implemented")
+            return None
 
 #########################
 ## Auxiliary functions ##
