@@ -224,14 +224,28 @@ class Lightcone(object):
         #update the class that corresponds
         lightcone_params = list(self._default_lightcone_params.keys())
         survey_params = list(self._default_survey_params.keys())
+        measure_params = list(self._default_measure_params.keys())
         if any(item in lightcone_params for item in new_params.keys()):
             for attribute in self._update_lightcone_list:
                 delattr(self,attribute)
             self._update_lightcone_list = []
+            for attribute in self._update_survey_list:
+                delattr(self,attribute)
+            self._update_survey_list = []
+            for attribute in self._update_measure_list:
+                delattr(self,attribute)
+            self._update_measure_list = [] 
         if any(item in survey_params for item in new_params.keys()):
             for attribute in self._update_survey_list:
                 delattr(self,attribute)
             self._update_survey_list = []
+            for attribute in self._update_measure_list:
+                delattr(self,attribute)
+            self._update_measure_list = [] 
+        if any (item in measure_params for item in new_params.keys()):
+            for attribute in self._update_measure_list:
+                delattr(self,attribute)
+            self._update_measure_list = [] 
         #update parameters
         for key in new_params:
             setattr(self, key, new_params[key])
