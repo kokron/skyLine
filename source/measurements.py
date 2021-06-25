@@ -148,6 +148,7 @@ class Measure(Survey):
             sigma_scatter = 0.
         M.update(nu=self.line_nu0[self.target_line],model_name=line_model,model_par=line_pars,
                       sigma_scatter = sigma_scatter)
+        M.update(Mmin = (np.min(self.halo_catalog['M_HALO'])*self.Msunh).to(u.Msun), Mmax = (np.max(self.halo_catalog['M_HALO'])*self.Msunh).to(u.Msun))
         M.update(sigma_NL=((np.trapz(M.PKint(M.z,M.k.value)*u.Mpc**3,M.k)/6./np.pi**2)**0.5).to(u.Mpc))
 
         PK_2d = M.Pk

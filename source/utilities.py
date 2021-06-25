@@ -203,8 +203,7 @@ def set_lim(self):
     fid = dict(cosmo_input_camb={'H0':67.8,'ombh2':0.02312,'omch2':0.118002988,
                       'As':2.23832e-9,'ns':0.96,'mnu':0.06})
     krange = {'nk':512,'kmin':1e-5*u.Mpc**-1,'kmax':10*u.Mpc**-1,'k_kind':'log','nmu':10000,'smooth':self.do_smooth}
-    hmf = dict(model_type='ML', Mmin = 1e10*self.Msunh.to(u.Msun), Mmax=1e15*self.Msunh.to(u.Msun),
-                      hmf_model='Tinker',bias_model='Tinker10',do_onehalo=True)
+    hmf = dict(model_type='ML',hmf_model='Tinker',bias_model='Tinker10',do_onehalo=True)
 
     astromodel=dict(nu=self.line_nu0[self.target_line],model_name="TonyLi",model_par={'alpha': 1.37, 'beta': -1.74, 'dMF': 1, 'sig_SFR': 0.3, 'SFR_file': '../SFR_tables/sfr_table_UniverseMachine_clean.dat'}, sigma_scatter = 0.3)
     survey = dict(Tsys_NEFD=self.Tsys,do_Jysr=self.do_intensity,tobs=self.tobs,Omega_field=self.Omega_field,
