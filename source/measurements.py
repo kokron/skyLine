@@ -100,7 +100,7 @@ class Measure(Survey):
         '''
         Fourier wavenumbers for the multipoles of the power spectrum
         '''
-        return self.Pk_2d.poles['k']*self.Mpch**-1
+        return (self.Pk_2d.poles['k']*self.Mpch**-1).to(self.Mpch**-1)
 
     @cached_measure_property
     def Pk_0(self):
@@ -108,23 +108,23 @@ class Measure(Survey):
         Monopole of the power spectrum
         '''
         if self.remove_noise:
-            return self.Pk_2d.poles['power_0'].real*self.Mpch**3*self.unit**2 - self.sigmaN**2*self.Vvox
+            return (self.Pk_2d.poles['power_0'].real*self.Mpch**3).to(self.Mpch**3)*self.unit**2 - self.sigmaN**2*self.Vvox
         else:
-            return self.Pk_2d.poles['power_0'].real*self.Mpch**3*self.unit**2
+            return (self.Pk_2d.poles['power_0'].real*self.Mpch**3).to(self.Mpch**3)*self.unit**2
 
     @cached_measure_property
     def Pk_2(self):
         '''
         Quadrupole of the power spectrum
         '''
-        return self.Pk_2d.poles['power_2'].real*self.Mpch**3*self.unit**2
+        return (self.Pk_2d.poles['power_2'].real*self.Mpch**3).to(self.Mpch**3)*self.unit**2
 
     @cached_measure_property
     def Pk_4(self):
         '''
         Hexadecapole of the power spectrum
         '''
-        return self.Pk_2d.poles['power_4'].real*self.Mpch**3*self.unit**2
+        return (self.Pk_2d.poles['power_4'].real*self.Mpch**3).to(self.Mpch**3)*self.unit**2
         
     ###################################################
     ## Theoretical Pk multipole covariance using lim ##
@@ -189,7 +189,7 @@ class Measure(Survey):
         '''
         integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
         cov = 0.5*np.trapz(integrand**2,self.Pk_2d_theo[1],axis=0)
-        return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles[1:])/self.Pk_2d.poles['modes'][1:]*self.Mpch**6*self.unit**4
+        return (interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles[1:])/self.Pk_2d.poles['modes'][1:]*self.Mpch**6).to(self.Mpch**6)*self.unit**4
 
 
     @cached_measure_property
@@ -201,7 +201,7 @@ class Measure(Survey):
         L2 = legendre(2)(mui_grid)
         integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
         cov = 5./2.*np.trapz(integrand**2*L2,self.Pk_2d_theo[1],axis=0)
-        return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6*self.unit**4
+        return (interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6).to(self.Mpch**6)*self.unit**4
 
 
     @cached_measure_property
@@ -213,7 +213,7 @@ class Measure(Survey):
         L4 = legendre(4)(mui_grid)
         integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
         cov = 9./2.*np.trapz(integrand**2*L4,self.Pk_2d_theo[1],axis=0)
-        return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6*self.unit**4
+        return (interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6).to(self.Mpch**6)*self.unit**4
 
 
     @cached_measure_property
@@ -225,7 +225,7 @@ class Measure(Survey):
         L2 = legendre(2)(mui_grid)
         integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
         cov = 25./2.*np.trapz(integrand**2*L2*L2,self.Pk_2d_theo[1],axis=0)
-        return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6*self.unit**4
+        return (interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6).to(self.Mpch**6)*self.unit**4
 
 
     @cached_measure_property
@@ -238,7 +238,7 @@ class Measure(Survey):
         L4 = legendre(4)(mui_grid)
         integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
         cov = 45./2.*np.trapz(integrand**2*L2*L4,self.Pk_2d_theo[1],axis=0)
-        return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6*self.unit**4
+        return (interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6).to(self.Mpch**6)*self.unit**4
 
 
     @cached_measure_property
@@ -250,7 +250,7 @@ class Measure(Survey):
         L4 = legendre(4)(mui_grid)
         integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
         cov = 81./2.*np.trapz(integrand**2*L4*L4,self.Pk_2d_theo[1],axis=0)
-        return interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6*self.unit**4
+        return (interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6).to(self.Mpch**6)*self.unit**4
 
 
     def get_covmat(self,Nmul):
