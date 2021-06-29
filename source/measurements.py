@@ -44,6 +44,8 @@ class Measure(Survey):
 
     -Nbin_hist              Number of bins for the VID histogram
                             (default: 100)
+                            
+    -angular_map            Whether the map used is angular (healpy map). (Default: False)
     '''   
     def __init__(self,
                  dk = 0.02*u.Mpc**-1,
@@ -55,6 +57,7 @@ class Measure(Survey):
                  Tmax_VID = 1000.*u.uK,
                  linear_VID_bin = False,
                  Nbin_hist = 100,
+                 angular_map = False,
                  **lightcone_survey_kwargs):
                  
         # Initiate Survey() parameters
@@ -73,6 +76,9 @@ class Measure(Survey):
         for key in self._measure_params:
             setattr(self,key,self._measure_params[key])
             
+        if self.do_angular != self.angular_map:
+            raise ValueError("'do_angular' and 'angular_map' must be the same when the map is computed")
+            
         # Combine measure_params with other classes
         self._input_params.update(self._measure_params)
         self._default_params.update(self._default_measure_params)
@@ -87,13 +93,17 @@ class Measure(Survey):
         '''
         Computes the 2d power spectrum P(k,mu) of the map
         '''
-        if not self.do_inner_cut:
-            print("ERROR!!: Fourier power spectrum measurements are only available if 'do_inner_cut == True'")
+        if self.angular_map:
+            print("ERROR!!! Fourier power spectrum measurements are available only if 'angular_map == False'")
             return None
         else:
-            return FFTPower(self.obs_map, '2d', Nmu=self.Nmu, poles=[0,2,4], los=[1,0,0],
-                            dk=self.dk.to(self.Mpch**-1).value,kmin=self.kmin.to(self.Mpch**-1).value,
-                            kmax=self.kmax.to(self.Mpch**-1).value,BoxSize=self.Lbox.value)
+            if not self.do_inner_cut:
+                print("ERROR!!: Fourier power spectrum measurements are only available at the moment if 'do_inner_cut == True'")
+                return None
+            else:
+                return FFTPower(self.obs_map, '2d', Nmu=self.Nmu, poles=[0,2,4], los=[1,0,0],
+                                dk=self.dk.to(self.Mpch**-1).value,kmin=self.kmin.to(self.Mpch**-1).value,
+                                kmax=self.kmax.to(self.Mpch**-1).value,BoxSize=self.Lbox.value)
 
     @cached_measure_property
     def k_Pk_poles(self):
