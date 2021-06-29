@@ -9,6 +9,7 @@ import astropy.constants as cu
 import copy
 import pmesh
 from nbodykit.source.mesh.catalog import CompensateCICShotnoise
+import healpy as hp
 from source.lightcone import Lightcone
 from source.utilities import cached_survey_property,get_default_params,check_params
 from source.utilities import set_lim, dict_lines
@@ -64,6 +65,8 @@ class Survey(Lightcone):
 
     -do_angular             Create an angular survey (healpy map)
                             (Default: False)
+                            
+    -nside                  NSIDE used by healpy to create angular maps. (Default: 2048)
     '''
     def __init__(self,
                  do_intensity=False,
@@ -85,6 +88,7 @@ class Survey(Lightcone):
                  do_smooth = True,
                  do_inner_cut = True,
                  do_angular = False,
+                 nside = 2048,
                  **lightcone_kwargs):
 
         # Initiate Lightcone() parameters
@@ -117,8 +121,16 @@ class Survey(Lightcone):
                 #Get true cell volume
                 zlims = (self.line_nu0[line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
                 if zlims[0] <= self.zmin or zlims [1] >= self.zmax:
-                    raise ValueError('The line {} on the bandwidth [{},{}] corresponds to z range [{},{}], while the included redshifts in the lightcone are within [{},{}]. Please remove the line, increase the zmin,zmax range or reduce the bandwith.'.format(line,self.nuObs_max,self.nuObs_min,zlims[0],zlims[1],self.zmin,self.zmax))
+                    raise ValueError('The line {} on the bandwidth [{:.2f},{:.2f}] corresponds to z range [{:.2f},{:.2f}], while the included redshifts in the lightcone are within [{:.2f},{:.2f}]. Please remove the line, increase the zmin,zmax range or reduce the bandwith.'.format(line,self.nuObs_max,self.nuObs_min,zlims[0],zlims[1],self.zmin,self.zmax))
 
+        #Check healpy pixel size just in case:
+        if self.do_angular:
+            if (self.beam_FWHM.to(u.arcmin)).value < hp.nside2resol(self.nside, arcmin=True):
+                print("WARNING!!! the healpy pixel side chosen, from NSIDE = {}, is {:.2f} times bigger than the beam_FWHM. Consider increasing NSIDE (remember that it must be a power of 2)".format(self.nside,hp.nside2resol(self.nside, arcmin=True)/self.beam_FWHM.to(u.arcmin)).value)
+            #Avoid inner cut if do_angular:
+            if self.do_angular and self.do_inner_cut:
+                raise ValueError('If you want to work with angular maps, you do not need the inner cut, hence please use do_inner_cut = False')
+            
         if self.paint_catalog:
             self.read_halo_catalog
             self.halo_luminosity
@@ -201,11 +213,11 @@ class Survey(Lightcone):
         else:
             #Temperature[uK]
             sig2 = self.Tsys**2/(self.Nfeeds*self.dnu*tpix)
-
+            
         if self.do_angular:
-            return ((sig2/self.Nchan)**0.5).to(self.unit)
-        else:
-            return (sig2**0.5).to(self.unit)
+            sig2 /= self.Nchan
+
+        return (sig2**0.5).to(self.unit)
 
     @cached_survey_property
     def Lbox(self):
@@ -224,14 +236,18 @@ class Survey(Lightcone):
             raside = 2*rlim[0]*np.tan(0.5*(ralim[1]-ralim[0]))
             decside = 2*rlim[0]*np.tan(0.5*(declim[1]-declim[0]))
             zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
+            rside_lim = np.array([rlim[0],rlim[0]+zside])
         else:
             raside = 2*rlim[1]*np.tan(0.5*(ralim[1]-ralim[0]))
             decside = 2*rlim[1]*np.tan(0.5*(declim[1]-declim[0]))
             zside = rlim[1]-rlim[0]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))
+            rside_lim = np.array([rlim[1]-zside,rlim[1]])
+            
         Lbox = np.array([zside,raside,decside])
 
         self.raside_lim = rlim[0]*np.sin(ralim) #min, max
         self.decside_lim = rlim[0]*np.sin(declim) #min, max
+        self.rside_obs_lim = rside_lim #min, max
 
         return (Lbox*self.Mpch).to(self.Mpch)
 
@@ -294,6 +310,9 @@ class Survey(Lightcone):
         declim = np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value]))
         raside_lim = self.raside_lim
         decside_lim = self.decside_lim
+        rside_obs_lim = self.rside_obs_lim
+        
+        mins_obs = np.array([rside_obs_lim[0],raside_lim[0],decside_lim[0]])
 
         global sigma_par
         global sigma_perp
@@ -385,8 +404,44 @@ class Survey(Lightcone):
         #Compensate the field for the CIC window function we apply
         maps = maps.apply(CompensateCICShotnoise, kind='circular')
 
-        #Add noise in the cosmic volume probed by target line
+        #If only want angular maps, transform to healpy map
         if not self.do_angular:
+            #transform the map to real field
+            maps = maps.c2r()
+            #Get back the coordinates of 3d to sky positions
+            vox_coords = da.from_array((pm.mesh_coordinates()+0.5)*Lbox/Nmesh+mins_obs)
+            x, y, z = vox_coords[:,0],vox_coords[:,1],vox_coords[:,2]
+            s = da.hypot(x, y)
+            phi = da.arctan2(y, x) #lon
+            theta = np.pi/2. - da.arctan2(z, s) #lat
+            
+            #Get the map of temperatures/intensities in the same format
+            signal_list = np.reshape(maps,vox_coords.shape[0])
+            #Create the map and get pixel indices corresponding to voxel positions
+            hp_map = np.zeros(hp.nside2npix(self.nside))
+            pix_inds = hp.ang2pix(self.nside,theta,phi).compute()
+            #Add all the signals within the same pixel
+            np.add.at(hp_map,pix_inds,signal_list)
+            
+            #Define the mask from the rectangular footprint
+            phicorner = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_min.value,self.RAObs_max.value,self.RAObs_max.value]))
+            thetacorner = np.pi/2-np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value,self.DECObs_max.value,self.DECObs_min.value]))
+            vecs = hp.dir2vec(thetacorner,phi=phicorner).T
+            pix_within = hp.query_polygon(nside=self.nside,vertices=vecs,inclusive=False)
+            mask = np.ones(hp.nside2npix(NSIDE),np.bool)
+            mask[pix_within] = 0
+            hp_map = hp.ma(hp_map)
+            hp_map.mask = mask
+            
+            #add noise
+            if self.Tsys.value > 0.:
+                #rescale the noise per pixel to the healpy pixel size
+                hp_sigmaN = self.sigmaN * (pix_within.size/self.Npix)**0.5
+                hp_map[within] += np.random.normal(0.,hp_sigmaN.value,within.size)
+                
+            return hp_map
+        else:
+            #Add noise in the cosmic volume probed by target line to the 3d maps
             if self.Tsys.value > 0.:
                 #get the proper shape for the observed map
                 if self.supersample > 1:
@@ -403,9 +458,6 @@ class Survey(Lightcone):
             else:
                 maps = maps.c2r()
             return maps
-        else:
-            print("ERROR!!: Angular maps still not implemented")
-            return None
 
 #########################
 ## Auxiliary functions ##
