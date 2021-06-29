@@ -405,7 +405,7 @@ class Survey(Lightcone):
         maps = maps.apply(CompensateCICShotnoise, kind='circular')
 
         #If only want angular maps, transform to healpy map
-        if not self.do_angular:
+        if self.do_angular:
             #transform the map to real field
             maps = maps.c2r()
             #Get back the coordinates of 3d to sky positions
@@ -428,7 +428,7 @@ class Survey(Lightcone):
             thetacorner = np.pi/2-np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value,self.DECObs_max.value,self.DECObs_min.value]))
             vecs = hp.dir2vec(thetacorner,phi=phicorner).T
             pix_within = hp.query_polygon(nside=self.nside,vertices=vecs,inclusive=False)
-            mask = np.ones(hp.nside2npix(NSIDE),np.bool)
+            mask = np.ones(hp.nside2npix(self.nside),np.bool)
             mask[pix_within] = 0
             hp_map = hp.ma(hp_map)
             hp_map.mask = mask
@@ -437,7 +437,7 @@ class Survey(Lightcone):
             if self.Tsys.value > 0.:
                 #rescale the noise per pixel to the healpy pixel size
                 hp_sigmaN = self.sigmaN * (pix_within.size/self.Npix)**0.5
-                hp_map[within] += np.random.normal(0.,hp_sigmaN.value,within.size)
+                hp_map[pix_within] += np.random.normal(0.,hp_sigmaN.value,pix_within.size)
                 
             return hp_map
         else:
