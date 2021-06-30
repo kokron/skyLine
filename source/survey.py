@@ -58,13 +58,14 @@ class Survey(Lightcone):
     -do_smooth:             Boolean: apply smoothing filter to implement resolution
                             limitations. (Default: True)
 
-    -output_root            Root path for output products. (default: output/default)
-
     -do_inner_cut           Get a box for which there are no empty spaces, but discards some haloes.
                             (Default: True). Do this *only* for narrow fields
 
     -do_angular             Create an angular survey (healpy map)
                             (Default: False)
+                            
+    -average_angular_proj   Average total integrated intensity per the number of channels for
+                            angular projections (Default: True)
                             
     -nside                  NSIDE used by healpy to create angular maps. (Default: 2048)
     '''
@@ -83,11 +84,11 @@ class Survey(Lightcone):
                  tobs=6000*u.hr,
                  target_line = 'CO',
                  supersample = 10,
-                 output_root = "output/default",
                  paint_catalog = True,
                  do_smooth = True,
                  do_inner_cut = True,
                  do_angular = False,
+                 average_angular_proj = True,
                  nside = 2048,
                  **lightcone_kwargs):
 
@@ -113,12 +114,11 @@ class Survey(Lightcone):
         # Check that the observed footprint is contained in the lightcone
         if self.RAObs_min < self.RA_min or self.RAObs_max > self.RA_max or \
            self.DECObs_min < self.DEC_min or self.DECObs_max > self.DEC_max:
-               raise ValueError('Please, your observed limits RA_Obs=[{},{}], DEC_Obs=[{},{}] must be within the lightcone limits RA=[{},{}], DEC=[{},{}].'.format(self.RAObs_min,self.RAObs_max,self.DECObs_min,self.DECObs_max,self.RA_min,self.RA_max,self.DEC_min,self.DEC_max))
+            raise ValueError('Please, your observed limits RA_Obs=[{},{}], DEC_Obs=[{},{}] must be within the lightcone limits RA=[{},{}], DEC=[{},{}].'.format(self.RAObs_min,self.RAObs_max,self.DECObs_min,self.DECObs_max,self.RA_min,self.RA_max,self.DEC_min,self.DEC_max))
 
         # Check that the bandwidth and lines used are included in the lightcone limits
         for line in self.lines.keys():
             if self.lines[line]:
-                #Get true cell volume
                 zlims = (self.line_nu0[line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
                 if zlims[0] <= self.zmin or zlims [1] >= self.zmax:
                     raise ValueError('The line {} on the bandwidth [{:.2f},{:.2f}] corresponds to z range [{:.2f},{:.2f}], while the included redshifts in the lightcone are within [{:.2f},{:.2f}]. Please remove the line, increase the zmin,zmax range or reduce the bandwith.'.format(line,self.nuObs_max,self.nuObs_min,zlims[0],zlims[1],self.zmin,self.zmax))
@@ -214,7 +214,7 @@ class Survey(Lightcone):
             #Temperature[uK]
             sig2 = self.Tsys**2/(self.Nfeeds*self.dnu*tpix)
             
-        if self.do_angular:
+        if self.do_angular and self.average_angular_proj:
             sig2 /= self.Nchan
 
         return (sig2**0.5).to(self.unit)
@@ -420,14 +420,18 @@ class Survey(Lightcone):
             #Create the map and get pixel indices corresponding to voxel positions
             hp_map = np.zeros(hp.nside2npix(self.nside))
             pix_inds = hp.ang2pix(self.nside,theta,phi).compute()
-            #Add all the signals within the same pixel
-            np.add.at(hp_map,pix_inds,signal_list)
+            #project and average all the signals within the same pixel
+            if self.average_angular_proj:
+                np.add.at(hp_map,pix_inds,signal_list/self.Nchan)
+            else:
+                np.add.at(hp_map,pix_inds,signal_list)
             
             #Define the mask from the rectangular footprint
             phicorner = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_min.value,self.RAObs_max.value,self.RAObs_max.value]))
             thetacorner = np.pi/2-np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value,self.DECObs_max.value,self.DECObs_min.value]))
             vecs = hp.dir2vec(thetacorner,phi=phicorner).T
             pix_within = hp.query_polygon(nside=self.nside,vertices=vecs,inclusive=False)
+            self.pix_within = pix_within
             mask = np.ones(hp.nside2npix(self.nside),np.bool)
             mask[pix_within] = 0
             hp_map = hp.ma(hp_map)
@@ -448,8 +452,7 @@ class Survey(Lightcone):
                     pm_noise = pmesh.pm.ParticleMesh(np.array([self.Nchan,self.Nside[0],self.Nside[1]], dtype=int),
                                                       BoxSize=Lbox, dtype='float32', resampler='cic')
                     maps = pm_noise.downsample(maps.c2r(),keep_mean=True)
-                    #Check if compensation is required agai
-                    #Check if compensation is required againn
+                    #Check if compensation is required again
                     maps = (maps.r2c()).apply(CompensateCICShotnoise, kind='circular')
 
                 maps = maps.c2r()
