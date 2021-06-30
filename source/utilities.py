@@ -107,7 +107,42 @@ def check_params(input_params, default_params):
             lines_available = ['CO','CII','Halpha','Lyalpha','HI']
             if input_value not in lines_available:
                 raise ValueError('The target line {} must be one of the available lines: {}'.format(input_value,lines_available))
+                
+    return
+    
+def check_updated_params(self):
+    '''
+    Set of checks for consistency between parameters after update
+    '''
+    # Check that the observed footprint is contained in the lightcone
+    if self.RAObs_min < self.RA_min or self.RAObs_max > self.RA_max or \
+       self.DECObs_min < self.DEC_min or self.DECObs_max > self.DEC_max:
+        raise ValueError('Please, your observed limits RA_Obs=[{},{}], DEC_Obs=[{},{}] must be within the lightcone limits RA=[{},{}], DEC=[{},{}].'.format(self.RAObs_min,self.RAObs_max,self.DECObs_min,self.DECObs_max,self.RA_min,self.RA_max,self.DEC_min,self.DEC_max))
 
+    # Check that the bandwidth and lines used are included in the lightcone limits
+    for line in self.lines.keys():
+        if self.lines[line]:
+            zlims = (self.line_nu0[line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
+            if zlims[0] <= self.zmin or zlims [1] >= self.zmax:
+                raise ValueError('The line {} on the bandwidth [{:.2f},{:.2f}] corresponds to z range [{:.2f},{:.2f}], while the included redshifts in the lightcone are within [{:.2f},{:.2f}]. Please remove the line, increase the zmin,zmax range or reduce the bandwith.'.format(line,self.nuObs_max,self.nuObs_min,zlims[0],zlims[1],self.zmin,self.zmax))
+
+    #Check healpy pixel size just in case:
+    if self.do_angular:
+        if (self.beam_FWHM.to(u.arcmin)).value < hp.nside2resol(self.nside, arcmin=True):
+            print("WARNING!!! the healpy pixel side chosen, from NSIDE = {}, is {:.2f} times bigger than the beam_FWHM. Consider increasing NSIDE (remember that it must be a power of 2)".format(self.nside,hp.nside2resol(self.nside, arcmin=True)/self.beam_FWHM.to(u.arcmin)).value)
+        #Avoid inner cut if do_angular:
+        if self.do_angular and self.do_inner_cut:
+            raise ValueError('If you want to work with angular maps, you do not need the inner cut, hence please use do_inner_cut = False')
+
+    #Set units for observable depending on convention
+    if self.do_intensity:
+        self.unit = u.Jy/u.sr
+    else:
+        self.unit = u.uK
+        
+    if self.do_angular != self.angular_map:
+        raise ValueError("'do_angular' and 'angular_map' must be the same when the map is computed")
+        
     return
 
 
