@@ -14,7 +14,7 @@ import source.line_models as LM
 import source.external_sfrs as extSFRs
 
 from source.utilities import check_params,get_default_params
-from source.utilities import cached_lightcone_property,cached_survey_property
+from source.utilities import cached_lightcone_property,cached_survey_property, check_updated_params
 
 class Lightcone(object):
     '''
@@ -57,8 +57,6 @@ class Lightcone(object):
     -external_SFR           SFR interpolation
 
     -sig_extSFR             log-scatter for an external SFR
-
-    -output_root            Root path for output products. (default: output/default)
     '''
     def __init__(self,
                  halo_lightcone_dir = '',
@@ -69,8 +67,7 @@ class Lightcone(object):
                  models = dict(CO = dict(model_name = '', model_pars = {}), CII = dict(model_name = '', model_pars = {}),
                                Halpha = dict(model_name = '', model_pars = {}), Lyalpha = dict(model_name = '', model_pars = {}),
                                HI = dict(model_name = '', model_pars = {})),
-                 do_external_SFR = False, external_SFR = '',sig_extSFR = 0.3, SFR_pars=dict(M0=1e-6, Ma=10**8, Mb=10**12.3, a=1.9, b=3.0, c=-1.4),
-                 output_root = "output/default"):
+                 do_external_SFR = False, external_SFR = '',sig_extSFR = 0.3, SFR_pars=dict(M0=1e-6, Ma=10**8, Mb=10**12.3, a=1.9, b=3.0, c=-1.4)):
 
         # Get list of input values to check type and units
         self._lightcone_params = locals()
@@ -255,5 +252,8 @@ class Lightcone(object):
         #update parameters
         for key in new_params:
             setattr(self, key, new_params[key])
+            
+        #check updated paramters:
+        check_updated_params(self)
 
         return
