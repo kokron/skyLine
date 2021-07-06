@@ -7,6 +7,7 @@ import source.external_sfrs as extSFRs
 import inspect
 from lim import lim
 import astropy.units as u
+import numpy as np
 
 class cached_lightcone_property(object):
     """
