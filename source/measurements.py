@@ -185,7 +185,7 @@ class Measure(Survey):
                     kprime[imu,:] = M.k/q_perp*np.sqrt(1.+M.mu[imu]**2*(1./F/F-1))
                 #Get the measured Pk contribution and add it to the rest, smooth it if necessary
                 if self. smooth:
-                    PK_2d += interp2d(M.k,M.mu,M.Pk*M.Wkmin)(kprime,mu_prime)*PK_2d.unit
+                    PK_2d += interp2d(M.k,M.mu,M.Pk*M.Wkmax)(kprime,mu_prime)*PK_2d.unit
                 else:
                     PK_2d += interp2d(M.k,M.mu,M.Pk)(kprime,mu_prime)*PK_2d.unit
 
