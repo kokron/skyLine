@@ -170,13 +170,8 @@ class Measure(Survey):
                 #Repeat for all line interlopers
                 line_model,line_pars = dict_lines(self,self.models[line]['model_name'],
                                           self.models[line]['model_pars'])
-                if 'sigma_LCO' in self.models[line]['model_pars']:
-                    sigma_scatter = self.models[line]['model_pars']['sigma_LCO']
-                #ANY OTHER CASE?
-                else:
-                    sigma_scatter = 0.
                 M.update(nu=self.line_nu0[line],model_name=line_model,model_par=line_pars,
-                              sigma_scatter = sigma_scatter)
+                              sigma_scatter = self.models[line]['model_pars']['sigma_L'])
                 M.update(sigma_NL=((np.trapz(M.PKint(M.z,M.k.value)*u.Mpc**3,M.k)/6./np.pi**2)**0.5).to(u.Mpc))
                 #Projection effects in the scales
                 q_perp = M.cosmo.angular_diameter_distance([M.z])*(1+M.z)/(M.cosmo.angular_diameter_distance([self.zmid])*(1+self.zmid))
@@ -188,8 +183,11 @@ class Measure(Survey):
                 mu_prime = M.mui_gridco/F/np.sqrt(1.+M.mui_grid**2.*(1./F/F-1))
                 for imu in range(M.nmu):
                     kprime[imu,:] = M.k/q_perp*np.sqrt(1.+M.mu[imu]**2*(1./F/F-1))
-                #Get the measured Pk contribution and add it to the rest
-                PK_2d += interp2d(M.k,M.mu,M.Pk)(kprime,mu_prime)*PK_2d.unit
+                #Get the measured Pk contribution and add it to the rest, smooth it if necessary
+                if self. smooth:
+                    PK_2d += interp2d(M.k,M.mu,M.Pk*M.Wkmin)(kprime,mu_prime)*PK_2d.unit
+                else:
+                    PK_2d += interp2d(M.k,M.mu,M.Pk)(kprime,mu_prime)*PK_2d.unit
 
         return M.k.to(M.Mpch**-1),M.mu,PK_2d.to(self.Mpch**3*self.unit**2)
 

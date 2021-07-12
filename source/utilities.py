@@ -238,7 +238,7 @@ def set_lim(self):
     '''
     fid = dict(cosmo_input_camb={'H0':67.8,'ombh2':0.02312,'omch2':0.118002988,
                       'As':2.23832e-9,'ns':0.96,'mnu':0.06})
-    krange = {'nk':512,'kmin':1e-5*u.Mpc**-1,'kmax':10*u.Mpc**-1,'k_kind':'log','nmu':10000,'smooth':self.do_smooth}
+    krange = {'nk':512,'kmin':1e-5*u.Mpc**-1,'kmax':10*u.Mpc**-1,'k_kind':'log','nmu':10000,'smooth':False}
     hmf = dict(model_type='ML',hmf_model='Tinker',bias_model='Tinker10',do_onehalo=True)
 
     astromodel=dict(nu=self.line_nu0[self.target_line],model_name="TonyLi",model_par={'alpha': 1.37, 'beta': -1.74, 'dMF': 1, 'sig_SFR': 0.3, 'SFR_file': '../SFR_tables/sfr_table_UniverseMachine_clean.dat'}, sigma_scatter = 0.3)
