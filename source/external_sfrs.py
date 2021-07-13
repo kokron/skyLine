@@ -23,6 +23,9 @@ def UniverseMachine_SFR(M,z):
     return SFR_Mz_2dinterp(M,z,'UM_sfr.dat')
 
 def Custom_SFR(M,z,pars):
+    '''
+    Returns SFR using a doble power law with and additional power to control width of peak
+    '''
     try:
         M0,Ma,Mb,a,b,c = pars['M0'],pars['Ma'],pars['Mb'],pars['a'],pars['b'],pars['c']
     except:
