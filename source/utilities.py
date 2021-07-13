@@ -241,7 +241,7 @@ def set_lim(self):
     krange = {'nk':512,'kmin':1e-5*u.Mpc**-1,'kmax':10*u.Mpc**-1,'k_kind':'log','nmu':10000,'smooth':False}
     hmf = dict(model_type='ML',hmf_model='Tinker',bias_model='Tinker10',do_onehalo=True)
 
-    astromodel=dict(nu=self.line_nu0[self.target_line],model_name="TonyLi",model_par={'alpha': 1.37, 'beta': -1.74, 'dMF': 1, 'sig_SFR': 0.3, 'SFR_file': '../SFR_tables/sfr_table_UniverseMachine_clean.dat'}, sigma_scatter = 0.3)
+    astromodel=dict(nu=self.line_nu0[self.target_line],model_name="TonyLi",model_par={'alpha': 1.37, 'beta': -1.74, 'dMF': 1, 'sig_SFR': 0.3, 'SFR_file': '../SFR_tables/sfr_table_normalmean_UniverseMachine_medianFalse_clean_solMass.dat'}, sigma_scatter = 0.3)
     survey = dict(Tsys_NEFD=self.Tsys,do_Jysr=self.do_intensity,tobs=self.tobs,Omega_field=self.Omega_field,
                   nuObs=self.nuObs_mean,Delta_nu=self.delta_nuObs,dnu=self.dnu,beam_FWHM=self.beam_FWHM,
                   Nfeeds=self.Nfeeds,Nfield=1)

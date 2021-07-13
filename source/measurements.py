@@ -151,9 +151,8 @@ class Measure(Survey):
         M = set_lim(self)
         line_model,line_pars = dict_lines(self,self.models[self.target_line]['model_name'],
                                           self.models[self.target_line]['model_pars'])
-        if 'sigma_LCO' in self.models[self.target_line]['model_pars']:
-            sigma_scatter = self.models[self.target_line]['model_pars']['sigma_LCO']
-        #ANY OTHER CASE?
+        if 'sigma_L' in self.models[self.target_line]['model_pars']:
+            sigma_scatter = self.models[self.target_line]['model_pars']['sigma_L']
         else:
             sigma_scatter = 0.
         M.update(nu=self.line_nu0[self.target_line],model_name=line_model,model_par=line_pars,
@@ -198,7 +197,7 @@ class Measure(Survey):
         '''
         integrand = (self.Pk_2d_theo[2]+self.sigmaN**2*self.Vvox)
         cov = 0.5*np.trapz(integrand**2,self.Pk_2d_theo[1],axis=0)
-        return (interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles[1:])/self.Pk_2d.poles['modes'][1:]*self.Mpch**6).to(self.Mpch**6)*self.unit**4
+        return (interp1d(self.Pk_2d_theo[0],cov)(self.k_Pk_poles)/self.Pk_2d.poles['modes']*self.Mpch**6).to(self.Mpch**6)*self.unit**4
 
 
     @cached_measure_property
