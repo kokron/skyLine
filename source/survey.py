@@ -463,15 +463,19 @@ class Survey(Lightcone):
                 maps = maps.c2r()
             return maps
             
-    def save_map(self,name):
+    def save_map(self,name,other_map=None):
         '''
-        Saves a map (either pmesh or healpy depending on do_angular)
+        Saves a map (either pmesh or healpy depending on do_angular).
+        If other_map != None, the map saved would be self.obs_map
         '''
-        
-        if self.do_angular:
-            hp.fitsfunc.write_map(name,self.obs_map)
+        if not other_map:
+            map_to_save = self.obs_map
         else:
-            hdu = fits.PrimaryHDU(self.obs_map)
+            map_to_save = other_map
+        if self.do_angular:
+            hp.fitsfunc.write_map(name,map_to_save)
+        else:
+            hdu = fits.PrimaryHDU(map_to_save)
             hdu.writeto(name)
         return
             
