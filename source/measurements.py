@@ -10,6 +10,7 @@ import healpy as hp
 from scipy.interpolate import interp2d,interp1d
 from scipy.special import legendre
 from nbodykit.algorithms import FFTPower
+from nbodykit.source.mesh.array import ArrayMesh
 from source.survey import Survey
 from source.lightcone import Lightcone
 from source.utilities import cached_measure_property,get_default_params,check_params
@@ -48,6 +49,10 @@ class Measure(Survey):
                             (default: 100)
                             
     -angular_map            Whether the map used is angular (healpy map). (Default: False)
+    
+    -do_read_map            Whether to read a map already saved from a survey computed before (Default:False)
+    
+    -map_name               The name of the map to read (Default: '')
     '''   
     def __init__(self,
                  dk = 0.02*u.Mpc**-1,
@@ -60,7 +65,7 @@ class Measure(Survey):
                  linear_VID_bin = False,
                  Nbin_hist = 100,
                  angular_map = False,
-                 do_read_map = True,
+                 do_read_map = False,
                  map_name = '',
                  **lightcone_survey_kwargs):
                  
@@ -126,7 +131,12 @@ class Measure(Survey):
                 print("ERROR!!: Fourier power spectrum measurements are only available at the moment if 'do_inner_cut == True'")
                 return None
             else:
-                return FFTPower(self.obs_map, '2d', Nmu=self.Nmu, poles=[0,2,4], los=[1,0,0],
+                if self.do_read_map:
+                    map_to_use = self.read_map
+                else:
+                    map_to_use = self.obs_map
+                    
+                return FFTPower(map_to_use, '2d', Nmu=self.Nmu, poles=[0,2,4], los=[1,0,0],
                                 dk=self.dk.to(self.Mpch**-1).value,kmin=self.kmin.to(self.Mpch**-1).value,
                                 kmax=self.kmax.to(self.Mpch**-1).value,BoxSize=self.Lbox.value)
 
