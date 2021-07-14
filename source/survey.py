@@ -6,6 +6,7 @@ import numpy as np
 import dask.array as da
 import astropy.units as u
 import astropy.constants as cu
+from astropy.io import fits
 import copy
 import pmesh
 from nbodykit.source.mesh.catalog import CompensateCICShotnoise
@@ -316,7 +317,7 @@ class Survey(Lightcone):
 
         global sigma_par
         global sigma_perp
-        maps = np.zeros([Nmesh[0],Nmesh[1],Nmesh[2]//2 + 1], dtype='complex64')
+        maps = np.zeros([Nmesh[0],Nmesh[1],Nmesh[2]//2 + 1], dtype='complex32')
 
         for line in self.lines.keys():
             if self.lines[line]:
@@ -461,6 +462,19 @@ class Survey(Lightcone):
             else:
                 maps = maps.c2r()
             return maps
+            
+    def save_map(self,name):
+        '''
+        Saves a map (either pmesh or healpy depending on do_angular)
+        '''
+        
+        if self.do_angular:
+            hp.fitsfunc.write_map(name,self.obs_map)
+        else:
+            hdu = fits.PrimaryHDU(self.obs_map)
+            hdu.writeto(name)
+        return
+            
 
 #########################
 ## Auxiliary functions ##
