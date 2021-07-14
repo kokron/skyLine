@@ -5,6 +5,8 @@ Base module to make LIM measurements from a mock LIM survey from painted lightco
 import numpy as np
 import astropy.units as u
 import astropy.constants as cu
+from astropy.io import fits
+import healpy as hp
 from scipy.interpolate import interp2d,interp1d
 from scipy.special import legendre
 from nbodykit.algorithms import FFTPower
@@ -58,6 +60,8 @@ class Measure(Survey):
                  linear_VID_bin = False,
                  Nbin_hist = 100,
                  angular_map = False,
+                 do_read_map = True,
+                 map_name = '',
                  **lightcone_survey_kwargs):
                  
         # Initiate Survey() parameters
@@ -82,7 +86,28 @@ class Measure(Survey):
         # Combine measure_params with other classes
         self._input_params.update(self._measure_params)
         self._default_params.update(self._default_measure_params)
+        
+    ##################
+    ## Read the map ##
+    ##################
     
+    @cached_measure_property
+    def read_map(self):
+        '''
+        Reads a previously saved map to avoid rerun survey everytime
+        '''
+        if do_angular:
+            mapread = hp.fitsfunc.read_map(self.map_name)
+        else:
+            #read the fits file
+            hdul = fits.open(self.map_name)
+            fitsmap = hdul[0].data
+            hdul.close()
+            #Transform it to a mesh field
+            mesh = ArrayMesh(fitsmap.byteswap().newbyteorder(),BoxSize=self.Lbox.value)
+            mapread = mesh.field
+            
+        return mapread
     
     ##########################################
     ## Fourier 3d power spectrum multipoles ##
