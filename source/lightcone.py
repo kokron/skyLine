@@ -14,7 +14,7 @@ import source.line_models as LM
 import source.external_sfrs as extSFRs
 
 from source.utilities import check_params,get_default_params
-from source.utilities import cached_lightcone_property,cached_survey_property, check_updated_params
+from source.utilities import cached_lightcone_property,cached_read_property, check_updated_params
 
 class Lightcone(object):
     '''
@@ -94,6 +94,7 @@ class Lightcone(object):
 
         # Create list of cached properties
         self._update_lightcone_list = []
+        self._update_read_list = []
         self._update_survey_list = []
         self._update_measure_list = []
 
@@ -132,7 +133,7 @@ class Lightcone(object):
     # Catalog Management #
     ######################
 
-    @cached_lightcone_property
+    @cached_read_property
     def read_halo_catalog(self):
         '''
         Reads all the files from the halo catalog and appends the slices
@@ -212,15 +213,6 @@ class Lightcone(object):
         self.halo_luminosity
         return
 
-    def save_lightcone(self):
-        '''
-        Saves the lightcone in a fits file
-        '''
-        #DO WE WANT TO DO THIS OR ONLY AFTER MAKE SURVEY??? MAYBE TOO LARGE?
-
-        #IF NOT, REMOVE OUTPUT_ROOT
-        return
-
     ########################################################################
     # Method for updating input parameters and resetting cached properties #
     ########################################################################
@@ -231,7 +223,15 @@ class Lightcone(object):
         lightcone_params = list(self._default_lightcone_params.keys())
         survey_params = list(self._default_survey_params.keys())
         measure_params = list(self._default_measure_params.keys())
-        if any(item in lightcone_params for item in new_params.keys()):
+        read_params = ['halo_lightcone_dir', 'zmin', 'zmax',
+                       'RA_min', 'RA_max', 'DEC_min', 'DEC_max']
+        for name in read_params:
+            lightcone_params.remove(name)
+            
+        if any(item in read_params for item in new_params.keys()):
+            for attribute in self._update_read_list:
+                delattr(self,attribute)
+            self._update_read_list = []
             for attribute in self._update_lightcone_list:
                 delattr(self,attribute)
             self._update_lightcone_list = []
@@ -241,14 +241,24 @@ class Lightcone(object):
             for attribute in self._update_measure_list:
                 delattr(self,attribute)
             self._update_measure_list = []
-        if any(item in survey_params for item in new_params.keys()):
+        elif any(item in lightcone_params for item in new_params.keys()):
+            for attribute in self._update_lightcone_list:
+                delattr(self,attribute)
+            self._update_lightcone_list = []
             for attribute in self._update_survey_list:
                 delattr(self,attribute)
             self._update_survey_list = []
             for attribute in self._update_measure_list:
                 delattr(self,attribute)
             self._update_measure_list = []
-        if any (item in measure_params for item in new_params.keys()):
+        elif any(item in survey_params for item in new_params.keys()):
+            for attribute in self._update_survey_list:
+                delattr(self,attribute)
+            self._update_survey_list = []
+            for attribute in self._update_measure_list:
+                delattr(self,attribute)
+            self._update_measure_list = []
+        elif any (item in measure_params for item in new_params.keys()):
             for attribute in self._update_measure_list:
                 delattr(self,attribute)
             self._update_measure_list = []
