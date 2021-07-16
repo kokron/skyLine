@@ -8,6 +8,7 @@ import inspect
 from lim import lim
 import astropy.units as u
 import numpy as np
+import healpy as hp
 
 class cached_lightcone_property(object):
     """
