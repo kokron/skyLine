@@ -84,8 +84,7 @@ class Survey(Lightcone):
                  beam_FWHM=4.1*u.arcmin,
                  tobs=6000*u.hr,
                  target_line = 'CO',
-                 supersample = 10,
-                 paint_catalog = True,
+                 supersample = 10, 
                  do_smooth = True,
                  do_inner_cut = True,
                  do_angular = False,
@@ -131,10 +130,6 @@ class Survey(Lightcone):
             #Avoid inner cut if do_angular:
             if self.do_angular and self.do_inner_cut:
                 raise ValueError('If you want to work with angular maps, you do not need the inner cut, hence please use do_inner_cut = False')
-            
-        if self.paint_catalog:
-            self.read_halo_catalog
-            self.halo_luminosity
 
         #Set units for observable depending on convention
         if self.do_intensity:
@@ -317,7 +312,7 @@ class Survey(Lightcone):
 
         global sigma_par
         global sigma_perp
-        maps = np.zeros([Nmesh[0],Nmesh[1],Nmesh[2]//2 + 1], dtype='complex32')
+        maps = np.zeros([Nmesh[0],Nmesh[1],Nmesh[2]//2 + 1], dtype='complex64')
 
         for line in self.lines.keys():
             if self.lines[line]:

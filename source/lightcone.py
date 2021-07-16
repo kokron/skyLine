@@ -98,9 +98,6 @@ class Lightcone(object):
         self._update_survey_list = []
         self._update_measure_list = []
 
-        #Placeholder
-        self.L_line_halo = None
-
         #Initialize camb (we need background only) - values used in UM
         camb_pars = camb.set_params(H0=67.8, omch2 = 0.118002988, ombh2 = 0.02312)
         self.h = 0.678
@@ -134,7 +131,7 @@ class Lightcone(object):
     ######################
 
     @cached_read_property
-    def read_halo_catalog(self):
+    def halo_catalog(self):
         '''
         Reads all the files from the halo catalog and appends the slices
         '''
@@ -167,14 +164,12 @@ class Lightcone(object):
             inds_sky = inds_RA&inds_DEC
             bigcat = np.append(bigcat, data[inds_sky])
 
-        self.halo_catalog = bigcat
-        return
+        return bigcat
 
     @cached_lightcone_property
-    def halo_luminosity(self):
+    def L_line_halo(self):
         '''
-        Computes the halo luminosity for each of the lines of interest,
-        and the corresponding observed frequency for each halo and line
+        Computes the halo luminosity for each of the lines of interest
         '''
         L_line_halo = {}
         nuObs_line_halo = {}
@@ -198,20 +193,21 @@ class Lightcone(object):
         for line in self.lines.keys():
             if self.lines[line]:
                 L_line_halo[line] = getattr(LM,self.models[line]['model_name'])(self,SFR,self.models[line]['model_pars'])
+
+        return L_line_halo
+
+    @cached_lightcone_property
+    def nuObs_line_halo(self):
+        '''
+        Computes the observed frequency for each halo and line
+        '''
+        nuObs_line_halo = {}
+
+        for line in self.lines.keys():
+            if self.lines[line]:
                 nuObs_line_halo[line] = self.line_nu0[line]/(1+self.halo_catalog['Z']+self.halo_catalog['DZ'])
 
-        self.L_line_halo = L_line_halo
-        self.nuObs_line_halo = nuObs_line_halo
-
-        return
-
-    def make_lightcone(self):
-        '''
-        Wrapper for "read_halo_catalog" and "halo_luminosity"
-        '''
-        self.read_halo_catalog
-        self.halo_luminosity
-        return
+        return nuObs_line_halo
 
     ########################################################################
     # Method for updating input parameters and resetting cached properties #
