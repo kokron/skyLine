@@ -291,6 +291,107 @@ class Survey(Lightcone):
         return halos_survey
 
     @cached_survey_property
+    def angular_map(self):
+        '''
+        Generates the mock intensity map observed in spherical shells. It does not include noise.
+        '''
+        #Define the mesh divisions and the box size
+
+        ralim = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_max.value]))
+        declim = np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value]))
+        raside_lim = self.raside_lim
+        decside_lim = self.decside_lim
+        rside_obs_lim = self.rside_obs_lim
+        
+        mins_obs = np.array([rside_obs_lim[0],raside_lim[0],decside_lim[0]])
+
+        global sigma_par
+        global sigma_perp
+        npix = hp.nside2npix(nside)
+
+        #This is too much memory
+        # maps = np.zeros((self.Nchan, npix))
+
+        hp_map = np.zeros(npix)
+
+        # First, compute the intensity/temperature of each halo in the catalog we will include
+        for line in self.lines.keys():
+            if self.lines[line]:
+                #Get true cell volume
+
+                #Get positions using the observed redshift
+                #Convert the halo position in each volume to Cartesian coordinates (from Nbodykit)
+                ra,dec,redshift = da.broadcast_arrays(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'],
+                                                      self.halos_in_survey[line]['Zobs'])
+                ra,dec  = da.deg2rad(ra),da.deg2rad(dec)
+
+
+                Zhalo = self.halos_in_survey[line]['Ztrue']
+                Hubble = self.cosmo.hubble_parameter(Zhalo)*(u.km/u.Mpc/u.s)
+
+
+                #Figure out what channel the halos will be in to figure out the voxel volume, for the signal. 
+                #This is what will be added to the healpy map.
+
+                #Figure out which channel each line will end up in
+                nu_bins = np.arange(self.nuObs_max, step=self.delta_nuObs) 
+                
+                zmid_channel = nu_bins + self.delta_nuObs
+
+                #Channel of each halo, can now compute voxel volumes where each of them are seamlessly
+                bin_idxs = np.digitize(self.line_nu0[line], nu_bins)
+
+                zmids = zmid_channel[bin_idxs]
+
+
+                #Vcell = Omega_pix * D_A (z)^2 * (1+z) * Dnu/nu * c/H is the volume of the voxel for a given channel
+                Vcell_true = hp.nside2pixarea(nside)*(self.cosmo.comoving_radial_distance(zmids) / (1 + zmids))**2 * (1 + zmids) * (self.delta_nuObs/self.line_nu0[line]) * (cu.c.to(km/s)/Hubble)
+
+
+                if self.do_intensity:
+                    #intensity[Jy/sr]
+                    signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
+                else:
+                    #Temperature[uK]
+                    signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
+                
+
+                #Paste the signals to the map
+                theta, phi = FUNCTION_TO_CONVERT(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'])
+
+                pixel_idxs = hp.ang2pix(theta, phi)
+                np.add.at(hp_map, pixel_idxs, signal)
+
+
+                #This smoothing comes from the resolution window function.
+                if self.do_smooth:
+                    #compute scales for the anisotropic filter (in Ztrue -> zmid)
+                    zmid = (self.line_nu0[line]/self.nuObs_mean).decompose().value-1
+                    sigma_par = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
+                    sigma_perp = (self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
+                    field = field.apply(aniso_filter, kind='wavenumber')
+
+                #Define the mask from the rectangular footprint
+                phicorner = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_min.value,self.RAObs_max.value,self.RAObs_max.value]))
+                thetacorner = np.pi/2-np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value,self.DECObs_max.value,self.DECObs_min.value]))
+                vecs = hp.dir2vec(thetacorner,phi=phicorner).T
+                pix_within = hp.query_polygon(nside=self.nside,vertices=vecs,inclusive=False)
+                self.pix_within = pix_within
+                mask = np.ones(hp.nside2npix(self.nside),np.bool)
+                mask[pix_within] = 0
+                hp_map = hp.ma(hp_map)
+                hp_map.mask = mask
+                
+                #add noise
+                if self.Tsys.value > 0.:
+                    #rescale the noise per pixel to the healpy pixel size
+                    hp_sigmaN = self.sigmaN * (pix_within.size/self.Npix)**0.5
+                    hp_map[pix_within] += np.random.normal(0.,hp_sigmaN.value,pix_within.size)
+                    
+                return hp_map
+
+
+    @cached_survey_property
     def obs_map(self):
         '''
         Generates the mock intensity map observed in Fourier space,
@@ -314,6 +415,8 @@ class Survey(Lightcone):
         global sigma_perp
         maps = np.zeros([Nmesh[0],Nmesh[1],Nmesh[2]//2 + 1], dtype='complex64')
 
+
+        # First, compute the intensity/temperature of each halo in the catalog we will include
         for line in self.lines.keys():
             if self.lines[line]:
                 #Get true cell volume
@@ -330,6 +433,7 @@ class Survey(Lightcone):
                     decside = 2*rlim[1]*np.tan(0.5*(declim[1]-declim[0]))
                     zside = rlim[1]-rlim[0]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))
                     rside_lim = np.array([rlim[1]-zside,rlim[1]])
+
                 Lbox_true = np.array([zside,raside,decside])
                 Vcell_true = (Lbox_true/Nmesh).prod()*(self.Mpch**3).to(self.Mpch**3)
                 #Get positions using the observed redshift
