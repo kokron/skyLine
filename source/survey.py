@@ -308,15 +308,10 @@ class Survey(Lightcone):
 
         ralim = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_max.value]))
         declim = np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value]))
-        raside_lim = self.raside_lim
-        decside_lim = self.decside_lim
-        rside_obs_lim = self.rside_obs_lim
-        
-        mins_obs = np.array([rside_obs_lim[0],raside_lim[0],decside_lim[0]])
 
         global sigma_par
         global sigma_perp
-        npix = hp.nside2npix(nside)
+        npix = hp.nside2npix(self.nside)
 
         #This is too much memory
         # maps = np.zeros((self.Nchan, npix))
@@ -342,12 +337,12 @@ class Survey(Lightcone):
                 #This is what will be added to the healpy map.
 
                 #Figure out which channel each line will end up in
-                nu_bins = np.arange(self.nuObs_max, step=self.delta_nuObs) 
+                nu_bins = np.arange(self.nuObs_min.to('GHz').value, step=self.dnu.to('GHz').value) 
                 
-                zmid_channel = nu_bins + self.delta_nuObs
+                zmid_channel = nu_bins + 0.5*self.dnu.to('GHz').value
 
                 #Channel of each halo, can now compute voxel volumes where each of them are seamlessly
-                bin_idxs = np.digitize(self.line_nu0[line], nu_bins)
+                bin_idxs = np.digitize(self.line_nu0[line].to('GHz').value, nu_bins)
 
                 zmids = zmid_channel[bin_idxs]
 
