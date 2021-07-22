@@ -300,7 +300,7 @@ class Survey(Lightcone):
         return halos_survey
 
     @cached_survey_property
-    def angular_map(self):
+    def make_angular_map(self):
         '''
         Generates the mock intensity map observed in spherical shells. It does not include noise.
         '''
