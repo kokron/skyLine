@@ -15,6 +15,15 @@ from source.lightcone import Lightcone
 from source.utilities import cached_survey_property,get_default_params,check_params
 from source.utilities import set_lim, dict_lines
 
+def rd2tp(ra,dec):
+    """ convert ra/dec to theta,phi"""
+
+    phi = ra*np.pi/180
+    
+    theta = np.pi/180 * (90. - dec)
+    return theta, phi
+
+
 class Survey(Lightcone):
     '''
     An object controlling all relevant quantities needed to create the
@@ -323,7 +332,6 @@ class Survey(Lightcone):
                 #Convert the halo position in each volume to Cartesian coordinates (from Nbodykit)
                 ra,dec,redshift = da.broadcast_arrays(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'],
                                                       self.halos_in_survey[line]['Zobs'])
-                ra,dec  = da.deg2rad(ra),da.deg2rad(dec)
 
 
                 Zhalo = self.halos_in_survey[line]['Ztrue']
@@ -357,7 +365,7 @@ class Survey(Lightcone):
                 
 
                 #Paste the signals to the map
-                theta, phi = FUNCTION_TO_CONVERT(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'])
+                theta, phi = rd2tp(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'])
 
                 pixel_idxs = hp.ang2pix(theta, phi)
                 np.add.at(hp_map, pixel_idxs, signal)
@@ -365,6 +373,7 @@ class Survey(Lightcone):
 
                 #This smoothing comes from the resolution window function.
                 if self.do_smooth:
+                    raise(ValueError('smoothing not implemented angularly right now'))
                     #compute scales for the anisotropic filter (in Ztrue -> zmid)
                     zmid = (self.line_nu0[line]/self.nuObs_mean).decompose().value-1
                     sigma_par = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
