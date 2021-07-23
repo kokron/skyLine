@@ -380,14 +380,9 @@ class Survey(Lightcone):
                 else:
                     np.add.at(hp_map, pixel_idxs, signal.value)
 
-                #This smoothing comes from the resolution window function.
                 if self.do_smooth:
-                    raise(ValueError('smoothing not implemented angularly right now'))
-                    #compute scales for the anisotropic filter (in Ztrue -> zmid)
-                    zmid = (self.line_nu0[line]/self.nuObs_mean).decompose().value-1
-                    sigma_par = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
-                    sigma_perp = (self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
-                    field = field.apply(aniso_filter, kind='wavenumber')
+                    theta_beam = self.beam_width/(1.*u.rad)
+                    hp_map = hp.smoothing(hp_map, theta_beam.value)
 
                 #Define the mask from the rectangular footprint
                 phicorner = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_min.value,self.RAObs_max.value,self.RAObs_max.value]))
