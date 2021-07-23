@@ -290,7 +290,7 @@ class Survey(Lightcone):
             srmin = np.sign(self.RAObs_min.value)
             srmax = np.sign(self.RAObs_max.value)
             sdmin = np.sign(self.DECObs_min.value)
-            sdmax = np.sign(self.DECObs_min.value)
+            sdmax = np.sign(self.DECObs_max.value)
             inds_RA = (self.halo_catalog['RA'] > srmin*np.abs(1.01*self.RAObs_min.value))&(self.halo_catalog['RA'] < np.abs(1.01*self.RAObs_max.value)*srmax)
             inds_DEC = (self.halo_catalog['DEC'] > sdmin*np.abs(1.01*self.DECObs_min.value))&(self.halo_catalog['DEC'] < sdmax*np.abs(1.01*self.DECObs_max.value))
         else:
@@ -313,7 +313,6 @@ class Survey(Lightcone):
                 halos_survey[line]['Lhalo'] = np.append(halos_survey[line]['Lhalo'],self.L_line_halo[line][inds])
 
         return halos_survey
-    @cached_survey_property
     def make_angular_map(self):
         '''
         Generates the mock intensity map observed in spherical shells. It does not include noise.
@@ -361,7 +360,7 @@ class Survey(Lightcone):
 
                 print(len(Zhalo))
                 #Vcell = Omega_pix * D_A (z)^2 * (1+z) * Dnu/nu * c/H is the volume of the voxel for a given channel
-                Vcell_true = hp.nside2pixarea(self.nside)*(self.cosmo.comoving_radial_distance(zmids)*u.Mpc / (1 + zmids))**2 * (1 + zmids) * (self.delta_nuObs/self.line_nu0[line]) * (cu.c.to('km/s')/Hubble)
+                Vcell_true = hp.nside2pixarea(self.nside)*(self.cosmo.comoving_radial_distance(zmids)*u.Mpc )**2 * (1 + zmids) * (self.delta_nuObs/self.line_nu0[line]) * (cu.c.to('km/s')/Hubble)
 
 
                 if self.do_intensity:
