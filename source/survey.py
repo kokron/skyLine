@@ -283,7 +283,7 @@ class Survey(Lightcone):
         halos_survey = {}
 
         #halos within footprint
-        if do_angular:
+        if self.do_angular:
             #Enhance the survey selection a bit to prevent healpy masking from giving limited objects at edges
             #May fail at low nside
             #Edge case for negative ramin/decmin is handled. 
@@ -313,7 +313,6 @@ class Survey(Lightcone):
                 halos_survey[line]['Lhalo'] = np.append(halos_survey[line]['Lhalo'],self.L_line_halo[line][inds])
 
         return halos_survey
-
     @cached_survey_property
     def make_angular_map(self):
         '''
@@ -332,8 +331,9 @@ class Survey(Lightcone):
         hp_map = np.zeros(npix)
 
         # First, compute the intensity/temperature of each halo in the catalog we will include
-        for line in self.lines.keys():
+        for line in ['CO']:
             if self.lines[line]:
+                print('s')
                 #Get true cell volume
 
                 #Get positions using the observed redshift
@@ -357,7 +357,6 @@ class Survey(Lightcone):
                 #Channel of each halo, can now compute voxel volumes where each of them are seamlessly
                 bin_idxs = np.digitize(self.line_nu0[line].to('GHz').value/(1+Zhalo), nu_bins)-1
 
-                print()
                 zmids = zmid_channel[bin_idxs]
 
                 print(len(Zhalo))
@@ -379,7 +378,7 @@ class Survey(Lightcone):
                 pixel_idxs = hp.ang2pix(self.nside, theta, phi)
                 np.add.at(hp_map, pixel_idxs, signal.value)
 
-
+                print('here')
                 #This smoothing comes from the resolution window function.
                 if self.do_smooth:
                     raise(ValueError('smoothing not implemented angularly right now'))
@@ -399,14 +398,14 @@ class Survey(Lightcone):
                 mask[pix_within] = 0
                 hp_map = hp.ma(hp_map)
                 hp_map.mask = mask
-
+                print('here')
                 #add noise
-                if self.Tsys.value > 0.:
-                    #rescale the noise per pixel to the healpy pixel size
-                    hp_sigmaN = self.sigmaN * (pix_within.size/self.Npix)**0.5
-                    hp_map[pix_within] += np.random.normal(0.,hp_sigmaN.value,pix_within.size)
+        #if self.Tsys.value > 0.:
+            #rescale the noise per pixel to the healpy pixel size
+            #hp_sigmaN = self.sigmaN * (pix_within.size/self.Npix)**0.5
+            #hp_map[pix_within] += np.random.normal(0.,hp_sigmaN.value,pix_within.size)
                     
-                return hp_map
+        return hp_map
 
 
     @cached_survey_property
