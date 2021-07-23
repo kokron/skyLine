@@ -15,13 +15,6 @@ from source.lightcone import Lightcone
 from source.utilities import cached_survey_property,get_default_params,check_params
 from source.utilities import set_lim, dict_lines
 
-def rd2tp(ra,dec):
-    """ convert ra/dec to theta,phi"""
-
-    phi = ra*np.pi/180
-    
-    theta = np.pi/180 * (90. - dec)
-    return theta, phi
 
 
 class Survey(Lightcone):
@@ -315,7 +308,10 @@ class Survey(Lightcone):
                 halos_survey[line]['Lhalo'] = np.append(halos_survey[line]['Lhalo'],self.L_line_halo[line][inds])
 
         return halos_survey
-    def make_angular_map(self):
+
+
+    @cached_survey_property
+    def obs_2d_map(self):
         '''
         Generates the mock intensity map observed in spherical shells. It does not include noise.
         '''
@@ -414,7 +410,7 @@ class Survey(Lightcone):
 
 
     @cached_survey_property
-    def obs_map(self):
+    def obs_3d_map(self):
         '''
         Generates the mock intensity map observed in Fourier space,
         obtained from Cartesian coordinates. It does not include noise.
@@ -526,63 +522,22 @@ class Survey(Lightcone):
         #Compensate the field for the CIC window function we apply
         maps = maps.apply(CompensateCICShotnoise, kind='circular')
 
-        #If only want angular maps, transform to healpy map
-        if self.do_angular:
-            #transform the map to real field
-            maps = maps.c2r()
-            #Get back the coordinates of 3d to sky positions
-            vox_coords = da.from_array((pm.mesh_coordinates()+0.5)*Lbox/Nmesh+mins_obs)
-            x, y, z = vox_coords[:,0],vox_coords[:,1],vox_coords[:,2]
-            s = da.hypot(x, y)
-            phi = da.arctan2(y, x) #lon
-            theta = np.pi/2. - da.arctan2(z, s) #lat
-            
-            #Get the map of temperatures/intensities in the same format
-            signal_list = np.reshape(maps,vox_coords.shape[0])
-            #Create the map and get pixel indices corresponding to voxel positions
-            hp_map = np.zeros(hp.nside2npix(self.nside))
-            pix_inds = hp.ang2pix(self.nside,theta,phi).compute()
-            #project and average all the signals within the same pixel
-            if self.average_angular_proj:
-                np.add.at(hp_map,pix_inds,signal_list/self.Nchan)
-            else:
-                np.add.at(hp_map,pix_inds,signal_list)
-            
-            #Define the mask from the rectangular footprint
-            phicorner = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_min.value,self.RAObs_max.value,self.RAObs_max.value]))
-            thetacorner = np.pi/2-np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value,self.DECObs_max.value,self.DECObs_min.value]))
-            vecs = hp.dir2vec(thetacorner,phi=phicorner).T
-            pix_within = hp.query_polygon(nside=self.nside,vertices=vecs,inclusive=False)
-            self.pix_within = pix_within
-            mask = np.ones(hp.nside2npix(self.nside),np.bool)
-            mask[pix_within] = 0
-            hp_map = hp.ma(hp_map)
-            hp_map.mask = mask
-            
-            #add noise
-            if self.Tsys.value > 0.:
-                #rescale the noise per pixel to the healpy pixel size
-                hp_sigmaN = self.sigmaN * (pix_within.size/self.Npix)**0.5
-                hp_map[pix_within] += np.random.normal(0.,hp_sigmaN.value,pix_within.size)
-                
-            return hp_map
-        else:
-            #Add noise in the cosmic volume probed by target line to the 3d maps
-            if self.Tsys.value > 0.:
-                #get the proper shape for the observed map
-                if self.supersample > 1:
-                    pm_noise = pmesh.pm.ParticleMesh(np.array([self.Nchan,self.Nside[0],self.Nside[1]], dtype=int),
+        #Add noise in the cosmic volume probed by target line to the 3d maps
+        if self.Tsys.value > 0.:
+            #get the proper shape for the observed map
+            if self.supersample > 1:
+                pm_noise = pmesh.pm.ParticleMesh(np.array([self.Nchan,self.Nside[0],self.Nside[1]], dtype=int),
                                                       BoxSize=Lbox, dtype='float32', resampler='cic')
-                    maps = pm_noise.downsample(maps.c2r(),keep_mean=True)
-                    #Check if compensation is required again
-                    maps = (maps.r2c()).apply(CompensateCICShotnoise, kind='circular')
+                maps = pm_noise.downsample(maps.c2r(),keep_mean=True)
+                #Check if compensation is required again
+                maps = (maps.r2c()).apply(CompensateCICShotnoise, kind='circular')
 
-                maps = maps.c2r()
-                #add the noise, distribution is gaussian with 0 mean
-                maps += np.random.normal(0.,self.sigmaN.value,maps.shape)
-            else:
-                maps = maps.c2r()
-            return maps
+            maps = maps.c2r()
+            #add the noise, distribution is gaussian with 0 mean
+            maps += np.random.normal(0.,self.sigmaN.value,maps.shape)
+        else:
+            maps = maps.c2r()
+        return maps
             
     def save_map(self,name,other_map=None):
         '''
@@ -638,3 +593,10 @@ def aniso_filter(k, v):
     kk[kk==0]==1
 
     return np.exp(-0.5*kk)*v
+def rd2tp(ra,dec):
+    """ convert ra/dec to theta,phi"""
+
+    phi = ra*np.pi/180
+    
+    theta = np.pi/180 * (90. - dec)
+    return theta, phi
