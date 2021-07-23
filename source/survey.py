@@ -283,18 +283,33 @@ class Survey(Lightcone):
         halos_survey = {}
 
         #halos within footprint
-        inds_RA = (self.halo_catalog['RA'] > self.RAObs_min.value)&(self.halo_catalog['RA'] < self.RAObs_max.value)
-        inds_DEC = (self.halo_catalog['DEC'] > self.DECObs_min.value)&(self.halo_catalog['DEC'] < self.DECObs_max.value)
+        if do_angular:
+            #Enhance the survey selection a bit to prevent healpy masking from giving limited objects at edges
+            #May fail at low nside
+            #Edge case for negative ramin/decmin is handled. 
+            srmin = np.sign(self.RAObs_min.value)
+            srmax = np.sign(self.RAObs_max.value)
+            sdmin = np.sign(self.DECObs_min.value)
+            sdmax = np.sign(self.DECObs_min.value)
+            inds_RA = (self.halo_catalog['RA'] > srmin*np.abs(1.01*self.RAObs_min.value))&(self.halo_catalog['RA'] < np.abs(1.01*self.RAObs_max.value)*srmax)
+            inds_DEC = (self.halo_catalog['DEC'] > sdmin*np.abs(1.01*self.DECObs_min.value))&(self.halo_catalog['DEC'] < sdmax*np.abs(1.01*self.DECObs_max.value))
+        else:
+            inds_RA = (self.halo_catalog['RA'] > self.RAObs_min.value)&(self.halo_catalog['RA'] < self.RAObs_max.value)
+            inds_DEC = (self.halo_catalog['DEC'] > self.DECObs_min.value)&(self.halo_catalog['DEC'] < self.DECObs_max.value)
         inds_sky = inds_RA&inds_DEC
+
         #Loop over lines to see what halos are within nuObs
         for line in self.lines.keys():
             if self.lines[line]:
                 halos_survey[line] = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),Ztrue=np.array([]),Lhalo=np.array([])*u.Lsun)
+                #inds = (self.nuObs_line_halo[line] >= self.nuObs_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky
                 inds = (self.nuObs_line_halo[line] >= self.nuObs_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky
                 halos_survey[line]['RA'] = np.append(halos_survey[line]['RA'],self.halo_catalog['RA'][inds])
                 halos_survey[line]['DEC'] = np.append(halos_survey[line]['DEC'],self.halo_catalog['DEC'][inds])
                 halos_survey[line]['Zobs'] = np.append(halos_survey[line]['Zobs'],(self.line_nu0[self.target_line]/self.nuObs_line_halo[line][inds]).decompose()-1)
-                halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog['Z'][inds]+self.halo_catalog['DZ'][inds])
+                #Not doing DZ correction
+                #halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog['Z'][inds]+self.halo_catalog['DZ'][inds])
+                halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog['Z'][inds])
                 halos_survey[line]['Lhalo'] = np.append(halos_survey[line]['Lhalo'],self.L_line_halo[line][inds])
 
         return halos_survey
