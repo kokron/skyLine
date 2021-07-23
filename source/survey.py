@@ -285,14 +285,16 @@ class Survey(Lightcone):
         #halos within footprint
         if self.do_angular:
             #Enhance the survey selection a bit to prevent healpy masking from giving limited objects at edges
-            #May fail at low nside
-            #Edge case for negative ramin/decmin is handled. 
-            srmin = np.sign(self.RAObs_min.value)
-            srmax = np.sign(self.RAObs_max.value)
-            sdmin = np.sign(self.DECObs_min.value)
-            sdmax = np.sign(self.DECObs_max.value)
-            inds_RA = (self.halo_catalog['RA'] > srmin*np.abs(1.01*self.RAObs_min.value))&(self.halo_catalog['RA'] < np.abs(1.01*self.RAObs_max.value)*srmax)
-            inds_DEC = (self.halo_catalog['DEC'] > sdmin*np.abs(1.01*self.DECObs_min.value))&(self.halo_catalog['DEC'] < sdmax*np.abs(1.01*self.DECObs_max.value))
+            #Computes the mid-point of the boundaries and then expands them by 1%
+            #May fail at low nside or weird survey masks
+            delta_ra = 1.01*0.5*(self.RAObs_max.value - self.RAObs_min.value)
+            mid_ra = 0.5*(self.RAObs_max.value + self.RAObs_min.value)
+            
+            delta_dec = 1.01*0.5*(self.DECObs_max.value - self.DECObs_min.value)
+            mid_dec = 0.5*(self.DECObs_max.value + self.DECObs_min.value)
+
+            inds_RA = (self.halo_catalog['RA'] > mid_ra - delta_ra)&(self.halo_catalog['RA'] < delta_ra  +mid_ra)
+            inds_DEC = (self.halo_catalog['DEC'] > mid_dec - delta_dec)&(self.halo_catalog['DEC'] < mid_dec + delta_dec)
         else:
             inds_RA = (self.halo_catalog['RA'] > self.RAObs_min.value)&(self.halo_catalog['RA'] < self.RAObs_max.value)
             inds_DEC = (self.halo_catalog['DEC'] > self.DECObs_min.value)&(self.halo_catalog['DEC'] < self.DECObs_max.value)
@@ -375,9 +377,13 @@ class Survey(Lightcone):
                 theta, phi = rd2tp(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'])
 
                 pixel_idxs = hp.ang2pix(self.nside, theta, phi)
-                np.add.at(hp_map, pixel_idxs, signal.value)
+                
+                if self.average_angular_proj:
+                    #averaging over the number of channels
+                    np.add.at(hp_map, pixel_idxs, signal.value/self.Nchan)
+                else:
+                    np.add.at(hp_map, pixel_idxs, signal.value)
 
-                print('here')
                 #This smoothing comes from the resolution window function.
                 if self.do_smooth:
                     raise(ValueError('smoothing not implemented angularly right now'))
