@@ -306,86 +306,87 @@ class Survey(Lightcone):
         '''
         #Define the mesh divisions and the box size
 
-        ralim = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_max.value]))
-        declim = np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value]))
+        ralim = np.deg2rad(np.array([CO.RAObs_min.value,CO.RAObs_max.value]))
+        declim = np.deg2rad(np.array([CO.DECObs_min.value,CO.DECObs_max.value]))
 
         global sigma_par
         global sigma_perp
-        npix = hp.nside2npix(self.nside)
+        npix = hp.nside2npix(CO.nside)
 
         #This is too much memory
-        # maps = np.zeros((self.Nchan, npix))
+        # maps = np.zeros((CO.Nchan, npix))
 
         hp_map = np.zeros(npix)
 
         # First, compute the intensity/temperature of each halo in the catalog we will include
-        for line in self.lines.keys():
-            if self.lines[line]:
+        for line in ['CO']:
+            if CO.lines[line]:
                 #Get true cell volume
 
                 #Get positions using the observed redshift
                 #Convert the halo position in each volume to Cartesian coordinates (from Nbodykit)
-                ra,dec,redshift = da.broadcast_arrays(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'],
-                                                      self.halos_in_survey[line]['Zobs'])
+                ra,dec,redshift = da.broadcast_arrays(CO.halos_in_survey[line]['RA'], CO.halos_in_survey[line]['DEC'],
+                                                      CO.halos_in_survey[line]['Zobs'])
 
 
-                Zhalo = self.halos_in_survey[line]['Ztrue']
-                Hubble = self.cosmo.hubble_parameter(Zhalo)*(u.km/u.Mpc/u.s)
+                Zhalo = CO.halos_in_survey[line]['Ztrue']
+                Hubble = CO.cosmo.hubble_parameter(Zhalo)*(u.km/u.Mpc/u.s)
 
 
                 #Figure out what channel the halos will be in to figure out the voxel volume, for the signal. 
                 #This is what will be added to the healpy map.
 
                 #Figure out which channel each line will end up in
-                nu_bins = np.arange(self.nuObs_min.to('GHz').value, step=self.dnu.to('GHz').value) 
-                
-                zmid_channel = nu_bins + 0.5*self.dnu.to('GHz').value
+                nu_bins = CO.nuObs_min.to('GHz').value + np.arange(CO.Nchan)*CO.dnu.to('GHz').value 
+
+                zmid_channel = nu_bins + 0.5*CO.dnu.to('GHz').value
 
                 #Channel of each halo, can now compute voxel volumes where each of them are seamlessly
-                bin_idxs = np.digitize(self.line_nu0[line].to('GHz').value, nu_bins)
+                bin_idxs = np.digitize(CO.line_nu0[line].to('GHz').value/(1+Zhalo), nu_bins)-1
 
+                print()
                 zmids = zmid_channel[bin_idxs]
 
-
+                print(len(Zhalo))
                 #Vcell = Omega_pix * D_A (z)^2 * (1+z) * Dnu/nu * c/H is the volume of the voxel for a given channel
-                Vcell_true = hp.nside2pixarea(nside)*(self.cosmo.comoving_radial_distance(zmids) / (1 + zmids))**2 * (1 + zmids) * (self.delta_nuObs/self.line_nu0[line]) * (cu.c.to(km/s)/Hubble)
+                Vcell_true = hp.nside2pixarea(CO.nside)*(CO.cosmo.comoving_radial_distance(zmids)*u.Mpc / (1 + zmids))**2 * (1 + zmids) * (CO.delta_nuObs/CO.line_nu0[line]) * (cu.c.to('km/s')/Hubble)
 
 
-                if self.do_intensity:
+                if CO.do_intensity:
                     #intensity[Jy/sr]
-                    signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
+                    signal = (cu.c/(4.*np.pi*CO.line_nu0[line]*Hubble*(1.*u.sr))*CO.halos_in_survey[line]['Lhalo']/Vcell_true).to(CO.unit)
                 else:
                     #Temperature[uK]
-                    signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
-                
+                    signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*CO.line_nu0[line]**3*Hubble)*CO.halos_in_survey[line]['Lhalo']/Vcell_true).to(CO.unit)
+
 
                 #Paste the signals to the map
-                theta, phi = rd2tp(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'])
+                theta, phi = rd2tp(CO.halos_in_survey[line]['RA'], CO.halos_in_survey[line]['DEC'])
 
-                pixel_idxs = hp.ang2pix(theta, phi)
-                np.add.at(hp_map, pixel_idxs, signal)
+                pixel_idxs = hp.ang2pix(CO.nside, theta, phi)
+                np.add.at(hp_map, pixel_idxs, 1)
 
 
                 #This smoothing comes from the resolution window function.
-                if self.do_smooth:
+                if CO.do_smooth:
                     raise(ValueError('smoothing not implemented angularly right now'))
                     #compute scales for the anisotropic filter (in Ztrue -> zmid)
-                    zmid = (self.line_nu0[line]/self.nuObs_mean).decompose().value-1
-                    sigma_par = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
-                    sigma_perp = (self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
+                    zmid = (CO.line_nu0[line]/CO.nuObs_mean).decompose().value-1
+                    sigma_par = (cu.c*CO.dnu*(1+zmid)/(CO.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*CO.nuObs_mean)).to(CO.Mpch).value
+                    sigma_perp = (CO.cosmo.comoving_radial_distance(zmid)*u.Mpc*(CO.beam_width/(1*u.rad))).to(CO.Mpch).value
                     field = field.apply(aniso_filter, kind='wavenumber')
 
                 #Define the mask from the rectangular footprint
-                phicorner = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_min.value,self.RAObs_max.value,self.RAObs_max.value]))
-                thetacorner = np.pi/2-np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value,self.DECObs_max.value,self.DECObs_min.value]))
+                phicorner = np.deg2rad(np.array([CO.RAObs_min.value,CO.RAObs_min.value,CO.RAObs_max.value,CO.RAObs_max.value]))
+                thetacorner = np.pi/2-np.deg2rad(np.array([CO.DECObs_min.value,CO.DECObs_max.value,CO.DECObs_max.value,CO.DECObs_min.value]))
                 vecs = hp.dir2vec(thetacorner,phi=phicorner).T
-                pix_within = hp.query_polygon(nside=self.nside,vertices=vecs,inclusive=False)
-                self.pix_within = pix_within
-                mask = np.ones(hp.nside2npix(self.nside),np.bool)
+                pix_within = hp.query_polygon(nside=CO.nside,vertices=vecs,inclusive=False)
+                CO.pix_within = pix_within
+                mask = np.ones(hp.nside2npix(CO.nside),np.bool)
                 mask[pix_within] = 0
                 hp_map = hp.ma(hp_map)
                 hp_map.mask = mask
-                
+
                 #add noise
                 if self.Tsys.value > 0.:
                     #rescale the noise per pixel to the healpy pixel size
