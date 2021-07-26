@@ -328,9 +328,8 @@ class Survey(Lightcone):
         hp_map = np.zeros(npix)
 
         # First, compute the intensity/temperature of each halo in the catalog we will include
-        for line in ['CO']:
+        for line in self.lines.keys():
             if self.lines[line]:
-                print('s')
                 #Get true cell volume
 
                 #Get positions using the observed redshift
@@ -356,7 +355,6 @@ class Survey(Lightcone):
 
                 zmids = zmid_channel[bin_idxs]
 
-                print(len(Zhalo))
                 #Vcell = Omega_pix * D_A (z)^2 * (1+z) * Dnu/nu * c/H is the volume of the voxel for a given channel
                 Vcell_true = hp.nside2pixarea(self.nside)*(self.cosmo.comoving_radial_distance(zmids)*u.Mpc )**2 * (1 + zmids) * (self.delta_nuObs/self.line_nu0[line]) * (cu.c.to('km/s')/Hubble)
 
@@ -379,7 +377,8 @@ class Survey(Lightcone):
                     np.add.at(hp_map, pixel_idxs, signal.value/self.Nchan)
                 else:
                     np.add.at(hp_map, pixel_idxs, signal.value)
-
+                #should smoothing be after masking?
+                #could lead to bleeding of the zeros with the boundary
                 if self.do_smooth:
                     theta_beam = self.beam_width/(1.*u.rad)
                     hp_map = hp.smoothing(hp_map, theta_beam.value)
@@ -394,12 +393,11 @@ class Survey(Lightcone):
                 mask[pix_within] = 0
                 hp_map = hp.ma(hp_map)
                 hp_map.mask = mask
-                print('here')
                 #add noise
-        #if self.Tsys.value > 0.:
+        if self.Tsys.value > 0.:
             #rescale the noise per pixel to the healpy pixel size
-            #hp_sigmaN = self.sigmaN * (pix_within.size/self.Npix)**0.5
-            #hp_map[pix_within] += np.random.normal(0.,hp_sigmaN.value,pix_within.size)
+            hp_sigmaN = self.sigmaN * (pix_within.size/self.Npix)**0.5
+            hp_map[pix_within] += np.random.normal(0.,hp_sigmaN.value,pix_within.size)
                     
         return hp_map
 
