@@ -184,11 +184,11 @@ class Lightcone(object):
                 SFR = getattr(extSFRs,self.external_SFR)(Mhalo_Msun.value,self.halo_catalog['Z'], self.SFR_pars)
                 #Add scatter to the relation
                 sigma_base_e = self.sig_extSFR*2.302585
-                SFR = SFR*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, SFR.shape)
+                SFR = SFR*self.rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, SFR.shape)
             else:
                 SFR = getattr(extSFRs,self.external_SFR)(Mhalo_Msun.value,self.halo_catalog['Z'])
                 sigma_base_e = self.sig_extSFR*2.302585
-                SFR = SFR*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, SFR.shape)
+                SFR = SFR*self.rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, SFR.shape)
         else:
             SFR = self.halo_catalog['SFR_HALO']
 
