@@ -69,7 +69,7 @@ class Lightcone(object):
                  models = dict(CO = dict(model_name = '', model_pars = {}), CII = dict(model_name = '', model_pars = {}),
                                Halpha = dict(model_name = '', model_pars = {}), Lyalpha = dict(model_name = '', model_pars = {}),
                                HI = dict(model_name = '', model_pars = {})),
-                 do_external_SFR = False, external_SFR = '',sig_extSFR = 0.3, SFR_pars=dict(M0=1e-6, Ma=10**8, Mb=10**12.3, a=1.9, b=3.0, c=-1.4), seed=None):
+                 do_external_SFR = False, external_SFR = '',sig_extSFR = 0.3, SFR_pars=dict(M0=1e-6, Ma=10**8, Mb=10**12.3, a=1.9, b=3.0, c=-1.4), seed=1):
 
         # Get list of input values to check type and units
         self._lightcone_params = locals()
@@ -109,7 +109,7 @@ class Lightcone(object):
         self.line_nu0 = dict(CO = 115.271*u.GHz, CII = 1900.539*u.GHz, HI = 1.4204134*u.GHz,
                         Lyalpha = 2465398.5*u.GHz, Halpha = 456805.72*u.GHz, Hbeta = 616730.01028595*u.GHz,
                         OII = 804380.08585994*u.GHz, OIII = 598746.67066107*u.GHz)
-        self.rng = np.random.default_rng(seed)
+        self.rng = np.random.default_rng(self.seed)
 
     #########
     # Units #
