@@ -11,7 +11,7 @@ import astropy.constants as cu
 ## CO LINE ##
 #############
 
-def CO_Li16(self,SFR,pars):
+def CO_Li16(self,SFR,pars,rng):
     '''
     Model for CO line from Li+2016 (arXiv:1503.08833)
 
@@ -34,7 +34,7 @@ def CO_Li16(self,SFR,pars):
     log10_LCO = (np.log10(LIR) - beta)/alpha
     #Add normal scatter in the log10(LCO)
     sigma_base_e = sigma_L*2.302585
-    LCO_samples = 10**(log10_LCO)*np.random.lognormal(-0.5*sigma_base_e**2, sigma_base_e, log10_LCO.shape)
+    LCO_samples = 10**(log10_LCO)*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, log10_LCO.shape)
     
     #transform to Lsun and give units
     return LCO_samples*4.9e-5*u.Lsun
@@ -44,7 +44,7 @@ def CO_Li16(self,SFR,pars):
 ## CII LINE ##
 ##############
 
-def CII_Silva15(self,SFR,pars):
+def CII_Silva15(self,SFR,pars,rng):
     '''
     Model for CII line from Silva+2015 (arXiv:1410.4808)
 
@@ -63,7 +63,7 @@ def CII_Silva15(self,SFR,pars):
     
     #Add scatter to the relation
     sigma_base_e = sigma_L*2.302585
-    L = L*np.random.lognormal(-0.5*sigma_base_e**2, sigma_base_e, L.shape)
+    L = L*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, L.shape)
 
     return L
 
@@ -71,7 +71,7 @@ def CII_Silva15(self,SFR,pars):
 ## Ly-alpha LINE ##
 ##############
 
-def Lyalpha_Chung19(self,SFR,pars):
+def Lyalpha_Chung19(self,SFR,pars,rng):
     '''
     Model for Lyman-alpha line used in Chung+2019 (arXiv:1809.04550)
 
@@ -94,7 +94,7 @@ def Lyalpha_Chung19(self,SFR,pars):
 
     #Add scatter to the relation
     sigma_base_e = sigma_L*2.302585
-    LLya_samples = LLya*np.random.lognormal(-0.5*sigma_base_e**2, sigma_base_e, LLya.shape)
+    LLya_samples = LLya*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, LLya.shape)
 
     return (LLya_samples*u.erg/u.s).to(u.Lsun)
 
@@ -103,7 +103,7 @@ def Lyalpha_Chung19(self,SFR,pars):
 ## Halpha LINE ##
 #################
 
-def Halpha_Gong17(self,SFR,pars):
+def Halpha_Gong17(self,SFR,pars,rng):
     '''
     Model for Halpha line used in Gong+2017 (arXiv:1610.09060)
 
@@ -125,7 +125,7 @@ def Halpha_Gong17(self,SFR,pars):
     
     #Add scatter to the relation
     sigma_base_e = sigma_L*2.302585
-    L = L*np.random.lognormal(-0.5*sigma_base_e**2, sigma_base_e, L.shape)
+    L = L*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, L.shape)
 
     return L*10**(-Aext_Halpha/2.5)
 
@@ -134,7 +134,7 @@ def Halpha_Gong17(self,SFR,pars):
 ## Hbeta LINE ##
 ################
 
-def Hbeta_Gong17(self,SFR,pars):
+def Hbeta_Gong17(self,SFR,pars,rng):
     '''
     Model for Hbeta line used in Gong+2017 (arXiv:1610.09060)
 
@@ -156,7 +156,7 @@ def Hbeta_Gong17(self,SFR,pars):
     
     #Add scatter to the relation
     sigma_base_e = sigma_L*2.302585
-    L = L*np.random.lognormal(-0.5*sigma_base_e**2, sigma_base_e, L.shape)
+    L = L*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, L.shape)
 
     return L*10**(-Aext_Hbeta/2.5)
 
@@ -166,7 +166,7 @@ def Hbeta_Gong17(self,SFR,pars):
 ## OII LINE ##
 ##############
 
-def OII_Gong17(self,SFR,pars):
+def OII_Gong17(self,SFR,pars,rng):
     '''
     Model for OII line used in Gong+2017 (arXiv:1610.09060)
 
@@ -188,7 +188,7 @@ def OII_Gong17(self,SFR,pars):
     
     #Add scatter to the relation
     sigma_base_e = sigma_L*2.302585
-    L = L*np.random.lognormal(-0.5*sigma_base_e**2, sigma_base_e, L.shape)
+    L = L*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, L.shape)
 
     return L*10**(-Aext_OII/2.5)
 
@@ -197,7 +197,7 @@ def OII_Gong17(self,SFR,pars):
 ## OIII LINE ##
 ###############
 
-def OIII_Gong17(self,SFR,pars):
+def OIII_Gong17(self,SFR,pars,rng):
     '''
     Model for OIII line used in Gong+2017 (arXiv:1610.09060)
 
@@ -219,6 +219,6 @@ def OIII_Gong17(self,SFR,pars):
     
     #Add scatter to the relation
     sigma_base_e = sigma_L*2.302585
-    L = L*np.random.lognormal(-0.5*sigma_base_e**2, sigma_base_e, L.shape)
+    L = L*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, L.shape)
 
     return L*10**(-Aext_OIII/2.5)
