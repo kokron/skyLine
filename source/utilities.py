@@ -110,7 +110,12 @@ def check_params(input_params, default_params):
 
         # Check if input has the correct type
         if type(input_value)!=type(default_value):
-            raise TypeError("Parameter "+key+" must be a "+
+            if key == 'seed':
+                if type(input_value) == int:
+                    continue
+
+            else:
+                raise TypeError("Parameter "+key+" must be a "+
                                 str(type(default_value)))
 
         # Special requirements for some parameters
