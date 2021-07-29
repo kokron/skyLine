@@ -57,6 +57,8 @@ class Lightcone(object):
     -external_SFR           SFR interpolation
 
     -sig_extSFR             log-scatter for an external SFR
+   
+    -seed                   seed for the RNG object
     '''
     def __init__(self,
                  halo_lightcone_dir = '',
@@ -67,7 +69,7 @@ class Lightcone(object):
                  models = dict(CO = dict(model_name = '', model_pars = {}), CII = dict(model_name = '', model_pars = {}),
                                Halpha = dict(model_name = '', model_pars = {}), Lyalpha = dict(model_name = '', model_pars = {}),
                                HI = dict(model_name = '', model_pars = {})),
-                 do_external_SFR = False, external_SFR = '',sig_extSFR = 0.3, SFR_pars=dict(M0=1e-6, Ma=10**8, Mb=10**12.3, a=1.9, b=3.0, c=-1.4)):
+                 do_external_SFR = False, external_SFR = '',sig_extSFR = 0.3, SFR_pars=dict(M0=1e-6, Ma=10**8, Mb=10**12.3, a=1.9, b=3.0, c=-1.4), seed=None):
 
         # Get list of input values to check type and units
         self._lightcone_params = locals()
@@ -107,6 +109,7 @@ class Lightcone(object):
         self.line_nu0 = dict(CO = 115.271*u.GHz, CII = 1900.539*u.GHz, HI = 1.4204134*u.GHz,
                         Lyalpha = 2465398.5*u.GHz, Halpha = 456805.72*u.GHz, Hbeta = 616730.01028595*u.GHz,
                         OII = 804380.08585994*u.GHz, OIII = 598746.67066107*u.GHz)
+        self.rng = np.random.default_rng(self.seed)
 
     #########
     # Units #
@@ -181,18 +184,18 @@ class Lightcone(object):
                 SFR = getattr(extSFRs,self.external_SFR)(Mhalo_Msun.value,self.halo_catalog['Z'], self.SFR_pars)
                 #Add scatter to the relation
                 sigma_base_e = self.sig_extSFR*2.302585
-                SFR = SFR*np.random.lognormal(-0.5*sigma_base_e**2, sigma_base_e, SFR.shape)
+                SFR = SFR*self.rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, SFR.shape)
             else:
                 SFR = getattr(extSFRs,self.external_SFR)(Mhalo_Msun.value,self.halo_catalog['Z'])
                 sigma_base_e = self.sig_extSFR*2.302585
-                SFR = SFR*np.random.lognormal(-0.5*sigma_base_e**2, sigma_base_e, SFR.shape)
+                SFR = SFR*self.rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, SFR.shape)
         else:
             SFR = self.halo_catalog['SFR_HALO']
 
 
         for line in self.lines.keys():
             if self.lines[line]:
-                L_line_halo[line] = getattr(LM,self.models[line]['model_name'])(self,SFR,self.models[line]['model_pars'])
+                L_line_halo[line] = getattr(LM,self.models[line]['model_name'])(self,SFR,self.models[line]['model_pars'],self.rng)
 
         return L_line_halo
 

@@ -396,7 +396,7 @@ class Survey(Lightcone):
         if self.Tsys.value > 0.:
             #rescale the noise per pixel to the healpy pixel size
             hp_sigmaN = self.sigmaN * (pix_within.size/self.Npix)**0.5
-            hp_map[pix_within] += np.random.normal(0.,hp_sigmaN.value,pix_within.size)
+            hp_map[pix_within] += self.rng.normal(0.,hp_sigmaN.value,pix_within.size)
                     
         return hp_map
 
@@ -530,7 +530,7 @@ class Survey(Lightcone):
 
             maps = maps.c2r()
             #add the noise, distribution is gaussian with 0 mean
-            maps += np.random.normal(0.,self.sigmaN.value,maps.shape)
+            maps += self.rng.normal(0.,self.sigmaN.value,maps.shape)
         else:
             maps = maps.c2r()
         return maps
