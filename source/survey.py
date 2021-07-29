@@ -317,9 +317,8 @@ class Survey(Lightcone):
         '''
         #Define the mesh divisions and the box size
 
-
-        global sigma_par
-        global sigma_perp
+        if not self.do_angular:
+            raise(Warning('Mask edges will be funky in this case, might see some vignetting'))
         npix = hp.nside2npix(self.nside)
 
         #This is too much memory
@@ -380,7 +379,7 @@ class Survey(Lightcone):
                 #should smoothing be after masking?
                 #could lead to bleeding of the zeros with the boundary
                 if self.do_smooth:
-                    theta_beam = self.beam_width/(1.*u.rad)
+                    theta_beam = self.beam_FWHM.to(u.rad)
                     hp_map = hp.smoothing(hp_map, theta_beam.value)
 
                 #Define the mask from the rectangular footprint
@@ -408,6 +407,10 @@ class Survey(Lightcone):
         Generates the mock intensity map observed in Fourier space,
         obtained from Cartesian coordinates. It does not include noise.
         '''
+        
+        if self.do_angular:
+            raise(Warning('Mask edges might be problematic due to the expanded selection!'))
+        
         #Define the mesh divisions and the box size
         Nmesh = np.array([self.supersample*self.Nchan,
                   self.supersample*self.Nside[0],
