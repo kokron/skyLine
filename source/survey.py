@@ -520,17 +520,22 @@ class Survey(Lightcone):
 
         #Add noise in the cosmic volume probed by target line to the 3d maps
         if self.Tsys.value > 0.:
+            #Avoiding the downgrade of Nmesh to Nchan,Nside,Nside and rescaling sigmaN
+            #TODO: check that this doesn't affect the VID SNR (signal will change since voxel size will change)
+            
             #get the proper shape for the observed map
-            if self.supersample > 1:
-                pm_noise = pmesh.pm.ParticleMesh(np.array([self.Nchan,self.Nside[0],self.Nside[1]], dtype=int),
-                                                      BoxSize=Lbox, dtype='float32', resampler='cic')
-                maps = pm_noise.downsample(maps.c2r(),keep_mean=True)
-                #Check if compensation is required again
-                maps = (maps.r2c()).apply(CompensateCICShotnoise, kind='circular')
+            #if self.supersample > 1:
+            #    pm_noise = pmesh.pm.ParticleMesh(np.array([self.Nchan,self.Nside[0],self.Nside[1]], dtype=int),
+            #                                          BoxSize=Lbox, dtype='float32', resampler='cic')
+            #    maps = pm_noise.downsample(maps.c2r(),keep_mean=True)
+            #    #Check if compensation is required again
+            #    maps = (maps.r2c()).apply(CompensateCICShotnoise, kind='circular')
 
+            #rescale noise:
+            supersample_sigmaN = self.sigmaN * (self.supersample)**1.5
             maps = maps.c2r()
             #add the noise, distribution is gaussian with 0 mean
-            maps += self.rng.normal(0.,self.sigmaN.value,maps.shape)
+            maps += self.rng.normal(0.,supersample_sigmaN.value,maps.shape)
         else:
             maps = maps.c2r()
         return maps
