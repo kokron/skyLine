@@ -146,7 +146,7 @@ class Lightcone(object):
             ind[ifile] =  int(fnames[ifile].split('_')[-1].split('.')[0])
         sort_ind = np.argsort(ind)
         #get the edge distances for each slice in Mpc (25 Mpc/h width each slice)
-        dist_edges = (np.arange(Nfiles+1))*25*self.Mpch.value
+        dist_edges = (np.arange(Nfiles+1)+ind[[sort_ind[0]]])*25*self.Mpch.value
         min_dist = self.cosmo.comoving_radial_distance(self.zmin)
         max_dist = self.cosmo.comoving_radial_distance(self.zmax)
         inds_in = np.where(np.logical_and(dist_edges[:-1] >= min_dist, dist_edges[1:] <= max_dist))[0]
