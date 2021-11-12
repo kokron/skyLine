@@ -516,7 +516,7 @@ class Survey(Lightcone):
                 maps+=field
 
         #Compensate the field for the CIC window function we apply
-        maps = maps.apply(CompensateCICShotnoise, kind='circular')
+        #maps = maps.apply(CompensateCICShotnoise, kind='circular')
 
         #Add noise in the cosmic volume probed by target line to the 3d maps
         if self.Tsys.value > 0.:

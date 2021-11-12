@@ -134,7 +134,7 @@ class Measure(Survey):
                 if self.do_read_map:
                     map_to_use = self.read_map
                 else:
-                    map_to_use = self.obs_map
+                    map_to_use = self.obs_3d_map
                     
                 return FFTPower(map_to_use, '2d', Nmu=self.Nmu, poles=[0,2,4], los=[1,0,0],
                                 dk=self.dk.to(self.Mpch**-1).value,kmin=self.kmin.to(self.Mpch**-1).value,
@@ -352,7 +352,7 @@ class Measure(Survey):
         Computes the histogram of temperatures in each voxel in hte observed map.
         Equivalent to the VID
         '''
-        return np.histogram(np.array(self.obs_map).flatten(),
+        return np.histogram(np.array(self.obs_3d_map).flatten(),
                             bins=self.Ti_edge.value)[0]
 
     @cached_measure_property
