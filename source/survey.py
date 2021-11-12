@@ -536,8 +536,10 @@ class Survey(Lightcone):
             maps = maps.c2r()
             #add the noise, distribution is gaussian with 0 mean
             maps += self.rng.normal(0.,supersample_sigmaN.value,maps.shape)
+            maps = maps/maps.cmean() - 1
         else:
             maps = maps.c2r()
+            maps = maps/maps.cmean() - 1
         return maps
             
     def save_map(self,name,other_map=None):
