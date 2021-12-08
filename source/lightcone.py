@@ -180,7 +180,7 @@ class Lightcone(object):
         if self.do_external_SFR:
             #convert halo mass to Msun
             Mhalo_Msun = (self.halo_catalog['M_HALO']*self.Msunh).to(u.Msun)
-            if self.external_SFR == 'Custom_SFR':
+            if self.external_SFR == 'Custom_SFR' or self.external_SFR == 'Dongwoo_SFR':
                 SFR = getattr(extSFRs,self.external_SFR)(Mhalo_Msun.value,self.halo_catalog['Z'], self.SFR_pars)
                 #Add scatter to the relation
                 sigma_base_e = self.sig_extSFR*2.302585
@@ -264,7 +264,9 @@ class Lightcone(object):
         #update parameters
         for key in new_params:
             setattr(self, key, new_params[key])
-            
+
+        #Update calls should maybe reset RNG for reproducibility?    
+        self.rng = np.random.default_rng(self.seed)
         #check updated paramters:
         check_updated_params(self)
 

@@ -352,7 +352,7 @@ class Measure(Survey):
         Computes the histogram of temperatures in each voxel in hte observed map.
         Equivalent to the VID
         '''
-        return np.histogram(np.array(self.obs_3d_map).flatten(),
+        return np.histogram(self.obs_3d_map.value.flatten(),
                             bins=self.Ti_edge.value)[0]
 
     @cached_measure_property
