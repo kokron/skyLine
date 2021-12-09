@@ -5,7 +5,9 @@ Base module to pain the LIM lightcone
 import numpy as np
 from glob import glob
 from astropy.io import fits
+from scipy.interpolate import interp2d
 
+import os
 import camb
 import astropy.units as u
 import astropy.constants as cu
@@ -178,14 +180,45 @@ class Lightcone(object):
         nuObs_line_halo = {}
         #Get the SFR
         if self.do_external_SFR:
-            #convert halo mass to Msun
-            Mhalo_Msun = (self.halo_catalog['M_HALO']*self.Msunh).to(u.Msun)
             if self.external_SFR == 'Custom_SFR' or self.external_SFR == 'Dongwoo_SFR':
+                #convert halo mass to Msun
+                Mhalo_Msun = (self.halo_catalog['M_HALO']*self.Msunh).to(u.Msun)
                 SFR = getattr(extSFRs,self.external_SFR)(Mhalo_Msun.value,self.halo_catalog['Z'], self.SFR_pars)
                 #Add scatter to the relation
                 sigma_base_e = self.sig_extSFR*2.302585
                 SFR = SFR*self.rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, SFR.shape)
+#            elif self.external_SFR == 'Behroozi_SFR':
+#                #Build interpolating table at this step.
+#                SFR_folder = os.path.dirname(os.path.realpath(__file__)).split("source")[0]+'SFR_tables/'
+#                SFR_file = 'sfr_table_Behroozi.dat'
+#
+#                try:
+#                    x = np.loadtxt(SFR_folder+SFR_file)
+#                except:
+#                    x = np.loadtxt(SFR_file)
+#                zb = np.unique(x[:,0])-1.
+#                logMb = np.unique(x[:,1])
+#                logSFRb = x[:,2].reshape(len(zb),len(logMb),order='F')
+#
+#                logSFR_interp = interp2d(logMb,zb,logSFRb,bounds_error=False,fill_value=-40.)
+#                logM = np.log10((self.halo_catalog['M_HALO']))
+#                z = self.halo_catalog['Z']
+#                if np.array(z).size>1:
+#                    SFR = np.zeros(logM.size)
+#                    for ii in range(0,logM.size):
+#                        SFR[ii] = 10.**logSFR_interp(logM[ii],z[ii])
+#                else:
+#                    SFR = 10.**logSFR_interp(logM,z)
+#
+#                sigma_base_e = self.sig_extSFR*2.302585
+#                SFR = SFR*self.rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, SFR.shape)
+
             else:
+                #convert halo mass to Msun/h
+                if self.external_SFR == 'Behroozi_SFR':
+                    Mhalo_Msun = (self.halo_catalog['M_HALO']*self.Msunh)
+                else:
+                    Mhalo_Msun = (self.halo_catalog['M_HALO']*self.Msunh).to(u.Msun)
                 SFR = getattr(extSFRs,self.external_SFR)(Mhalo_Msun.value,self.halo_catalog['Z'])
                 sigma_base_e = self.sig_extSFR*2.302585
                 SFR = SFR*self.rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, SFR.shape)

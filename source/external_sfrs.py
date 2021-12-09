@@ -3,7 +3,7 @@ Catalog for external SFRs
 '''
 
 import numpy as np
-from scipy.interpolate import interp2d
+from scipy.interpolate import griddata 
 import os
 
 def Behroozi_SFR(M, z):
@@ -12,7 +12,6 @@ def Behroozi_SFR(M, z):
     '''
 
     return SFR_Mz_2dinterp(M,z,'sfr_table_Behroozi.dat')
-
 
 def UniverseMachine_SFR(M,z):
     '''
@@ -60,15 +59,18 @@ def SFR_Mz_2dinterp(M,z,SFR_file):
     zb = np.unique(x[:,0])-1.
     logMb = np.unique(x[:,1])
     logSFRb = x[:,2].reshape(len(zb),len(logMb),order='F')
+   
+
+
+    xx, yy = np.meshgrid(logMb, zb)
+
+    ingrid = np.array([xx, yy]).reshape(2, len(zb)*len(logMb))
+
+    inval = logSFRb.reshape(len(zb)*len(logMb))
+    #Assuming in Msun/h units
+    logM = np.log10((M))
     
-    logSFR_interp = interp2d(logMb,zb,logSFRb,bounds_error=False,fill_value=-40.)
-    
-    logM = np.log10((M.to(u.Msun)).value)
-    if np.array(z).size>1:
-        SFR = np.zeros(logM.size)
-        for ii in range(0,logM.size):
-            SFR[ii] = 10.**logSFR_interp(logM[ii],z[ii])
-    else:
-        SFR = 10.**logSFR_interp(logM,z)
-    
+    grid = np.array([logM, z]) 
+    logSFR_interp = griddata(ingrid.T, inval, grid.T, fill_value=-40.)
+    SFR = 10**logSFR_interp
     return SFR
