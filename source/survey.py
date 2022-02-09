@@ -226,16 +226,21 @@ class Survey(Lightcone):
         #box angular limits
         ralim = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_max.value]))
         declim = np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value]))
+
+        ramid = np.deg2rad(0.5*(self.RAObs_max + self.RAObs_min).value)
+        decmid = np.deg2rad(0.5*(self.DECObs_max + self.DECObs_min).value)
+        
         #transform Frequency band into redshift range for the target line
         zlims = (self.line_nu0[self.target_line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
         rlim = ((self.cosmo.comoving_radial_distance(zlims)*u.Mpc).to(self.Mpch)).value
         #Get the side of the box
         if self.do_inner_cut:
+
             raside = 2*rlim[0]*np.tan(0.5*(ralim[1]-ralim[0]))
             decside = 2*rlim[0]*np.tan(0.5*(declim[1]-declim[0]))
             zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
             rside_lim = np.array([rlim[0],rlim[0]+zside])
-        else:
+        else: 
             raside = 2*rlim[1]*np.tan(0.5*(ralim[1]-ralim[0]))
             decside = 2*rlim[1]*np.tan(0.5*(declim[1]-declim[0]))
             zside = rlim[1]-rlim[0]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))
@@ -243,10 +248,9 @@ class Survey(Lightcone):
             
         Lbox = np.array([zside,raside,decside])
 
-        self.raside_lim = rlim[0]*np.sin(ralim) #min, max
-        self.decside_lim = rlim[0]*np.sin(declim) #min, max
+        self.raside_lim = rlim[0]*np.tan(ralim-ramid) #min, max self.decside_lim = rlim[0]*np.tan(declim-decmid) #min, max
+        self.decside_lim = rlim[0]*np.tan(declim-decmid) #min, max
         self.rside_obs_lim = rside_lim #min, max
-
         return (Lbox*self.Mpch).to(self.Mpch)
 
     @cached_survey_property
@@ -423,6 +427,9 @@ class Survey(Lightcone):
         decside_lim = self.decside_lim
         rside_obs_lim = self.rside_obs_lim
         
+        ramid = 0.5*(self.RAObs_max + self.RAObs_min)
+        decmid = 0.5*(self.DECObs_max + self.DECObs_min)
+        
         mins_obs = np.array([rside_obs_lim[0],raside_lim[0],decside_lim[0]])
 
         global sigma_par
@@ -454,7 +461,13 @@ class Survey(Lightcone):
                 #Convert the halo position in each volume to Cartesian coordinates (from Nbodykit)
                 ra,dec,redshift = da.broadcast_arrays(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'],
                                                       self.halos_in_survey[line]['Zobs'])
+
+                #Shift the ra and dec of the halo such that they are centered in (0,0)
+                ra -= ramid.value
+                dec -= decmid.value
+                
                 ra,dec  = da.deg2rad(ra),da.deg2rad(dec)
+
                 # cartesian coordinates
                 x = da.cos(dec) * da.cos(ra)
                 y = da.cos(dec) * da.sin(ra)
@@ -467,9 +480,9 @@ class Survey(Lightcone):
                 lategrid = np.array(cartesian_halopos.compute())
                 #Filter some halos out if outside of the inner cut
                 if self.do_inner_cut:
-                    filtering = (lategrid[:,0] >= rside_lim[0]) & (lategrid[:,0] <= rside_lim[1]) & \
-                                (lategrid[:,1] >= raside_lim[0]) & (lategrid[:,1] <= raside_lim[1]) & \
-                                (lategrid[:,2] >= decside_lim[0]) & (lategrid[:,2] <= decside_lim[1])
+                    filtering = (lategrid[:,0] >= rside_lim[0]) & (lategrid[:,0] < rside_lim[1]) & \
+                                (lategrid[:,1] >= raside_lim[0]) & (lategrid[:,1] < raside_lim[1]) & \
+                                (lategrid[:,2] >= decside_lim[0]) & (lategrid[:,2] < decside_lim[1])
                     lategrid = lategrid[filtering]
                     #Compute the signal in each voxel (with Ztrue and Vcell_true)
                     Zhalo = self.halos_in_survey[line]['Ztrue'][filtering]
@@ -537,9 +550,11 @@ class Survey(Lightcone):
             #add the noise, distribution is gaussian with 0 mean
             maps += self.rng.normal(0.,supersample_sigmaN.value,maps.shape)
             maps = maps-maps.cmean()
-            
+
+            #maps += np.abs(np.min(maps)) 
         else:
             maps = maps.c2r()
+            #maps += np.abs(np.min(maps)) 
             maps = maps-maps.cmean()
         return maps
             
