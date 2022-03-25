@@ -92,6 +92,7 @@ class Survey(Lightcone):
                  do_angular = False,
                  average_angular_proj = True,
                  nside = 2048,
+                 mass=False,
                  **lightcone_kwargs):
 
         # Initiate Lightcone() parameters
@@ -515,7 +516,10 @@ class Survey(Lightcone):
                 p = layout.exchange(lategrid)
                 #Assign weights following the layout of particles
                 m = layout.exchange(signal.value)
-                pm.paint(p, out=field, mass=m, resampler='cic')
+                if self.mass:
+                    pm.paint(p, out=field, mass=1, resampler='cic')
+                else: 
+                    pm.paint(p, out=field, mass=m, resampler='cic')
                 #Fourier transform fields and apply the filter
                 field = field.r2c()
                 #This smoothing comes from the resolution window function.
