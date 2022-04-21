@@ -67,6 +67,32 @@ def CII_Silva15(self,SFR,pars,rng):
 
     return L
 
+def CII_Lagache18(self,SFR,pars,rng):
+    '''
+    Model for CII line from Lagache+2018 (arXiv:1711.00798)
+
+    Parameters:
+        -SFR:       SFR of the halo in Msun/yr
+        -pars:      Dictionary of parameters for the model
+            -alpha1, alpha2, beta1, beta2    Fit to log10(L_CII/Lsun) = alpha*log10(SFR/(Msun/yr)) + beta, where alpha=alpha1 + alpha2*z and beta=beta1 + beta2*z
+            -sigma_L: Scatter in dex of the CII luminosity
+    '''
+    try:
+        alpha1, alpha2, beta1, beta2, sigma_L = pars['alpha1'],pars['alpha2'],pars['beta1'],pars['beta2'],pars['sigma_L']
+    except:
+        raise ValueError('The model_pars for CII_Lagache18 are alpha1, alpha2, beta1, beta2, sigma_L, but {} were provided'.format(pars.keys()))
+    # LCII relation
+    alpha=alpha1+alpha2*self.halo_catalog['Z']
+    beta=beta1+beta2*self.halo_catalog['Z']
+
+    L = 10**(alpha*np.log10(SFR)+beta)*u.Lsun
+    
+    #Add scatter to the relation
+    sigma_base_e = sigma_L*2.302585
+    L = L*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, L.shape)
+
+    return L
+
 ##############
 ## Ly-alpha LINE ##
 ##############
