@@ -3,17 +3,17 @@ Catalog of different lines and models
 '''
 
 import numpy as np
-from numpy.random import normal
+from numpy.random import normal,multivariate_normal
 import astropy.units as u
 import astropy.constants as cu
 
-#############
-## CO LINE ##
-#############
+##############
+## CO LINES ##
+##############
 
 def CO_Li16(self,SFR,pars,rng):
     '''
-    Model for CO line from Li+2016 (arXiv:1503.08833)
+    Model for CO(1-0) line from Li+2016 (arXiv:1503.08833)
 
     Parameters:
         -SFR:       SFR of the halo in Msun/yr
@@ -38,6 +38,46 @@ def CO_Li16(self,SFR,pars,rng):
     
     #transform to Lsun and give units
     return LCO_samples*4.9e-5*u.Lsun
+    
+    
+def CO_lines_scaling_LFIR(self,SFR,pars,rng):
+    '''
+    Returns the luminosity for CO lines lines that have empirical scaling relations with FIR luminosity
+    
+    Examples include: All the CO rotational ladder lines
+    (From Kamenetzky+2016, arXiv:1508.05102)
+    
+    Relation is: log10(LFIR) = alpha*log10(LCO')+beta
+    
+    Parameters:
+        -SFR:       SFR of the halo in Msun/yr
+        -pars:      Dictionary of parameters for the model
+            -alpha
+            -beta
+            -alpha_std  Std of the alpha param
+            -beta_std   Std of the beta param
+            -sigma_L    Scatter in dex of the luminosity
+    '''
+    try:
+        alpha,beta,alpha_std,beta_std,sigma_L = pars['alpha'],pars['beta'],pars['alpha_std'],pars['beta_std'],pars['sigma_L']
+    except:
+        raise ValueError('The model_pars for CO_lines_scaling_LFIR are "alpha","beta", "alpha_std", "beta_std","sigma_L" but {} were provided'.format(pars.keys()))
+        
+    #Get the LIR from Kennicutt 1998, arXiv:9807187
+    LIR = (SFR/4.5e-44*u.erg/u.s).to(u.Lsun)
+    
+    std = multivariate_normal(np.array([alpha,beta]),np.diag(np.array([alpha_std,beta_std])),L.shape)
+    alpha_par,beta_par = std[:,0],std[:,1]
+    
+    Lp = 10**((np.log10(LIR.value)-beta_par)/alpha_par)
+    
+    L = (4.9e-5*u.Lsun)*Lp
+    
+    #Add scatter to the relation
+    sigma_base_e = sigma_L*2.302585
+    L = L*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, L.shape)
+    
+    return L
 
 
 ##############
@@ -123,128 +163,81 @@ def Lyalpha_Chung19(self,SFR,pars,rng):
     LLya_samples = LLya*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, LLya.shape)
 
     return (LLya_samples*u.erg/u.s).to(u.Lsun)
+    
+    
+#####################################
+## SFR Kennicutt scaling relations ##
+#####################################
 
-
-#################
-## Halpha LINE ##
-#################
-
-def Halpha_Gong17(self,SFR,pars,rng):
+def SFR_scaling_relation_Kennicutt(self,SFR,pars,rng):
     '''
-    Model for Halpha line used in Gong+2017 (arXiv:1610.09060)
+    Model for SFR-related lines used in Gong+2017 (arXiv:1610.09060),
+    employing Kennicutt relations and extinctions.
+    
+    Examples include: Halpha, Hbeta, OII, OIII_0p5
 
     Parameters:
         -SFR:       SFR of the halo in Msun/yr
         -pars:      Dictionary of parameters for the model
-            -K_Halpha       linear factor SFR = K_Halpha*L_Halpha (L in ergios/s)
-            -Kstd_Halpha    Std of the linear relation
-            -Aext_Halpha    Extinction of the Halpha line
-            -sigma_L: Scatter in dex of the Halpha luminosity
+            -K            linear factor SFR = K*L (L in ergios/s)
+            -Kstd         Std of the linear relation
+            -Aext         Extinction of the line
+            -sigma_L: Scatter in dex of the luminosity
     '''
     try:
-        K_Halpha,Kstd_Halpha,Aext_Halpha, sigma_L = pars['K_Halpha'],pars['Kstd_Halpha'],pars['Aext_Halpha'],pars['sigma_L']
+        K,Kstd,Aext,sigma_L = pars['K'],pars['Kstd'],pars['Aext'],pars['sigma_L']
     except:
-        raise ValueError('The model_pars for Halpha_Gong17 are "K_Halpha","Kstd_Halpha", Aext_Halpha, sigma_L but {} were provided'.format(pars.keys()))
+        raise ValueError('The model_pars for SFR_scaling_relation_Kennicutt are "K","Kstd", Aext, sigma_L but {} were provided'.format(pars.keys()))
     #Spread in the linear relation
-    factor = normal(K_Halpha,Kstd_Halpha,len(SFR))
+    factor = normal(K,Kstd,len(SFR))
     L = (SFR*factor*u.erg/u.s).to(u.Lsun)
     
     #Add scatter to the relation
     sigma_base_e = sigma_L*2.302585
     L = L*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, L.shape)
 
-    return L*10**(-Aext_Halpha/2.5)
+    return L*10**(-Aext/2.5)
+    
 
+###########################
+## LIR scaling relations ##
+###########################
 
-################
-## Hbeta LINE ##
-################
-
-def Hbeta_Gong17(self,SFR,pars,rng):
+def FIR_scaling_relation(self,SFR,pars,rng):
     '''
-    Model for Hbeta line used in Gong+2017 (arXiv:1610.09060)
-
+    Returns the luminosity for lines that have empirical scaling relations with FIR luminosity
+    
+    Examples include: OIII_51, NIII, NII, OI_63, OIII_88, OI_145, CII
+    (From Spignolio+2012, arXiv:1110.4837, check the erratum for actual numbers)
+    
+    Relation is: log10(L/(1e41 erg/s)) = alpha*log10(LIR/(1e41 erg/s))-beta
+    
     Parameters:
         -SFR:       SFR of the halo in Msun/yr
         -pars:      Dictionary of parameters for the model
-            -K_Hbeta       linear factor SFR = K_Hbeta*L_Hbeta (L in ergios/s)
-            -Kstd_Hbeta    Std of the linear relation
-            -Aext_Hbeta    Extinction of the Hbeta line
-            -sigma_L: Scatter in dex of the Hbeta luminosity
+            -alpha
+            -beta
+            -alpha_std  Std of the alpha param
+            -beta_std   Std of the beta param
+            -sigma_L    Scatter in dex of the luminosity
     '''
     try:
-        K_Hbeta,Kstd_Hbeta,Aext_Hbeta, sigma_L = pars['K_Hbeta'],pars['Kstd_Hbeta'],pars['Aext_Hbeta'],pars['sigma_L']
+        alpha,beta,alpha_std,beta_std,sigma_L = pars['alpha'],pars['beta'],pars['alpha_std'],pars['beta_std'],pars['sigma_L']
     except:
-        raise ValueError('The model_pars for Hbeta_Gong17 are "K_Hbeta","Kstd_Hbeta", Aext_Hbeta, sigma_L but {} were provided'.format(pars.keys()))
-    #Spread in the linear relation
-    factor = normal(K_Hbeta,Kstd_Hbeta,len(SFR))
-    L = (SFR*factor*u.erg/u.s).to(u.Lsun)
+        raise ValueError('The model_pars for FIR_scaling_relation are "alpha","beta", "alpha_std", "beta_std","sigma_L" but {} were provided'.format(pars.keys()))
+    #Get the LIR from Kennicutt 1998, arXiv:9807187
+    LIR = SFR/4.5e-44*u.erg/u.s
+    LIR_norm = LIR/1e41
+    
+    std = multivariate_normal(np.array([alpha,beta]),np.diag(np.array([alpha_std,beta_std])),L.shape)
+    alpha_par,beta_par = std[:,0],std[:,1]
+    
+    Lerg_norm = 10**(alpha_par*np.log10(LIR_norm.value)-beta_par)
+    L = (Lerg*1e41*u.erg/u.s).to(u.Lsun)
     
     #Add scatter to the relation
     sigma_base_e = sigma_L*2.302585
     L = L*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, L.shape)
-
-    return L*10**(-Aext_Hbeta/2.5)
-
-
-
-##############
-## OII LINE ##
-##############
-
-def OII_Gong17(self,SFR,pars,rng):
-    '''
-    Model for OII line used in Gong+2017 (arXiv:1610.09060)
-
-    Parameters:
-        -SFR:       SFR of the halo in Msun/yr
-        -pars:      Dictionary of parameters for the model
-            -K_OII       linear factor SFR = K_OII*L_OII (L in ergios/s)
-            -Kstd_OII    Std of the linear relation
-            -Aext_OII    Extinction of the OII line
-            -sigma_L: Scatter in dex of the OII luminosity
-    '''
-    try:
-        K_OII,Kstd_OII,Aext_OII, sigma_L = pars['K_OII'],pars['Kstd_OII'],pars['Aext_OII'],pars['sigma_L']
-    except:
-        raise ValueError('The model_pars for OII_Gong17 are "K_OII","Kstd_OII", Aext_OII, sigma_L but {} were provided'.format(pars.keys()))
-    #Spread in the linear relation
-    factor = normal(K_OII,Kstd_OII,len(SFR))
-    L = (SFR*factor*u.erg/u.s).to(u.Lsun)
     
-    #Add scatter to the relation
-    sigma_base_e = sigma_L*2.302585
-    L = L*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, L.shape)
-
-    return L*10**(-Aext_OII/2.5)
-
-
-###############
-## OIII LINE ##
-###############
-
-def OIII_Gong17(self,SFR,pars,rng):
-    '''
-    Model for OIII line used in Gong+2017 (arXiv:1610.09060)
-
-    Parameters:
-        -SFR:       SFR of the halo in Msun/yr
-        -pars:      Dictionary of parameters for the model
-            -K_OIII       linear factor SFR = K_OIII*L_OIII (L in ergios/s)
-            -Kstd_OIII    Std of the linear relation
-            -Aext_OIII    Extinction of the OIII line
-            -sigma_L: Scatter in dex of the OIII luminosity
-    '''
-    try:
-        K_OIII,Kstd_OIII,Aext_OIII, sigma_L = pars['K_OIII'],pars['Kstd_OIII'],pars['Aext_OIII'],pars['sigma_L']
-    except:
-        raise ValueError('The model_pars for OIII_Gong17 are "K_OIII","Kstd_OIII", Aext_OIII, sigma_L but {} were provided'.format(pars.keys()))
-    #Spread in the linear relation
-    factor = normal(K_OIII,Kstd_OIII,len(SFR))
-    L = (SFR*factor*u.erg/u.s).to(u.Lsun)
+    return L
     
-    #Add scatter to the relation
-    sigma_base_e = sigma_L*2.302585
-    L = L*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, L.shape)
-
-    return L*10**(-Aext_OIII/2.5)
