@@ -64,7 +64,7 @@ def CO_lines_scaling_LFIR(self,SFR,pars,rng):
         raise ValueError('The model_pars for CO_lines_scaling_LFIR are "alpha","beta", "alpha_std", "beta_std","sigma_L" but {} were provided'.format(pars.keys()))
         
     #Get the LIR from Kennicutt 1998, arXiv:9807187
-    LIR = (SFR/4.5e-44*u.erg/u.s).to(u.Lsun)
+    LIR = (SFR*(1/4.5e-44)*u.erg/u.s).to(u.Lsun)
     
     std = multivariate_normal(np.array([alpha,beta]),np.diag(np.array([alpha_std,beta_std])),LIR.shape)
     alpha_par,beta_par = std[:,0],std[:,1]
