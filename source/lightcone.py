@@ -67,10 +67,17 @@ class Lightcone(object):
                  zmin = 0., zmax = 20.,
                  RA_min = -65.*u.deg,RA_max = 60.*u.deg,
                  DEC_min = -1.25*u.deg,DEC_max = 1.25*u.deg,
-                 lines = dict(CO = False, CII = False, Halpha = False, Lyalpha = False, HI = False),
-                 models = dict(CO = dict(model_name = '', model_pars = {}), CII = dict(model_name = '', model_pars = {}),
-                               Halpha = dict(model_name = '', model_pars = {}), Lyalpha = dict(model_name = '', model_pars = {}),
-                               HI = dict(model_name = '', model_pars = {})),
+                 lines = dict(CO_J10 = False, CII = False, Halpha = False, Hbeta = False, Lyalpha = False, HI = False, 
+                              CO_J21 = False, CO_J32 = False, CO_J43 = False, NIII = False, NII = False,
+                              OIII_88 = False, OI_63 = False, OI_145 = False, OII = False, OIII_0p5 = False),
+                 models = dict(CO_J10 = dict(model_name = '', model_pars = {}), CII = dict(model_name = '', model_pars = {}), 
+                               Halpha = dict(model_name = '', model_pars = {}), Hbeta = dict(model_name = '', model_pars = {}), 
+                               Lyalpha = dict(model_name = '', model_pars = {}), HI = dict(model_name = '', model_pars = {}), 
+                               CO_J21 = dict(model_name = '', model_pars = {}), CO_J32 = dict(model_name = '', model_pars = {}), 
+                               CO_J43 = dict(model_name = '', model_pars = {}), NIII = dict(model_name = '', model_pars = {}), 
+                               NII = dict(model_name = '', model_pars = {}), OIII_88 = dict(model_name = '', model_pars = {}), 
+                               OI_63 = dict(model_name = '', model_pars = {}), OI_145 = dict(model_name = '', model_pars = {}), 
+                               OII = dict(model_name = '', model_pars = {}), OIII_0p5 = dict(model_name = '', model_pars
                  do_external_SFR = False, external_SFR = '',sig_extSFR = 0.3, SFR_pars=dict(M0=1e-6, Ma=10**8, Mb=10**12.3, a=1.9, b=3.0, c=-1.4), seed=None):
 
         # Get list of input values to check type and units
