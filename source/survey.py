@@ -58,8 +58,11 @@ class Survey(Lightcone):
     -paint_catalog:         Boolean: Paint catalog or used a painted one.               DOES THIS MAKE SENSE OR ALWAYS TRUE????
                             (Default: True).
 
-    -do_smooth:             Boolean: apply smoothing filter to implement resolution
+    -do_angular_smooth:     Boolean: apply smoothing filter to implement angular resolution
                             limitations. (Default: True)
+                            
+    -do_spectral_smooth:    Boolean: apply smoothing filter to implement spectral resolution
+                            limitations. (Default: False)
 
     -do_inner_cut           Get a box for which there are no empty spaces, but discards some haloes.
                             (Default: True). Do this *only* for narrow fields
@@ -71,6 +74,8 @@ class Survey(Lightcone):
                             angular projections (Default: True)
                             
     -nside                  NSIDE used by healpy to create angular maps. (Default: 2048)
+    
+    -mass                   Boolean: Create a map with number density of ALL the haloes within the catalog (defaul: False)
     '''
     def __init__(self,
                  do_intensity=False,
@@ -87,7 +92,8 @@ class Survey(Lightcone):
                  tobs=6000*u.hr,
                  target_line = 'CO',
                  supersample = 10, 
-                 do_smooth = True,
+                 do_angular_smooth = True,
+                 do_spectral_smooth = False,
                  do_inner_cut = True,
                  do_angular = False,
                  average_angular_proj = True,
@@ -383,7 +389,7 @@ class Survey(Lightcone):
                     np.add.at(hp_map, pixel_idxs, signal.value)
                 #should smoothing be after masking?
                 #could lead to bleeding of the zeros with the boundary
-                if self.do_smooth:
+                if self.do_angular_smooth:
                     theta_beam = self.beam_FWHM.to(u.rad)
                     hp_map = hp.smoothing(hp_map, theta_beam.value)
 
@@ -523,11 +529,11 @@ class Survey(Lightcone):
                 #Fourier transform fields and apply the filter
                 field = field.r2c()
                 #This smoothing comes from the resolution window function.
-                if self.do_smooth:
+                if self.do_spectral_smooth or self.do_angular_smooth:
                     #compute scales for the anisotropic filter (in Ztrue -> zmid)
                     zmid = (self.line_nu0[line]/self.nuObs_mean).decompose().value-1
-                    sigma_par = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
-                    sigma_perp = (self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
+                    sigma_par = self.do_spectral_smooth*(cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
+                    sigma_perp = self.do_angular_smooth*(self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
                     field = field.apply(aniso_filter, kind='wavenumber')
                 #Add this contribution to the total maps
                 maps+=field
