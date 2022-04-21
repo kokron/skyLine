@@ -66,7 +66,7 @@ def CO_lines_scaling_LFIR(self,SFR,pars,rng):
     #Get the LIR from Kennicutt 1998, arXiv:9807187
     LIR = (SFR/4.5e-44*u.erg/u.s).to(u.Lsun)
     
-    std = multivariate_normal(np.array([alpha,beta]),np.diag(np.array([alpha_std,beta_std])),L.shape)
+    std = multivariate_normal(np.array([alpha,beta]),np.diag(np.array([alpha_std,beta_std])),LIR.shape)
     alpha_par,beta_par = std[:,0],std[:,1]
     
     Lp = 10**((np.log10(LIR.value)-beta_par)/alpha_par)
@@ -229,7 +229,7 @@ def FIR_scaling_relation(self,SFR,pars,rng):
     LIR = SFR/4.5e-44*u.erg/u.s
     LIR_norm = LIR/1e41
     
-    std = multivariate_normal(np.array([alpha,beta]),np.diag(np.array([alpha_std,beta_std])),L.shape)
+    std = multivariate_normal(np.array([alpha,beta]),np.diag(np.array([alpha_std,beta_std])),LIR.shape)
     alpha_par,beta_par = std[:,0],std[:,1]
     
     Lerg_norm = 10**(alpha_par*np.log10(LIR_norm.value)-beta_par)
