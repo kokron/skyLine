@@ -28,16 +28,19 @@ def CO_Li16(self,SFR,pars,rng):
     except:
         raise ValueError('The model_pars for CO_Li16 are "alpha","beta","delta_mf" and "sigma_L", but {} were provided'.format(pars.keys()))
 
+    #avoid SFR=0 issues
+    inds = np.where(SFR>0)
+    LCO_samples = np.zeros(len(SFR))*u.Lsun
+    
     #Convert halo SFR to IR luminosity
-    LIR = 1e10 * SFR/delta_mf
+    LIR = 1e10 * SFR[inds]/delta_mf
     #Transform IR luminosity to CO luminosity (log10)
     log10_LCO = (np.log10(LIR) - beta)/alpha
-    #Add normal scatter in the log10(LCO)
+    #Add normal scatter in the log10(LCO) and transform to Lsun and give units
     sigma_base_e = sigma_L*2.302585
-    LCO_samples = 10**(log10_LCO)*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, log10_LCO.shape)
+    LCO_samples[inds] = 10**(log10_LCO)*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, log10_LCO.shape)*4.9e-5*u.Lsun
     
-    #transform to Lsun and give units
-    return LCO_samples*4.9e-5*u.Lsun
+    return LCO_samples
     
     
 def CO_lines_scaling_LFIR(self,SFR,pars,rng):
@@ -63,19 +66,23 @@ def CO_lines_scaling_LFIR(self,SFR,pars,rng):
     except:
         raise ValueError('The model_pars for CO_lines_scaling_LFIR are "alpha","beta", "alpha_std", "beta_std","sigma_L" but {} were provided'.format(pars.keys()))
         
-    #Get the LIR from Kennicutt 1998, arXiv:9807187
-    LIR = (SFR*(1/4.5e-44)*u.erg/u.s).to(u.Lsun)
+    #avoid SFR=0 issues
+    inds = np.where(SFR>0)
+    L = np.zeros(len(SFR))*u.Lsun
     
-    std = multivariate_normal(np.array([alpha,beta]),np.diag(np.array([alpha_std,beta_std])),LIR.shape)
+    #Get the LIR from Kennicutt 1998, arXiv:9807187
+    LIR = (SFR[inds]*(1/4.5e-44)*u.erg/u.s).to(u.Lsun)
+    
+    std = multivariate_normal(np.array([alpha,beta]),np.diag(np.array([alpha_std**2,beta_std**2])),LIR.shape)
     alpha_par,beta_par = std[:,0],std[:,1]
     
     Lp = 10**((np.log10(LIR.value)-beta_par)/alpha_par)
     
-    L = (4.9e-5*u.Lsun)*Lp
+    Lmean = (4.9e-5*u.Lsun)*Lp
     
     #Add scatter to the relation
     sigma_base_e = sigma_L*2.302585
-    L = L*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, L.shape)
+    L[inds] = Lmean*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, Lmean.shape)
     
     return L
 
@@ -98,12 +105,17 @@ def CII_Silva15(self,SFR,pars,rng):
         aLCII,bLCII, sigma_L = pars['aLCII'],pars['bLCII'],pars['sigma_L']
     except:
         raise ValueError('The model_pars for CII_Silva15 are "aLCII","bLCII", "sigma_L", but {} were provided'.format(pars.keys()))
+        
+    #avoid SFR=0 issues
+    inds = np.where(SFR>0)
+    L = np.zeros(len(SFR))*u.Lsun
+    
     # LCII relation
-    L = 10**(aLCII*np.log10(SFR)+bLCII)*u.Lsun
+    Lmean = 10**(aLCII*np.log10(SFR[inds])+bLCII)*u.Lsun
     
     #Add scatter to the relation
     sigma_base_e = sigma_L*2.302585
-    L = L*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, L.shape)
+    L[inds] = Lmean*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, Lmean.shape)
 
     return L
 
@@ -121,15 +133,19 @@ def CII_Lagache18(self,SFR,pars,rng):
         alpha1, alpha2, beta1, beta2, sigma_L = pars['alpha1'],pars['alpha2'],pars['beta1'],pars['beta2'],pars['sigma_L']
     except:
         raise ValueError('The model_pars for CII_Lagache18 are alpha1, alpha2, beta1, beta2, sigma_L, but {} were provided'.format(pars.keys()))
+    #avoid SFR=0 issues
+    inds = np.where(SFR>0)
+    L = np.zeros(len(SFR))*u.Lsun
+    
     # LCII relation
-    alpha=alpha1+alpha2*self.halo_catalog['Z']
-    beta=beta1+beta2*self.halo_catalog['Z']
-
-    L = 10**(alpha*np.log10(SFR)+beta)*u.Lsun
+    alpha=alpha1+alpha2*self.halo_catalog['Z'][inds]
+    beta=beta1+beta2*self.halo_catalog['Z'][inds]
+    
+    Lmean = 10**(alpha*np.log10(SFR[inds])+beta)*u.Lsun
     
     #Add scatter to the relation
     sigma_base_e = sigma_L*2.302585
-    L = L*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, L.shape)
+    L[inds] = Lmean*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, Lmean.shape)
 
     return L
 
@@ -225,19 +241,23 @@ def FIR_scaling_relation(self,SFR,pars,rng):
         alpha,beta,alpha_std,beta_std,sigma_L = pars['alpha'],pars['beta'],pars['alpha_std'],pars['beta_std'],pars['sigma_L']
     except:
         raise ValueError('The model_pars for FIR_scaling_relation are "alpha","beta", "alpha_std", "beta_std","sigma_L" but {} were provided'.format(pars.keys()))
-    #Get the LIR from Kennicutt 1998, arXiv:9807187
-    LIR = SFR/4.5e-44*u.erg/u.s
-    LIR_norm = LIR/1e41
+    #avoid SFR=0 issues
+    inds = np.where(SFR>0)
+    L = np.zeros(len(SFR))*u.Lsun
     
-    std = multivariate_normal(np.array([alpha,beta]),np.diag(np.array([alpha_std,beta_std])),LIR.shape)
+    #Get the LIR from Kennicutt 1998, arXiv:9807187
+    LIR = SFR[inds]*(1/4.5e-44)*u.erg/u.s
+    LIR_norm = LIR*(1/1e41)
+    
+    std = multivariate_normal(np.array([alpha,beta]),np.diag(np.array([alpha_std**2,beta_std**2])),LIR.shape)
     alpha_par,beta_par = std[:,0],std[:,1]
     
     Lerg_norm = 10**(alpha_par*np.log10(LIR_norm.value)-beta_par)
-    L = (Lerg*1e41*u.erg/u.s).to(u.Lsun)
+    Lmean = (Lerg_norm*1e41*u.erg/u.s).to(u.Lsun)
     
     #Add scatter to the relation
     sigma_base_e = sigma_L*2.302585
-    L = L*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, L.shape)
+    L[inds] = Lmean*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, Lmean.shape)
     
     return L
     
