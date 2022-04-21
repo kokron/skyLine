@@ -133,10 +133,12 @@ def check_params(input_params, default_params):
                 raise ValueError('{} not found in external_sfrs.py'.format(input_params['external_SFR']))
 
         elif key == 'target_line':
-            lines_available = ['CO','CII','Halpha','Lyalpha','HI']
+            lines_available = ['CO_J10','CII','Halpha','Hbeta','Lyalpha','HI','
+                              'CO_J21','CO_J32','CO_J43','CO_J54','CO_J65','CO_J76',
+                              'NIII','NII','OIII_88','OI_63','OI_145','OII','OIII_0p5']
             if input_value not in lines_available:
                 raise ValueError('The target line {} must be one of the available lines: {}'.format(input_value,lines_available))
-                
+
     return
     
 def check_updated_params(self):
