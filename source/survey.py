@@ -189,8 +189,8 @@ class Survey(Lightcone):
         '''
         Number of pixels per side of the observed map. RA,DEC
         '''
-        return int(np.round(((self.RAObs_max-self.RAObs_min)/(self.beam_width)).decompose())),\
-               int(np.round(((self.DECObs_max-self.DECObs_min)/(self.beam_width)).decompose()))
+        return int(np.round(((self.RAObs_max-self.RAObs_min)/(self.beam_FWHM)).decompose())),\
+               int(np.round(((self.DECObs_max-self.DECObs_min)/(self.beam_FWHM)).decompose()))
 
     @cached_survey_property
     def Npix(self):
