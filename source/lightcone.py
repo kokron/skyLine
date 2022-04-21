@@ -68,17 +68,19 @@ class Lightcone(object):
                  RA_min = -65.*u.deg,RA_max = 60.*u.deg,
                  DEC_min = -1.25*u.deg,DEC_max = 1.25*u.deg,
                  lines = dict(CO_J10 = False, CII = False, Halpha = False, Hbeta = False, Lyalpha = False, HI = False, 
-                              CO_J21 = False, CO_J32 = False, CO_J43 = False, NIII = False, NII = False,
-                              OIII_88 = False, OI_63 = False, OI_145 = False, OII = False, OIII_0p5 = False),
+                              CO_J21 = False, CO_J32 = False, CO_J43 = False, CO_J54 = False, CO_J65 = False, CO_J76 = False,
+                              NIII = False, NII = False, OIII_88 = False, OI_63 = False, OI_145 = False, OII = False, OIII_0p5 = False),
                  models = dict(CO_J10 = dict(model_name = '', model_pars = {}), CII = dict(model_name = '', model_pars = {}), 
                                Halpha = dict(model_name = '', model_pars = {}), Hbeta = dict(model_name = '', model_pars = {}), 
                                Lyalpha = dict(model_name = '', model_pars = {}), HI = dict(model_name = '', model_pars = {}), 
                                CO_J21 = dict(model_name = '', model_pars = {}), CO_J32 = dict(model_name = '', model_pars = {}), 
-                               CO_J43 = dict(model_name = '', model_pars = {}), NIII = dict(model_name = '', model_pars = {}), 
-                               NII = dict(model_name = '', model_pars = {}), OIII_88 = dict(model_name = '', model_pars = {}), 
-                               OI_63 = dict(model_name = '', model_pars = {}), OI_145 = dict(model_name = '', model_pars = {}), 
-                               OII = dict(model_name = '', model_pars = {}), OIII_0p5 = dict(model_name = '', model_pars
-                 do_external_SFR = False, external_SFR = '',sig_extSFR = 0.3, SFR_pars=dict(M0=1e-6, Ma=10**8, Mb=10**12.3, a=1.9, b=3.0, c=-1.4), seed=None):
+                               CO_J43 = dict(model_name = '', model_pars = {}), CO_J54 = dict(model_name = '', model_pars = {}), 
+                               CO_J65 = dict(model_name = '', model_pars = {}), CO_J76 = dict(model_name = '', model_pars = {}), 
+                               NIII = dict(model_name = '', model_pars = {}), NII = dict(model_name = '', model_pars = {}), 
+                               OIII_88 = dict(model_name = '', model_pars = {}), OI_63 = dict(model_name = '', model_pars = {}), 
+                               OI_145 = dict(model_name = '', model_pars = {}), OII = dict(model_name = '', model_pars = {}), OIII_0p5 = dict(model_name = '', model_pars = {})),
+                 do_external_SFR = False, external_SFR = '',sig_extSFR = 0.3, SFR_pars=dict(M0=1e-6, Ma=10**8, Mb=10**12.3, a=1.9, b=3.0, c=-1.4), 
+                 seed=None):
 
         # Get list of input values to check type and units
         self._lightcone_params = locals()
@@ -116,6 +118,7 @@ class Lightcone(object):
 
         #Line frequencies:
         self.line_nu0 = dict(CO_J10 = 115.271*u.GHz, CO_J21 = 2*115.271*u.GHz, CO_J32 = 3*115.271*u.GHz,CO_J43 = 4*115.271*u.GHz,
+                        CO_J54 = 5*115.271*u.GHz, CO_J65 = 6*115.271*u.GHz, CO_J76 = 7*115.271*u.GHz,
                         CII = 1900.539*u.GHz, HI = 1.4204134*u.GHz,NIII = 5230.1545*u.GHz,NII = 2459.3311*u.GHz,
                         OIII_88 = 3392.8526*u.GHz, OI_63 = 4745.0531*u.GHz, OI_145 = 2060.4293*u.GHz, 
                         Lyalpha = 2465398.5*u.GHz, Halpha = 456805.72*u.GHz, Hbeta = 616730.01028595*u.GHz,
