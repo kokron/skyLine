@@ -487,7 +487,7 @@ class Survey(Lightcone):
                 lategrid = np.array(cartesian_halopos.compute())
                 #Filter some halos out if outside of the inner cut
                 if self.do_inner_cut:
-                    filtering = (lategrid[:,0] >= rside_lim[0]) & (lategrid[:,0] < rside_lim[1]) & \
+                    filtering = (lategrid[:,0] >= rside_obs_lim[0]) & (lategrid[:,0] < rside_obs_lim[1]) & \
                                 (lategrid[:,1] >= raside_lim[0]) & (lategrid[:,1] < raside_lim[1]) & \
                                 (lategrid[:,2] >= decside_lim[0]) & (lategrid[:,2] < decside_lim[1])
                     lategrid = lategrid[filtering]
@@ -510,7 +510,7 @@ class Survey(Lightcone):
                         #Temperature[uK]
                         signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
                 #Locate the grid such that bottom left corner of the box is [0,0,0] which is the nbodykit convention.
-                mins = np.array([rside_lim[0],raside_lim[0],decside_lim[0]])
+                mins = np.array([rside_obs_lim[0],raside_lim[0],decside_lim[0]])
                 for n in range(3):
                     lategrid[:,n] -= mins[n]
                 #Set the emitter in the grid and paint using pmesh directly instead of nbk
