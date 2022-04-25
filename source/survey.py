@@ -9,7 +9,6 @@ import astropy.constants as cu
 from astropy.io import fits
 import copy
 import pmesh
-from nbodykit.source.mesh.catalog import CompensateCICShotnoise
 import healpy as hp
 from source.lightcone import Lightcone
 from source.utilities import cached_survey_property,get_default_params,check_params
@@ -537,35 +536,23 @@ class Survey(Lightcone):
                     field = field.apply(aniso_filter, kind='wavenumber')
                 #Add this contribution to the total maps
                 maps+=field
-
-        #Compensate the field for the CIC window function we apply
-        #maps = maps.apply(CompensateCICShotnoise, kind='circular')
+        
+        #get the proper shape for the observed map
+        if self.supersample > 1:
+            pm_noise = pmesh.pm.ParticleMesh(np.array([self.Nchan,self.Nside[0],self.Nside[1]], dtype=int),
+                                                  BoxSize=Lbox, dtype='float32', resampler='cic')
+            maps = pm_noise.downsample(maps.c2r(),keep_mean=True)
+        else:
+            maps = maps.c2r()
 
         #Add noise in the cosmic volume probed by target line to the 3d maps
         if self.Tsys.value > 0.:
-            #Avoiding the downgrade of Nmesh to Nchan,Nside,Nside and rescaling sigmaN
-            #TODO: check that this doesn't affect the VID SNR (signal will change since voxel size will change)
-            
-            #get the proper shape for the observed map
-            #if self.supersample > 1:
-            #    pm_noise = pmesh.pm.ParticleMesh(np.array([self.Nchan,self.Nside[0],self.Nside[1]], dtype=int),
-            #                                          BoxSize=Lbox, dtype='float32', resampler='cic')
-            #    maps = pm_noise.downsample(maps.c2r(),keep_mean=True)
-            #    #Check if compensation is required again
-            #    maps = (maps.r2c()).apply(CompensateCICShotnoise, kind='circular')
-
-            #rescale noise:
-            supersample_sigmaN = self.sigmaN * (self.supersample)**1.5
-            maps = maps.c2r()
             #add the noise, distribution is gaussian with 0 mean
-            maps += self.rng.normal(0.,supersample_sigmaN.value,maps.shape)
-            maps = maps-maps.cmean()
+            maps += self.rng.normal(0.,self.sigmaN.value,maps.shape)
+            
+        #Remove mean
+        maps = maps-maps.cmean()
 
-            #maps += np.abs(np.min(maps)) 
-        else:
-            maps = maps.c2r()
-            #maps += np.abs(np.min(maps)) 
-            maps = maps-maps.cmean()
         return maps
             
     def save_map(self,name,other_map=None):
