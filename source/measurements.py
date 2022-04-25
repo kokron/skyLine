@@ -11,6 +11,7 @@ from scipy.interpolate import interp2d,interp1d
 from scipy.special import legendre
 from nbodykit.algorithms import FFTPower
 from nbodykit.source.mesh.array import ArrayMesh
+from nbodykit.source.mesh.catalog import CompensateCICShotnoise
 from source.survey import Survey
 from source.lightcone import Lightcone
 from source.utilities import cached_measure_property,get_default_params,check_params
@@ -135,6 +136,9 @@ class Measure(Survey):
                     map_to_use = self.read_map
                 else:
                     map_to_use = self.obs_3d_map
+                    
+                #Compensate the field for the CIC window function we apply
+                map_to_use = map_to_use.apply(CompensateCICShotnoise, kind='circular')
                     
                 return FFTPower(map_to_use, '2d', Nmu=self.Nmu, poles=[0,2,4], los=[1,0,0],
                                 dk=self.dk.to(self.Mpch**-1).value,kmin=self.kmin.to(self.Mpch**-1).value,
