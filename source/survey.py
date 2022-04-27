@@ -65,6 +65,9 @@ class Survey(Lightcone):
 
     -do_inner_cut           Get a box for which there are no empty spaces, but discards some haloes.
                             (Default: True). Do this *only* for narrow fields
+                            
+    -do_downsample          Downsample the map such as supersample=1. 
+                            (Default: True; make if False for nice plots)
 
     -do_angular             Create an angular survey (healpy map)
                             (Default: False)
@@ -94,6 +97,7 @@ class Survey(Lightcone):
                  do_angular_smooth = True,
                  do_spectral_smooth = False,
                  do_inner_cut = True,
+                 do_downsample = True,
                  do_angular = False,
                  average_angular_proj = True,
                  nside = 2048,
@@ -538,17 +542,21 @@ class Survey(Lightcone):
                 maps+=field
         
         #get the proper shape for the observed map
-        if self.supersample > 1:
-            pm_noise = pmesh.pm.ParticleMesh(np.array([self.Nchan,self.Nside[0],self.Nside[1]], dtype=int),
+        if self.supersample > 1 and self.do_downsample:
+            pm_down = pmesh.pm.ParticleMesh(np.array([self.Nchan,self.Nside[0],self.Nside[1]], dtype=int),
                                                   BoxSize=Lbox, dtype='float32', resampler='cic')
-            maps = pm_noise.downsample(maps.c2r(),keep_mean=True)
+            maps = pm_down.downsample(maps.c2r(),keep_mean=True)
         else:
             maps = maps.c2r()
 
         #Add noise in the cosmic volume probed by target line to the 3d maps
         if self.Tsys.value > 0.:
             #add the noise, distribution is gaussian with 0 mean
-            maps += self.rng.normal(0.,self.sigmaN.value,maps.shape)
+            if self.do_downsample:
+                maps += self.rng.normal(0.,self.sigmaN.value,maps.shape)
+            else:
+                supersample_sigmaN = self.sigmaN * (self.supersample)**1.5
+                maps += self.rng.normal(0.,supersample_sigmaN.value,maps.shape)
             
         #Remove mean
         maps = maps-maps.cmean()
