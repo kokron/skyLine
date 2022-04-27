@@ -66,8 +66,11 @@ class Survey(Lightcone):
     -do_inner_cut           Get a box for which there are no empty spaces, but discards some haloes.
                             (Default: True). Do this *only* for narrow fields
                             
-    -do_downsample          Downsample the map such as supersample=1. 
+    -do_downsample          Boolean: Downsample the map such as supersample=1. 
                             (Default: True; make if False for nice plots)
+                            
+    -do_remove_mean         Boolean: Remove the mean of the map or not
+                            (Defult: True)
 
     -do_angular             Create an angular survey (healpy map)
                             (Default: False)
@@ -98,6 +101,7 @@ class Survey(Lightcone):
                  do_spectral_smooth = False,
                  do_inner_cut = True,
                  do_downsample = True,
+                 do_remove_mean = True,
                  do_angular = False,
                  average_angular_proj = True,
                  nside = 2048,
@@ -559,7 +563,8 @@ class Survey(Lightcone):
                 maps += self.rng.normal(0.,supersample_sigmaN.value,maps.shape)
             
         #Remove mean
-        maps = maps-maps.cmean()
+        if self.do_remove_mean:
+            maps = maps-maps.cmean()
 
         return maps
             
