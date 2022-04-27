@@ -138,7 +138,7 @@ class Measure(Survey):
                     map_to_use = self.obs_3d_map
                     
                 #Compensate the field for the CIC window function we apply
-                map_to_use = map_to_use.apply(CompensateCICShotnoise, kind='circular')
+                map_to_use = (map_to_use.r2c().apply(CompensateCICShotnoise, kind='circular')).c2r()
                     
                 return FFTPower(map_to_use, '2d', Nmu=self.Nmu, poles=[0,2,4], los=[1,0,0],
                                 dk=self.dk.to(self.Mpch**-1).value,kmin=self.kmin.to(self.Mpch**-1).value,
