@@ -31,7 +31,7 @@ def CO_Li16(self,SFR,pars,rng):
     #avoid SFR=0 issues
     inds = np.where(SFR>0)
     LCO_samples = np.zeros(len(SFR))*u.Lsun
-    
+
     #Convert halo SFR to IR luminosity
     LIR = 1e10 * SFR[inds]/delta_mf
     #Transform IR luminosity to CO luminosity (log10)
@@ -39,19 +39,19 @@ def CO_Li16(self,SFR,pars,rng):
     #Add normal scatter in the log10(LCO) and transform to Lsun and give units
     sigma_base_e = sigma_L*2.302585
     LCO_samples[inds] = 10**(log10_LCO)*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, log10_LCO.shape)*4.9e-5*u.Lsun
-    
+
     return LCO_samples
-    
-    
+
+
 def CO_lines_scaling_LFIR(self,SFR,pars,rng):
     '''
     Returns the luminosity for CO lines lines that have empirical scaling relations with FIR luminosity
-    
+
     Examples include: All the CO rotational ladder lines
     (From Kamenetzky+2016, arXiv:1508.05102)
-    
+
     Relation is: log10(LFIR) = alpha*log10(LCO')+beta
-    
+
     Parameters:
         -SFR:       SFR of the halo in Msun/yr
         -pars:      Dictionary of parameters for the model
@@ -65,25 +65,25 @@ def CO_lines_scaling_LFIR(self,SFR,pars,rng):
         alpha,beta,alpha_std,beta_std,sigma_L = pars['alpha'],pars['beta'],pars['alpha_std'],pars['beta_std'],pars['sigma_L']
     except:
         raise ValueError('The model_pars for CO_lines_scaling_LFIR are "alpha","beta", "alpha_std", "beta_std","sigma_L" but {} were provided'.format(pars.keys()))
-        
+
     #avoid SFR=0 issues
     inds = np.where(SFR>0)
     L = np.zeros(len(SFR))*u.Lsun
-    
+
     #Get the LIR from Kennicutt 1998, arXiv:9807187
     LIR = (SFR[inds]*(1/4.5e-44)*u.erg/u.s).to(u.Lsun)
-    
+
     std = multivariate_normal(np.array([alpha,beta]),np.diag(np.array([alpha_std**2,beta_std**2])),LIR.shape)
     alpha_par,beta_par = std[:,0],std[:,1]
-    
+
     Lp = 10**((np.log10(LIR.value)-beta_par)/alpha_par)
-    
+
     Lmean = (4.9e-5*u.Lsun)*Lp
-    
+
     #Add scatter to the relation
     sigma_base_e = sigma_L*2.302585
     L[inds] = Lmean*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, Lmean.shape)
-    
+
     return L
 
 
@@ -105,14 +105,14 @@ def CII_Silva15(self,SFR,pars,rng):
         aLCII,bLCII, sigma_L = pars['aLCII'],pars['bLCII'],pars['sigma_L']
     except:
         raise ValueError('The model_pars for CII_Silva15 are "aLCII","bLCII", "sigma_L", but {} were provided'.format(pars.keys()))
-        
+
     #avoid SFR=0 issues
     inds = np.where(SFR>0)
     L = np.zeros(len(SFR))*u.Lsun
-    
+
     # LCII relation
     Lmean = 10**(aLCII*np.log10(SFR[inds])+bLCII)*u.Lsun
-    
+
     #Add scatter to the relation
     sigma_base_e = sigma_L*2.302585
     L[inds] = Lmean*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, Lmean.shape)
@@ -136,13 +136,13 @@ def CII_Lagache18(self,SFR,pars,rng):
     #avoid SFR=0 issues
     inds = np.where(SFR>0)
     L = np.zeros(len(SFR))*u.Lsun
-    
+
     # LCII relation
     alpha=alpha1+alpha2*self.halo_catalog['Z'][inds]
     beta=beta1+beta2*self.halo_catalog['Z'][inds]
-    
+
     Lmean = 10**(alpha*np.log10(SFR[inds])+beta)*u.Lsun
-    
+
     #Add scatter to the relation
     sigma_base_e = sigma_L*2.302585
     L[inds] = Lmean*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, Lmean.shape)
@@ -179,8 +179,42 @@ def Lyalpha_Chung19(self,SFR,pars,rng):
     LLya_samples = LLya*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, LLya.shape)
 
     return (LLya_samples*u.erg/u.s).to(u.Lsun)
-    
-    
+
+##############
+## 21-cm LINE ##
+##############
+
+def HI_VN18(self,SFR,pars,rng):
+    '''
+    Model for 21-cm line used in Villaescusa-Navarro+2018 (arXiv:1804.09180)
+
+    Parameters:
+        -SFR:       SFR of the halo in Msun/yr
+        -pars:      Dictionary of parameters for the model
+            -M0, Mmin, alpha    Normalization, cutoff mass, and slope in the M_HI-M_halo relation
+            -sigma_L    log-normal scatter in the luminosity
+
+    M
+    '''
+    try:
+        M0, Mmin, alpha,sigma_L = pars['M0'],pars['Mmin'],pars['alpha'],pars['sigma_L']
+    except:
+        raise ValueError('The model_pars for HI_VN18 are M0, Mmin, alpha, and sigma_L, but {} were provided'.format(pars.keys()))
+
+    Mhalo_Msun = Mhalo_Msun = (self.halo_catalog['M_HALO']*self.Msunh).to(u.Msun)
+    MHI=M0*np.exp(-(Mmin/Mhalo_Msun)**0.35)*(Mhalo_Msun/Mmin)**alpha
+
+    A10=2.869e-15*u.s**(-1) #spontaneous emission coefficient
+    LHI=(3/4)*A10*u.h*self.line_nu0['HI']*MHI/cu.m_p
+
+    #Add scatter to the relation
+    sigma_base_e = sigma_L*2.302585
+    LHI_samples = LHI*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, LHI.shape)
+
+    return (LHI_samples).to(u.Lsun)
+
+
+
 #####################################
 ## SFR Kennicutt scaling relations ##
 #####################################
@@ -189,7 +223,7 @@ def SFR_scaling_relation_Kennicutt(self,SFR,pars,rng):
     '''
     Model for SFR-related lines used in Gong+2017 (arXiv:1610.09060),
     employing Kennicutt relations and extinctions.
-    
+
     Examples include: Halpha, Hbeta, OII, OIII_0p5
 
     Parameters:
@@ -207,13 +241,13 @@ def SFR_scaling_relation_Kennicutt(self,SFR,pars,rng):
     #Spread in the linear relation
     factor = normal(K,Kstd,len(SFR))
     L = (SFR*factor*u.erg/u.s).to(u.Lsun)
-    
+
     #Add scatter to the relation
     sigma_base_e = sigma_L*2.302585
     L = L*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, L.shape)
 
     return L*10**(-Aext/2.5)
-    
+
 
 ###########################
 ## LIR scaling relations ##
@@ -222,12 +256,12 @@ def SFR_scaling_relation_Kennicutt(self,SFR,pars,rng):
 def FIR_scaling_relation(self,SFR,pars,rng):
     '''
     Returns the luminosity for lines that have empirical scaling relations with FIR luminosity
-    
+
     Examples include: OIII_51, NIII, NII, OI_63, OIII_88, OI_145, CII
     (From Spignolio+2012, arXiv:1110.4837, check the erratum for actual numbers)
-    
+
     Relation is: log10(L/(1e41 erg/s)) = alpha*log10(LIR/(1e41 erg/s))-beta
-    
+
     Parameters:
         -SFR:       SFR of the halo in Msun/yr
         -pars:      Dictionary of parameters for the model
@@ -244,20 +278,19 @@ def FIR_scaling_relation(self,SFR,pars,rng):
     #avoid SFR=0 issues
     inds = np.where(SFR>0)
     L = np.zeros(len(SFR))*u.Lsun
-    
+
     #Get the LIR from Kennicutt 1998, arXiv:9807187
     LIR = SFR[inds]*(1/4.5e-44)*u.erg/u.s
     LIR_norm = LIR*(1/1e41)
-    
+
     std = multivariate_normal(np.array([alpha,beta]),np.diag(np.array([alpha_std**2,beta_std**2])),LIR.shape)
     alpha_par,beta_par = std[:,0],std[:,1]
-    
+
     Lerg_norm = 10**(alpha_par*np.log10(LIR_norm.value)-beta_par)
     Lmean = (Lerg_norm*1e41*u.erg/u.s).to(u.Lsun)
-    
+
     #Add scatter to the relation
     sigma_base_e = sigma_L*2.302585
     L[inds] = Lmean*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, Lmean.shape)
-    
+
     return L
-    
