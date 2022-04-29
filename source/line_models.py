@@ -201,11 +201,11 @@ def HI_VN18(self,SFR,pars,rng):
     except:
         raise ValueError('The model_pars for HI_VN18 are M0, Mmin, alpha, and sigma_L, but {} were provided'.format(pars.keys()))
 
-    Mhalo_Msun = Mhalo_Msun = (self.halo_catalog['M_HALO']*self.Msunh).to(u.Msun)
+    Mhalo_Msun = (self.halo_catalog['M_HALO']*self.Msunh).to(u.Msun)
     MHI=M0*np.exp(-(Mmin/Mhalo_Msun)**0.35)*(Mhalo_Msun/Mmin)**alpha
 
     A10=2.869e-15*u.s**(-1) #spontaneous emission coefficient
-    LHI=(3/4)*A10*u.h*self.line_nu0['HI']*MHI/cu.m_p
+    LHI=(3/4)*A10*cu.h*self.line_nu0['HI']*MHI/cu.m_p
 
     #Add scatter to the relation
     sigma_base_e = sigma_L*2.302585
