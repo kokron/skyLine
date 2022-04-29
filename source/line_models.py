@@ -205,7 +205,8 @@ def HI_VN18(self,SFR,pars,rng):
     MHI=M0*np.exp(-(Mmin/Mhalo_Msun)**0.35)*(Mhalo_Msun/Mmin)**alpha
 
     A10=2.869e-15*u.s**(-1) #spontaneous emission coefficient
-    LHI=(3/4)*A10*cu.h*self.line_nu0['HI']*MHI/cu.m_p
+    coeff=((3/4)*A10*cu.h*self.line_nu0['HI']/cu.m_p).to(u.Lsun/u.Msun)
+    LHI=coeff*MHI
 
     #Add scatter to the relation
     sigma_base_e = sigma_L*2.302585
