@@ -363,39 +363,34 @@ class Survey(Lightcone):
                 ra,dec,redshift = da.broadcast_arrays(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'],
                                                       self.halos_in_survey[line]['Zobs'])
 
-
                 Zhalo = self.halos_in_survey[line]['Ztrue']
                 Hubble = self.cosmo.hubble_parameter(Zhalo)*(u.km/u.Mpc/u.s)
 
-
                 #Figure out what channel the halos will be in to figure out the voxel volume, for the signal. 
                 #This is what will be added to the healpy map.
-
-                #Figure out which channel each line will end up in
                 nu_bins = self.nuObs_min.to('GHz').value + np.arange(self.Nchan)*self.dnu.to('GHz').value 
-
                 zmid_channel = nu_bins + 0.5*self.dnu.to('GHz').value
 
                 #Channel of each halo, can now compute voxel volumes where each of them are seamlessly
                 bin_idxs = np.digitize(self.line_nu0[line].to('GHz').value/(1+Zhalo), nu_bins)-1
-
                 zmids = zmid_channel[bin_idxs]
 
                 #Vcell = Omega_pix * D_A (z)^2 * (1+z) * Dnu/nu * c/H is the volume of the voxel for a given channel
                 Vcell_true = hp.nside2pixarea(self.nside)*(self.cosmo.comoving_radial_distance(zmids)*u.Mpc )**2 * (1 + zmids) * (self.delta_nuObs/self.line_nu0[line]) * (cu.c.to('km/s')/Hubble)
 
-
-                if self.do_intensity:
-                    #intensity[Jy/sr]
-                    signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
+                if not self.mass:
+                    if self.do_intensity:
+                        #intensity[Jy/sr]
+                        signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
+                    else:
+                        #Temperature[uK]
+                        signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
                 else:
-                    #Temperature[uK]
-                    signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
-
+                    #number counts [empty unit]
+                    signal = np.ones(len(Zhalo))*(1*self.unit/self.unit)
 
                 #Paste the signals to the map
                 theta, phi = rd2tp(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'])
-
                 pixel_idxs = hp.ang2pix(self.nside, theta, phi)
                 
                 if self.average_angular_proj:
@@ -423,6 +418,8 @@ class Survey(Lightcone):
         if self.Tsys.value > 0.:
             #rescale the noise per pixel to the healpy pixel size
             hp_sigmaN = self.sigmaN * (pix_within.size/self.Npix)**0.5
+            if self.average_angular_proj:
+                hp_sigmaN *= 1./(self.Nchan)**0.5
             hp_map[pix_within] += self.rng.normal(0.,hp_sigmaN.value,pix_within.size)
                     
         return hp_map
