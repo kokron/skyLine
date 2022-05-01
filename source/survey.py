@@ -356,10 +356,10 @@ class Survey(Lightcone):
         # First, compute the intensity/temperature of each halo in the catalog we will include
         for line in self.lines.keys():
             if self.lines[line]:
+                hp_map_line = np.zeros(npix)
+                
                 #Get true cell volume
-
                 #Get positions using the observed redshift
-                #Convert the halo position in each volume to Cartesian coordinates (from Nbodykit)
                 ra,dec,redshift = da.broadcast_arrays(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'],
                                                       self.halos_in_survey[line]['Zobs'])
 
@@ -395,14 +395,15 @@ class Survey(Lightcone):
                 
                 if self.average_angular_proj:
                     #averaging over the number of channels
-                    np.add.at(hp_map, pixel_idxs, signal.value/self.Nchan)
+                    np.add.at(hp_map_line, pixel_idxs, signal.value/self.Nchan)
                 else:
-                    np.add.at(hp_map, pixel_idxs, signal.value)
+                    np.add.at(hp_map_line, pixel_idxs, signal.value)
                 #should smoothing be after masking?
                 #could lead to bleeding of the zeros with the boundary
                 if self.do_angular_smooth:
                     theta_beam = self.beam_FWHM.to(u.rad)
-                    hp_map = hp.smoothing(hp_map, theta_beam.value)
+                    hp_map_line = hp.smoothing(hp_map_line, theta_beam.value)
+                hp_map += hp_map_line
                     
         #get the proper nside for the observed map
         if self.do_downsample:
