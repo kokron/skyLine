@@ -159,8 +159,8 @@ def check_updated_params(self):
 
     #Check healpy pixel size just in case:
     if self.do_angular:
-        if (self.beam_FWHM.to(u.arcmin)).value < hp.nside2resol(self.nside, arcmin=True):
-            print("WARNING!!! the healpy pixel side chosen, from NSIDE = {}, is {:.2f} times bigger than the beam_FWHM. Consider increasing NSIDE (remember that it must be a power of 2)".format(self.nside,hp.nside2resol(self.nside, arcmin=True)/self.beam_FWHM.to(u.arcmin)).value)
+        if (self.beam_FWHM.to(u.arcmin)).value*self.supersample < hp.nside2resol(self.nside, arcmin=True):
+            print("WARNING!!! the healpy pixel side chosen, from NSIDE = {}, is {:.2f} times bigger than the beam_FWHM*supersample. Consider increasing NSIDE (remember that it must be a power of 2)".format(self.nside,hp.nside2resol(self.nside, arcmin=True)/self.beam_FWHM.to(u.arcmin)).value)
         #Avoid inner cut if do_angular:
         if self.do_angular and self.do_inner_cut:
             raise ValueError('If you want to work with angular maps, you do not need the inner cut, hence please use do_inner_cut = False')
