@@ -403,18 +403,26 @@ class Survey(Lightcone):
                 if self.do_angular_smooth:
                     theta_beam = self.beam_FWHM.to(u.rad)
                     hp_map = hp.smoothing(hp_map, theta_beam.value)
+                    
+        #get the proper nside for the observed map
+        if self.do_downsample:
+            npix_fullsky = 4*np.pi/(self.beam_FWHM**2).to(u.sr).value
+            nside_min = hp.pixelfunc.get_min_valid_nside(npix_fullsky)
+            if nside_min < self.nside:
+                hp_map = hp.ud_grade(hp_map,nside_min)
 
-                #Define the mask from the rectangular footprint
-                phicorner = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_min.value,self.RAObs_max.value,self.RAObs_max.value]))
-                thetacorner = np.pi/2-np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value,self.DECObs_max.value,self.DECObs_min.value]))
-                vecs = hp.dir2vec(thetacorner,phi=phicorner).T
-                pix_within = hp.query_polygon(nside=self.nside,vertices=vecs,inclusive=False)
-                self.pix_within = pix_within
-                mask = np.ones(hp.nside2npix(self.nside),np.bool)
-                mask[pix_within] = 0
-                hp_map = hp.ma(hp_map)
-                hp_map.mask = mask
-                #add noise
+        #Define the mask from the rectangular footprint
+        phicorner = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_min.value,self.RAObs_max.value,self.RAObs_max.value]))
+        thetacorner = np.pi/2-np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value,self.DECObs_max.value,self.DECObs_min.value]))
+        vecs = hp.dir2vec(thetacorner,phi=phicorner).T
+        pix_within = hp.query_polygon(nside=self.nside,vertices=vecs,inclusive=False)
+        self.pix_within = pix_within
+        mask = np.ones(hp.nside2npix(self.nside),np.bool)
+        mask[pix_within] = 0
+        hp_map = hp.ma(hp_map)
+        hp_map.mask = mask
+        
+        #add noise
         if self.Tsys.value > 0.:
             #rescale the noise per pixel to the healpy pixel size
             hp_sigmaN = self.sigmaN * (pix_within.size/self.Npix)**0.5
