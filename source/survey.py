@@ -54,9 +54,6 @@ class Survey(Lightcone):
     -supersample:           Factor of supersample with respect to the survey resolution
                             when making the grid. (Default: 10)
 
-    -paint_catalog:         Boolean: Paint catalog or used a painted one.               DOES THIS MAKE SENSE OR ALWAYS TRUE????
-                            (Default: True).
-
     -do_angular_smooth:     Boolean: apply smoothing filter to implement angular resolution
                             limitations. (Default: True)
                             
@@ -81,6 +78,11 @@ class Survey(Lightcone):
     -nside                  NSIDE used by healpy to create angular maps. (Default: 2048)
     
     -mass                   Boolean: Create a map with number density of ALL the haloes within the catalog (defaul: False)
+    
+    -Mhalo_min              Minimum halo mass to be included in the survey (filter for halos_in_survey). Default:None
+    
+    -Mstar_min              Minimum stellar mass in a halo to be ncluded in the survey (filter for halos_in_survey). Default:None
+    
     '''
     def __init__(self,
                  do_intensity=False,
@@ -106,6 +108,8 @@ class Survey(Lightcone):
                  average_angular_proj = True,
                  nside = 2048,
                  mass=False,
+                 Mhalo_min=None,
+                 Mstar_min=None,
                  **lightcone_kwargs):
 
         # Initiate Lightcone() parameters
@@ -310,13 +314,18 @@ class Survey(Lightcone):
             inds_RA = (self.halo_catalog['RA'] > self.RAObs_min.value)&(self.halo_catalog['RA'] < self.RAObs_max.value)
             inds_DEC = (self.halo_catalog['DEC'] > self.DECObs_min.value)&(self.halo_catalog['DEC'] < self.DECObs_max.value)
         inds_sky = inds_RA&inds_DEC
+        inds_mass = np.ones(len(inds_sky),dtype=bool)
+        if self.Mhalo_min not None:
+            inds_mass = inds_mass&(self.halo_catalog['M_HALO']>=self.Mhalo_min)
+        if self.Mstar_min not None:
+            inds_mass = inds_mass&(self.halo_catalog['SM_HALO']>=self.Mstar_min)
 
         #Loop over lines to see what halos are within nuObs
         for line in self.lines.keys():
             if self.lines[line]:
                 halos_survey[line] = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),Ztrue=np.array([]),Lhalo=np.array([])*u.Lsun)
                 #inds = (self.nuObs_line_halo[line] >= self.nuObs_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky
-                inds = (self.nuObs_line_halo[line] >= self.nuObs_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky
+                inds = (self.nuObs_line_halo[line] >= self.nuObs_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky&inds_mass
                 halos_survey[line]['RA'] = np.append(halos_survey[line]['RA'],self.halo_catalog['RA'][inds])
                 halos_survey[line]['DEC'] = np.append(halos_survey[line]['DEC'],self.halo_catalog['DEC'][inds])
                 halos_survey[line]['Zobs'] = np.append(halos_survey[line]['Zobs'],(self.line_nu0[self.target_line]/self.nuObs_line_halo[line][inds]).decompose()-1)
@@ -324,7 +333,7 @@ class Survey(Lightcone):
                 #halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog['Z'][inds]+self.halo_catalog['DZ'][inds])
                 halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog['Z'][inds])
                 halos_survey[line]['Lhalo'] = np.append(halos_survey[line]['Lhalo'],self.L_line_halo[line][inds])
-
+                
         return halos_survey
 
 
@@ -501,21 +510,23 @@ class Survey(Lightcone):
                     #Compute the signal in each voxel (with Ztrue and Vcell_true)
                     Zhalo = self.halos_in_survey[line]['Ztrue'][filtering]
                     Hubble = self.cosmo.hubble_parameter(Zhalo)*(u.km/u.Mpc/u.s)
-                    if self.do_intensity:
-                        #intensity[Jy/sr]
-                        signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*self.halos_in_survey[line]['Lhalo'][filtering]/Vcell_true).to(self.unit)
-                    else:
-                        #Temperature[uK]
-                        signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo'][filtering]/Vcell_true).to(self.unit)
+                    if not self.mass:
+                        if self.do_intensity:
+                            #intensity[Jy/sr]
+                            signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*self.halos_in_survey[line]['Lhalo'][filtering]/Vcell_true).to(self.unit)
+                        else:
+                            #Temperature[uK]
+                            signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo'][filtering]/Vcell_true).to(self.unit)
                 else:
                     Zhalo = self.halos_in_survey[line]['Ztrue']
                     Hubble = self.cosmo.hubble_parameter(Zhalo)*(u.km/u.Mpc/u.s)
-                    if self.do_intensity:
-                        #intensity[Jy/sr]
-                        signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
-                    else:
-                        #Temperature[uK]
-                        signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
+                    if not self.mass:
+                        if self.do_intensity:
+                            #intensity[Jy/sr]
+                            signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
+                        else:
+                            #Temperature[uK]
+                            signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
                 #Locate the grid such that bottom left corner of the box is [0,0,0] which is the nbodykit convention.
                 mins = np.array([rside_obs_lim[0],raside_lim[0],decside_lim[0]])
                 for n in range(3):
@@ -528,10 +539,10 @@ class Survey(Lightcone):
                 #Exchange positions between different MPI ranks
                 p = layout.exchange(lategrid)
                 #Assign weights following the layout of particles
-                m = layout.exchange(signal.value)
                 if self.mass:
                     pm.paint(p, out=field, mass=1, resampler='cic')
                 else: 
+                    m = layout.exchange(signal.value)
                     pm.paint(p, out=field, mass=m, resampler='cic')
                 #Fourier transform fields and apply the filter
                 field = field.r2c()
