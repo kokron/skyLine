@@ -430,7 +430,11 @@ class Survey(Lightcone):
             if self.average_angular_proj:
                 hp_sigmaN *= 1./(self.Nchan)**0.5
             hp_map[pix_within] += self.rng.normal(0.,hp_sigmaN.value,pix_within.size)
-                    
+            
+        #remove the monopole
+        if self.do_remove_mean:
+            hp_map = hp.pixelfunc.remove_monopole(hp_map,copy=False)
+            
         return hp_map
 
 
