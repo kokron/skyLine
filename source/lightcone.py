@@ -240,7 +240,7 @@ class Lightcone(object):
 
         for line in self.lines.keys():
             if self.lines[line]:
-                L_line_halo[line] = getattr(LM,self.models[line]['model_name'])(self,SFR,self.models[line]['model_pars'],self.rng)
+                L_line_halo[line] = getattr(LM,self.models[line]['model_name'])(self,SFR,self.models[line]['model_pars'],self.line_nu0[line],self.rng)
 
         return L_line_halo
 
