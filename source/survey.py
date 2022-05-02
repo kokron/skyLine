@@ -315,9 +315,9 @@ class Survey(Lightcone):
             inds_DEC = (self.halo_catalog['DEC'] > self.DECObs_min.value)&(self.halo_catalog['DEC'] < self.DECObs_max.value)
         inds_sky = inds_RA&inds_DEC
         inds_mass = np.ones(len(inds_sky),dtype=bool)
-        if self.Mhalo_min not None:
+        if self.Mhalo_min != None:
             inds_mass = inds_mass&(self.halo_catalog['M_HALO']>=self.Mhalo_min)
-        if self.Mstar_min not None:
+        if self.Mstar_min != None:
             inds_mass = inds_mass&(self.halo_catalog['SM_HALO']>=self.Mstar_min)
 
         #Loop over lines to see what halos are within nuObs
