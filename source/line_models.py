@@ -11,7 +11,7 @@ import astropy.constants as cu
 ## CO LINES ##
 ##############
 
-def CO_Li16(self,SFR,pars,rng):
+def CO_Li16(self,SFR,pars,nu0,rng):
     '''
     Model for CO(1-0) line from Li+2016 (arXiv:1503.08833)
 
@@ -38,12 +38,12 @@ def CO_Li16(self,SFR,pars,rng):
     log10_LCO = (np.log10(LIR) - beta)/alpha
     #Add normal scatter in the log10(LCO) and transform to Lsun and give units
     sigma_base_e = sigma_L*2.302585
-    LCO_samples[inds] = 10**(log10_LCO)*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, log10_LCO.shape)*4.9e-5*u.Lsun
+    LCO_samples[inds] = 10**(log10_LCO)*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, log10_LCO.shape)*4.9e-5*u.Lsun*(nu0/(115.27*u.GHz))**3
 
     return LCO_samples
 
 
-def CO_lines_scaling_LFIR(self,SFR,pars,rng):
+def CO_lines_scaling_LFIR(self,SFR,pars,nu0,rng):
     '''
     Returns the luminosity for CO lines lines that have empirical scaling relations with FIR luminosity
 
@@ -78,7 +78,7 @@ def CO_lines_scaling_LFIR(self,SFR,pars,rng):
 
     Lp = 10**((np.log10(LIR.value)-beta_par)/alpha_par)
 
-    Lmean = (4.9e-5*u.Lsun)*Lp
+    Lmean = (4.9e-5*u.Lsun)*Lp*(nu0/(115.27*u.GHz))**3
 
     #Add scatter to the relation
     sigma_base_e = sigma_L*2.302585
@@ -91,7 +91,7 @@ def CO_lines_scaling_LFIR(self,SFR,pars,rng):
 ## CII LINE ##
 ##############
 
-def CII_Silva15(self,SFR,pars,rng):
+def CII_Silva15(self,SFR,pars,nu0,rng):
     '''
     Model for CII line from Silva+2015 (arXiv:1410.4808)
 
@@ -119,7 +119,7 @@ def CII_Silva15(self,SFR,pars,rng):
 
     return L
 
-def CII_Lagache18(self,SFR,pars,rng):
+def CII_Lagache18(self,SFR,pars,nu0,rng):
     '''
     Model for CII line from Lagache+2018 (arXiv:1711.00798)
 
@@ -153,7 +153,7 @@ def CII_Lagache18(self,SFR,pars,rng):
 ## Ly-alpha LINE ##
 ##############
 
-def Lyalpha_Chung19(self,SFR,pars,rng):
+def Lyalpha_Chung19(self,SFR,pars,nu0,rng):
     '''
     Model for Lyman-alpha line used in Chung+2019 (arXiv:1809.04550)
 
@@ -184,7 +184,7 @@ def Lyalpha_Chung19(self,SFR,pars,rng):
 ## 21-cm LINE ##
 ##############
 
-def HI_VN18(self,SFR,pars,rng):
+def HI_VN18(self,SFR,pars,nu0,rng):
     '''
     Model for 21-cm line used in Villaescusa-Navarro+2018 (arXiv:1804.09180)
 
@@ -220,7 +220,7 @@ def HI_VN18(self,SFR,pars,rng):
 ## SFR Kennicutt scaling relations ##
 #####################################
 
-def SFR_scaling_relation_Kennicutt(self,SFR,pars,rng):
+def SFR_scaling_relation_Kennicutt(self,SFR,pars,nu0,rng):
     '''
     Model for SFR-related lines used in Gong+2017 (arXiv:1610.09060),
     employing Kennicutt relations and extinctions.
@@ -254,7 +254,7 @@ def SFR_scaling_relation_Kennicutt(self,SFR,pars,rng):
 ## LIR scaling relations ##
 ###########################
 
-def FIR_scaling_relation(self,SFR,pars,rng):
+def FIR_scaling_relation(self,SFR,pars,nu0,rng):
     '''
     Returns the luminosity for lines that have empirical scaling relations with FIR luminosity
 
