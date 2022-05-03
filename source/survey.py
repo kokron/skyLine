@@ -13,8 +13,13 @@ import healpy as hp
 from source.lightcone import Lightcone
 from source.utilities import cached_survey_property,get_default_params,check_params
 from source.utilities import set_lim, dict_lines
-import pysm
-from pysm.nominal import models
+
+try:
+    import pysm
+    from pysm.nominal import models
+    NoPySM = False
+except:
+    NoPySM = True
 
 
 
@@ -153,6 +158,9 @@ class Survey(Lightcone):
             #Avoid inner cut if do_angular:
             if self.do_angular and self.do_inner_cut:
                 raise ValueError('If you want to work with angular maps, you do not need the inner cut, hence please use do_inner_cut = False')
+
+        if NoPySM and do_gal_foregrounds==True:
+            raise ValueError('PySM must be installed to model galactic foregrounds')
 
         #Set units for observable depending on convention
         if self.do_intensity:
