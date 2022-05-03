@@ -35,6 +35,8 @@ class Measure(Survey):
 
     -Nmu:                   Number of sampling in mu to compute the power spectrum
                             (default: 10)
+                            
+    -lmax:                  Maximum multipole to compute the angular power spectrum. Default=1000
 
     -remove_noise:          Remove the expected instrumental noise power spectrum (sigma_N^2*Vvox)
                             from the observed power spectrum (and adds it to the covariance).
@@ -60,6 +62,7 @@ class Measure(Survey):
                  kmin = 0.0*u.Mpc**-1,
                  kmax = 3.*u.Mpc**-1,
                  Nmu = 5,
+                 lmax = 1000,
                  remove_noise = False,
                  Tmin_VID = 1.0e-2*u.uK,
                  Tmax_VID = 1000.*u.uK,
