@@ -13,6 +13,8 @@ import healpy as hp
 from source.lightcone import Lightcone
 from source.utilities import cached_survey_property,get_default_params,check_params
 from source.utilities import set_lim, dict_lines
+import pysm
+from pysm.nominal import models
 
 
 
@@ -56,33 +58,33 @@ class Survey(Lightcone):
 
     -do_angular_smooth:     Boolean: apply smoothing filter to implement angular resolution
                             limitations. (Default: True)
-                            
+
     -do_spectral_smooth:    Boolean: apply smoothing filter to implement spectral resolution
                             limitations. (Default: False)
 
     -do_inner_cut           Get a box for which there are no empty spaces, but discards some haloes.
                             (Default: True). Do this *only* for narrow fields
-                            
-    -do_downsample          Boolean: Downsample the map such as supersample=1. 
+
+    -do_downsample          Boolean: Downsample the map such as supersample=1.
                             (Default: True; make if False for nice plots)
-                            
+
     -do_remove_mean         Boolean: Remove the mean of the map or not
                             (Defult: True)
 
     -do_angular             Create an angular survey (healpy map)
                             (Default: False)
-                            
+
     -average_angular_proj   Average total integrated intensity per the number of channels for
                             angular projections (Default: True)
-                            
+
     -nside                  NSIDE used by healpy to create angular maps. (Default: 2048)
-    
+
     -mass                   Boolean: Create a map with number density of ALL the haloes within the catalog (defaul: False)
-    
+
     -Mhalo_min              Minimum halo mass (in Msun/h) to be included in the survey (filter for halos_in_survey). Default:None
-    
+
     -Mstar_min              Minimum stellar mass in a halo (in Msun) to be ncluded in the survey (filter for halos_in_survey). Default:None
-    
+
     '''
     def __init__(self,
                  do_intensity=False,
@@ -98,13 +100,14 @@ class Survey(Lightcone):
                  beam_FWHM=4.1*u.arcmin,
                  tobs=6000*u.hr,
                  target_line = 'CO',
-                 supersample = 10, 
+                 supersample = 10,
                  do_angular_smooth = True,
                  do_spectral_smooth = False,
                  do_inner_cut = True,
                  do_downsample = True,
                  do_remove_mean = True,
                  do_angular = False,
+                 do_gal_foregrounds = False,
                  average_angular_proj = True,
                  nside = 2048,
                  mass=False,
@@ -229,7 +232,7 @@ class Survey(Lightcone):
         else:
             #Temperature[uK]
             sig2 = self.Tsys**2/(self.Nfeeds*self.dnu*tpix)
-            
+
         if self.do_angular and self.average_angular_proj:
             sig2 /= self.Nchan
 
@@ -247,7 +250,7 @@ class Survey(Lightcone):
 
         ramid = np.deg2rad(0.5*(self.RAObs_max + self.RAObs_min).value)
         decmid = np.deg2rad(0.5*(self.DECObs_max + self.DECObs_min).value)
-        
+
         #transform Frequency band into redshift range for the target line
         zlims = (self.line_nu0[self.target_line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
         rlim = ((self.cosmo.comoving_radial_distance(zlims)*u.Mpc).to(self.Mpch)).value
@@ -258,12 +261,12 @@ class Survey(Lightcone):
             decside = 2*rlim[0]*np.tan(0.5*(declim[1]-declim[0]))
             zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
             rside_lim = np.array([rlim[0],rlim[0]+zside])
-        else: 
+        else:
             raside = 2*rlim[1]*np.tan(0.5*(ralim[1]-ralim[0]))
             decside = 2*rlim[1]*np.tan(0.5*(declim[1]-declim[0]))
             zside = rlim[1]-rlim[0]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))
             rside_lim = np.array([rlim[1]-zside,rlim[1]])
-            
+
         Lbox = np.array([zside,raside,decside])
 
         self.raside_lim = rlim[0]*np.tan(ralim-ramid) #min, max self.decside_lim = rlim[0]*np.tan(declim-decmid) #min, max
@@ -304,7 +307,7 @@ class Survey(Lightcone):
             #May fail at low nside or weird survey masks
             delta_ra = 1.01*0.5*(self.RAObs_max.value - self.RAObs_min.value)
             mid_ra = 0.5*(self.RAObs_max.value + self.RAObs_min.value)
-            
+
             delta_dec = 1.01*0.5*(self.DECObs_max.value - self.DECObs_min.value)
             mid_dec = 0.5*(self.DECObs_max.value + self.DECObs_min.value)
 
@@ -315,9 +318,9 @@ class Survey(Lightcone):
             inds_DEC = (self.halo_catalog['DEC'] > self.DECObs_min.value)&(self.halo_catalog['DEC'] < self.DECObs_max.value)
         inds_sky = inds_RA&inds_DEC
         inds_mass = np.ones(len(inds_sky),dtype=bool)
-        if self.Mhalo_min not None:
+        if self.Mhalo_min is not None:
             inds_mass = inds_mass&(self.halo_catalog['M_HALO']>=self.Mhalo_min)
-        if self.Mstar_min not None:
+        if self.Mstar_min is not None:
             inds_mass = inds_mass&(self.halo_catalog['SM_HALO']>=self.Mstar_min)
 
         #Loop over lines to see what halos are within nuObs
@@ -333,7 +336,7 @@ class Survey(Lightcone):
                 #halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog['Z'][inds]+self.halo_catalog['DZ'][inds])
                 halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog['Z'][inds])
                 halos_survey[line]['Lhalo'] = np.append(halos_survey[line]['Lhalo'],self.L_line_halo[line][inds])
-                
+
         return halos_survey
 
 
@@ -357,7 +360,7 @@ class Survey(Lightcone):
         for line in self.lines.keys():
             if self.lines[line]:
                 hp_map_line = np.zeros(npix)
-                
+
                 #Get true cell volume
                 #Get positions using the observed redshift
                 ra,dec,redshift = da.broadcast_arrays(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'],
@@ -366,9 +369,9 @@ class Survey(Lightcone):
                 Zhalo = self.halos_in_survey[line]['Ztrue']
                 Hubble = self.cosmo.hubble_parameter(Zhalo)*(u.km/u.Mpc/u.s)
 
-                #Figure out what channel the halos will be in to figure out the voxel volume, for the signal. 
+                #Figure out what channel the halos will be in to figure out the voxel volume, for the signal.
                 #This is what will be added to the healpy map.
-                nu_bins = self.nuObs_min.to('GHz').value + np.arange(self.Nchan)*self.dnu.to('GHz').value 
+                nu_bins = self.nuObs_min.to('GHz').value + np.arange(self.Nchan)*self.dnu.to('GHz').value
                 zmid_channel = nu_bins + 0.5*self.dnu.to('GHz').value
 
                 #Channel of each halo, can now compute voxel volumes where each of them are seamlessly
@@ -392,7 +395,7 @@ class Survey(Lightcone):
                 #Paste the signals to the map
                 theta, phi = rd2tp(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'])
                 pixel_idxs = hp.ang2pix(self.nside, theta, phi)
-                
+
                 if self.average_angular_proj:
                     #averaging over the number of channels
                     np.add.at(hp_map_line, pixel_idxs, signal.value/self.Nchan)
@@ -404,7 +407,7 @@ class Survey(Lightcone):
                     theta_beam = self.beam_FWHM.to(u.rad)
                     hp_map_line = hp.smoothing(hp_map_line, theta_beam.value)
                 hp_map += hp_map_line
-                    
+
         #get the proper nside for the observed map
         if self.do_downsample:
             npix_fullsky = 4*np.pi/(self.beam_FWHM**2).to(u.sr).value
@@ -422,7 +425,7 @@ class Survey(Lightcone):
         mask[pix_within] = 0
         hp_map = hp.ma(hp_map)
         hp_map.mask = mask
-        
+
         #add noise
         if self.Tsys.value > 0.:
             #rescale the noise per pixel to the healpy pixel size
@@ -430,11 +433,11 @@ class Survey(Lightcone):
             if self.average_angular_proj:
                 hp_sigmaN *= 1./(self.Nchan)**0.5
             hp_map[pix_within] += self.rng.normal(0.,hp_sigmaN.value,pix_within.size)
-            
+
         #remove the monopole
         if self.do_remove_mean:
             hp_map = hp.pixelfunc.remove_monopole(hp_map,copy=False)
-            
+
         return hp_map
 
 
@@ -444,10 +447,10 @@ class Survey(Lightcone):
         Generates the mock intensity map observed in Fourier space,
         obtained from Cartesian coordinates. It does not include noise.
         '''
-        
+
         if self.do_angular:
             raise(Warning('Mask edges might be problematic due to the expanded selection!'))
-        
+
         #Define the mesh divisions and the box size
         Nmesh = np.array([self.supersample*self.Nchan,
                   self.supersample*self.Nside[0],
@@ -459,10 +462,10 @@ class Survey(Lightcone):
         raside_lim = self.raside_lim
         decside_lim = self.decside_lim
         rside_obs_lim = self.rside_obs_lim
-        
+
         ramid = 0.5*(self.RAObs_max + self.RAObs_min)
         decmid = 0.5*(self.DECObs_max + self.DECObs_min)
-        
+
         mins_obs = np.array([rside_obs_lim[0],raside_lim[0],decside_lim[0]])
 
         global sigma_par
@@ -498,7 +501,7 @@ class Survey(Lightcone):
                 #Shift the ra and dec of the halo such that they are centered in (0,0)
                 ra -= ramid.value
                 dec -= decmid.value
-                
+
                 ra,dec  = da.deg2rad(ra),da.deg2rad(dec)
 
                 # cartesian coordinates
@@ -543,7 +546,8 @@ class Survey(Lightcone):
                     lategrid[:,n] -= mins[n]
                 #Set the emitter in the grid and paint using pmesh directly instead of nbk
                 pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler='cic')
-                #Make realfield object
+                #Make realfield object                                                  BoxSize=Lbox, dtype='float32', resampler='cic')
+
                 field = pm.create(type='real')
                 layout = pm.decompose(lategrid)
                 #Exchange positions between different MPI ranks
@@ -551,7 +555,7 @@ class Survey(Lightcone):
                 #Assign weights following the layout of particles
                 if self.mass:
                     pm.paint(p, out=field, mass=1, resampler='cic')
-                else: 
+                else:
                     m = layout.exchange(signal.value)
                     pm.paint(p, out=field, mass=m, resampler='cic')
                 #Fourier transform fields and apply the filter
@@ -565,7 +569,54 @@ class Survey(Lightcone):
                     field = field.apply(aniso_filter, kind='wavenumber')
                 #Add this contribution to the total maps
                 maps+=field
-        
+
+        # add galactic foregrounds
+        if self.do_gal_foregrounds:
+            #define models for the different galactic foreground components
+            sky_config = {'synchrotron' : models("s1", self.nside),'dust' : models("d1", self.nside),'freefree' : models("f1", self.nside),'cmb' : models("c1", self.nside),'ame' : models("a1", self.nside)}
+            sky = pysm.Sky(sky_config) #create sky object using the specified model
+            obs_freqs=np.linspace(self.nuObs_min, self.nuObs_max, self.supersample*self.Nchan) #frequencies observed in survey
+            galactic_2d=(sky.signal()(obs_freqs))[:,0,:] #produce healpy maps, 0 index corresponds to intensity
+            rot_southpole = hp.Rotator(rot=[0, 90], inv=True) #rotation to place the galactic south pole at the origin
+
+            ra_fullsky, dec_fullsky, obs_mask=observed_mask_2d(self)
+            ra_insurvey=[]; dec_insurvey=[]; foreground_signal=[]
+            for i in range(len(obs_freq)):
+                galactic_2d_rotated=rot_southpole.rotate_map_pixel(galactic_2d[i]) #apply rotation
+                ra_insurvey.append(ra_fullsky[obs_mask])
+                dec_insurvey.append(dec_fullsky[obs_mask])
+                foreground_signal.append(galactic_2d_rotated[obs_mask]*u.uK)
+
+            ra,dec,redshift = da.broadcast_arrays(ra_map[obs_mask], dec_map[obs_mask], self.line_nu0[line]/obs_freqs -1)
+            ra,dec  = da.deg2rad(ra),da.deg2rad(dec)
+            # cartesian coordinates
+            x = da.cos(dec) * da.cos(ra)
+            y = da.cos(dec) * da.sin(ra)
+            z = da.sin(dec)
+            pos = da.vstack([x,y,z]).T
+            #radial distances in Mpch/h
+            r = redshift.map_blocks(lambda zz: (((self.cosmo.comoving_radial_distance(zz)*u.Mpc).to(self.Mpch)).value),dtype=redshift.dtype)
+            cartesian_pixelpos = r[:,None] * pos
+            foreground_grid = np.array(cartesian_pixelpos.compute())
+
+            for n in range(3):
+                foreground_grid[:,n] -= mins[n]
+            #Set the emitter in the grid and paint using pmesh directly instead of nbk
+            pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler='cic')
+            #Make realfield object
+
+            field = pm.create(type='real')
+            layout = pm.decompose(foreground_grid)
+            #Exchange positions between different MPI ranks
+            p = layout.exchange(foreground_grid)
+            #Assign weights following the layout of particles
+            m = layout.exchange(foreground_signal.value)
+            pm.paint(p, out=field, mass=m, resampler='cic')
+            #Fourier transform fields and apply the filter
+            field = field.r2c()
+            maps+=field
+
+
         #get the proper shape for the observed map
         if self.supersample > 1 and self.do_downsample:
             pm_down = pmesh.pm.ParticleMesh(np.array([self.Nchan,self.Nside[0],self.Nside[1]], dtype=int),
@@ -582,13 +633,13 @@ class Survey(Lightcone):
             else:
                 supersample_sigmaN = self.sigmaN * (self.supersample)**1.5
                 maps += self.rng.normal(0.,supersample_sigmaN.value,maps.shape)
-            
+
         #Remove mean
         if self.do_remove_mean:
             maps = maps-maps.cmean()
 
         return maps
-            
+
     def save_map(self,name,other_map=None):
         '''
         Saves a map (either pmesh or healpy depending on do_angular).
@@ -604,7 +655,7 @@ class Survey(Lightcone):
             hdu = fits.PrimaryHDU(map_to_save)
             hdu.writeto(name)
         return
-            
+
 
 #########################
 ## Auxiliary functions ##
@@ -643,10 +694,30 @@ def aniso_filter(k, v):
     kk[kk==0]==1
 
     return np.exp(-0.5*kk)*v
+
 def rd2tp(ra,dec):
     """ convert ra/dec to theta,phi"""
 
     phi = ra*np.pi/180
-    
+
     theta = np.pi/180 * (90. - dec)
     return theta, phi
+
+def tp2ra(theta, phi):
+    """ convert theta,phi to ra,dec"""
+
+    ra = np.rad2deg(phi)
+    dec = np.rad2deg(0.5 * np.pi - theta)
+    return ra, dec
+
+def observed_mask_2d(self):
+    pix = np.arange(hp.nside2npix(self.nside), dtype=int)
+    theta, phi = hp.pix2ang(self.nside, pix)
+    ra, dec = tp2ra(theta, phi)
+    ra[ra>180]=ra[ra>180]-360
+
+    RAmask=(ra>self.RAObs_min)&(ra<=self.RAObs_max)
+    DECmask=(dec>self.DECObs_min)&(dec<=self.DECObs_max)
+
+    mask=RAmask&DECmask
+    return ra, dec, mask
