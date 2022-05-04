@@ -581,11 +581,19 @@ class Survey(Lightcone):
 
         # add galactic foregrounds
         if self.do_gal_foregrounds:
+            inv_mask=build_inv_mask(self)
+            pixel_indices = np.arange(hp.nside2npix(nside), dtype=int)[inv_mask]
+
             #define models for the different galactic foreground components
-            sky_config = {'synchrotron' : models("s1", self.nside),'dust' : models("d1", self.nside),'freefree' : models("f1", self.nside),'cmb' : models("c1", self.nside),'ame' : models("a1", self.nside)}
+            sky_config = {'synchrotron' : models("s1", self.nside, pixel_indices=pixel_indices),
+            'dust' : models("d1", self.nside, pixel_indices=pixel_indices),
+            'freefree' : models("f1", self.nside, pixel_indices=pixel_indices),
+            'cmb' : models("c1", self.nside, pixel_indices=pixel_indices),
+            'ame' : models("a1", self.nside, pixel_indices=pixel_indices)}
             sky = pysm.Sky(sky_config) #create sky object using the specified model
             obs_freqs=np.linspace(self.nuObs_min, self.nuObs_max, self.supersample*self.Nchan) #frequencies observed in survey
-            galactic_2d=(sky.signal()(obs_freqs))[:,0,:] #produce healpy maps, 0 index corresponds to intensity
+            galactic_2d=build_partial_map(pixel_indices, (sky.signal()(obs_freqs))[:,0,:]) #produce healpy maps, 0 index corresponds to intensity
+
             rot_southpole = hp.Rotator(rot=[0, 90], inv=True) #rotation to place the galactic south pole at the origin
 
             ra_fullsky, dec_fullsky, obs_mask=observed_mask_2d(self)
@@ -730,3 +738,18 @@ def observed_mask_2d(self):
 
     mask=RAmask&DECmask
     return ra, dec, mask
+
+def build_inv_mask(self):
+    _, _, square_mask=observed_mask_2d(self)
+    pix_mask = np.arange(hp.nside2npix(self.nside), dtype=int)[square_mask]
+    square_partial_map = hp.UNSEEN*np.ones((hp.nside2npix(self.nside)))
+    square_partial_map[pix_mask] = np.ones((len(pix_mask)))
+
+    rot = hp.Rotator(rot=[0, -90], inv=True)
+    rotated_partial_map = rot.rotate_map_pixel(square_partial_map)
+    return hp.pixelfunc.mask_good(rotated_partial_map)
+
+def build_partial_map(self, pixel_indices, pixel_values):
+    partial_map = np.nan * np.empty((self.Nchan, hp.nside2npix(self.nside)))
+    partial_map[:, pixel_indices] = pixel_values
+    return partial_map
