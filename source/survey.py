@@ -589,14 +589,14 @@ class Survey(Lightcone):
             rot_southpole = hp.Rotator(rot=[0, 90], inv=True) #rotation to place the galactic south pole at the origin
 
             ra_fullsky, dec_fullsky, obs_mask=observed_mask_2d(self)
-            ra_insurvey=[]; dec_insurvey=[]; foreground_signal=[]
-            for i in range(len(obs_freq)):
+            ra_insurvey=[]; dec_insurvey=[]; z_insurvey=[]; foreground_signal=[]
+            for i in range(len(obs_freqs)):
                 galactic_2d_rotated=rot_southpole.rotate_map_pixel(galactic_2d[i]) #apply rotation
                 ra_insurvey.append(ra_fullsky[obs_mask])
                 dec_insurvey.append(dec_fullsky[obs_mask])
+                z_insurvey.append((self.line_nu0[self.target_line]/obs_freqs[i] -1)*np.ones((obs_mask.sum())))
                 foreground_signal.append(galactic_2d_rotated[obs_mask]*u.uK)
-
-            ra,dec,redshift = da.broadcast_arrays(ra_map[obs_mask], dec_map[obs_mask], self.line_nu0[line]/obs_freqs -1)
+            ra,dec,redshift = da.broadcast_arrays(np.asarray(ra_insurvey).flatten(), np.asarray(dec_insurvey).flatten(), np.asarray(z_insurvey).flatten())
             ra,dec  = da.deg2rad(ra),da.deg2rad(dec)
             # cartesian coordinates
             x = da.cos(dec) * da.cos(ra)
@@ -619,7 +619,7 @@ class Survey(Lightcone):
             #Exchange positions between different MPI ranks
             p = layout.exchange(foreground_grid)
             #Assign weights following the layout of particles
-            m = layout.exchange(foreground_signal.value)
+            m = layout.exchange(np.asarray(foreground_signal).flatten())
             pm.paint(p, out=field, mass=m, resampler='cic')
             #Fourier transform fields and apply the filter
             field = field.r2c()
@@ -725,8 +725,8 @@ def observed_mask_2d(self):
     ra, dec = tp2ra(theta, phi)
     ra[ra>180]=ra[ra>180]-360
 
-    RAmask=(ra>self.RAObs_min)&(ra<=self.RAObs_max)
-    DECmask=(dec>self.DECObs_min)&(dec<=self.DECObs_max)
+    RAmask=(ra>self.RAObs_min.value)&(ra<=self.RAObs_max.value)
+    DECmask=(dec>self.DECObs_min.value)&(dec<=self.DECObs_max.value)
 
     mask=RAmask&DECmask
     return ra, dec, mask
