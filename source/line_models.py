@@ -69,10 +69,13 @@ def CO_lines_scaling_LFIR(self,SFR,pars,nu0,rng):
     #avoid SFR=0 issues
     inds = np.where(SFR>0)
     L = np.zeros(len(SFR))*u.Lsun
-
-    #Get the LIR from Kennicutt 1998, arXiv:9807187
-    LIR = (SFR[inds]*(1/4.5e-44)*u.erg/u.s).to(u.Lsun)
-
+    
+    #IRX - Mstar relation from Bouwens 2017, arXiv:1606.05280
+    IRX = 10**-9.17*self.halo_catalog['SM_HALO'][inds]
+    #We get the LIR using SFRs and IRX, with coeffiencients from Kennicutt & Evans 2012
+    K_IR,K_UV = 1.49e-10, 1.71e-10
+    LIR = SFR[inds]/(K_IR + K_UV*10**-IRX)*u.Lsun
+    
     std = multivariate_normal(np.array([alpha,beta]),np.diag(np.array([alpha_std**2,beta_std**2])),LIR.shape)
     alpha_par,beta_par = std[:,0],std[:,1]
 
@@ -279,9 +282,13 @@ def FIR_scaling_relation(self,SFR,pars,nu0,rng):
     #avoid SFR=0 issues
     inds = np.where(SFR>0)
     L = np.zeros(len(SFR))*u.Lsun
+    
+    #IRX - Mstar relation from Bouwens 2017, arXiv:1606.05280
+    IRX = 10**-9.17*self.halo_catalog['SM_HALO'][inds]
+    #We get the LIR using SFRs and IRX, with coeffiencients from Kennicutt & Evans 2012
+    K_IR,K_UV = 1.49e-10, 1.71e-10
+    LIR = (SFR[inds]/(K_IR + K_UV*10**-IRX)*u.Lsun).to(u.erg/u.s)
 
-    #Get the LIR from Kennicutt 1998, arXiv:9807187
-    LIR = SFR[inds]*(1/4.5e-44)*u.erg/u.s
     LIR_norm = LIR*(1/1e41)
 
     std = multivariate_normal(np.array([alpha,beta]),np.diag(np.array([alpha_std**2,beta_std**2])),LIR.shape)
