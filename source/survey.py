@@ -86,9 +86,9 @@ class Survey(Lightcone):
 
     -mass                   Boolean: Create a map with number density of ALL the haloes within the catalog (defaul: False)
 
-    -Mhalo_min              Minimum halo mass (in Msun/h) to be included in the survey (filter for halos_in_survey). Default:None
+    -Mhalo_min              Minimum halo mass (in Msun/h) to be included in the survey (filter for halos_in_survey). Default:0
 
-    -Mstar_min              Minimum stellar mass in a halo (in Msun) to be ncluded in the survey (filter for halos_in_survey). Default:None
+    -Mstar_min              Minimum stellar mass in a halo (in Msun) to be ncluded in the survey (filter for halos_in_survey). Default:0
 
     '''
     def __init__(self,
