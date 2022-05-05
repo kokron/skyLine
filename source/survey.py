@@ -581,25 +581,34 @@ class Survey(Lightcone):
 
         # add galactic foregrounds
         if self.do_gal_foregrounds:
-            inv_mask=build_inv_mask(self)
-            pixel_indices = np.arange(hp.nside2npix(nside), dtype=int)[inv_mask]
+            dgrade_nside=2**10
+            inv_mask=build_inv_mask(self, dgrade_nside)
+            pixel_indices = np.arange(hp.nside2npix(dgrade_nside), dtype=int)[inv_mask]
 
             #define models for the different galactic foreground components
-            sky_config = {'synchrotron' : models("s1", self.nside, pixel_indices=pixel_indices),
-            'dust' : models("d1", self.nside, pixel_indices=pixel_indices),
-            'freefree' : models("f1", self.nside, pixel_indices=pixel_indices),
-            'cmb' : models("c1", self.nside, pixel_indices=pixel_indices),
-            'ame' : models("a1", self.nside, pixel_indices=pixel_indices)}
+            sky_config = {'synchrotron' : models("s1", dgrade_nside, pixel_indices=pixel_indices),
+            'dust' : models("d1", dgrade_nside, pixel_indices=pixel_indices),
+            'freefree' : models("f1", dgrade_nside, pixel_indices=pixel_indices),
+            'cmb' : models("c1", dgrade_nside, pixel_indices=pixel_indices),
+            'ame' : models("a1", dgrade_nside, pixel_indices=pixel_indices)}
+            
             sky = pysm.Sky(sky_config) #create sky object using the specified model
             obs_freqs=np.linspace(self.nuObs_min, self.nuObs_max, self.supersample*self.Nchan) #frequencies observed in survey
-            galactic_2d=build_partial_map(pixel_indices, (sky.signal()(obs_freqs))[:,0,:]) #produce healpy maps, 0 index corresponds to intensity
-
+            dgrade_galactic_2d=build_partial_map(self, pixel_indices, (sky.signal()(obs_freqs))[:,0,:], dgrade_nside) #produce healpy maps, 0 index corresponds to intensity
             rot_southpole = hp.Rotator(rot=[0, 90], inv=True) #rotation to place the galactic south pole at the origin
 
-            ra_fullsky, dec_fullsky, obs_mask=observed_mask_2d(self)
+            for i in range(len(obs_freqs)):
+                dgrade_galactic_2d_rotated=rot_southpole.rotate_map_pixel(dgrade_galactic_2d[i]) #apply rotation
+            galactic_2d_rotated=hp.pixelfunc.ud_grade(dgrade_galactic_2d_rotated, self.nside)
+
+            #ra_fullsky, dec_fullsky, obs_mask=observed_mask_2d(self)
+            pix = np.arange(hp.nside2npix(self.nside), dtype=int)
+            theta, phi = hp.pix2ang(self.nside, pix)
+            ra_fullsky, dec_fullsky = tp2ra(theta, phi)
             ra_insurvey=[]; dec_insurvey=[]; z_insurvey=[]; foreground_signal=[]
             for i in range(len(obs_freqs)):
-                galactic_2d_rotated=rot_southpole.rotate_map_pixel(galactic_2d[i]) #apply rotation
+                #galactic_2d_rotated=rot_southpole.rotate_map_pixel(galactic_2d[i]) #apply rotation
+                obs_mask=hp.pixelfunc.mask_good(galactic_2d_rotated)
                 ra_insurvey.append(ra_fullsky[obs_mask])
                 dec_insurvey.append(dec_fullsky[obs_mask])
                 z_insurvey.append((self.line_nu0[self.target_line]/obs_freqs[i] -1)*np.ones((obs_mask.sum())))
@@ -739,17 +748,19 @@ def observed_mask_2d(self):
     mask=RAmask&DECmask
     return ra, dec, mask
 
-def build_inv_mask(self):
+def build_inv_mask(self, dgrade_nside):
     _, _, square_mask=observed_mask_2d(self)
     pix_mask = np.arange(hp.nside2npix(self.nside), dtype=int)[square_mask]
     square_partial_map = hp.UNSEEN*np.ones((hp.nside2npix(self.nside)))
     square_partial_map[pix_mask] = np.ones((len(pix_mask)))
+    
+    dgrade_square_partial_map=hp.pixelfunc.ud_grade(square_partial_map, dgrade_nside)
 
     rot = hp.Rotator(rot=[0, -90], inv=True)
-    rotated_partial_map = rot.rotate_map_pixel(square_partial_map)
+    rotated_partial_map = rot.rotate_map_pixel(dgrade_square_partial_map)
     return hp.pixelfunc.mask_good(rotated_partial_map)
 
-def build_partial_map(self, pixel_indices, pixel_values):
-    partial_map = np.nan * np.empty((self.Nchan, hp.nside2npix(self.nside)))
+def build_partial_map(self, pixel_indices, pixel_values, dgrade_nside):
+    partial_map = np.nan * np.empty((self.Nchan, hp.nside2npix(dgrade_nside)))
     partial_map[:, pixel_indices] = pixel_values
     return partial_map
