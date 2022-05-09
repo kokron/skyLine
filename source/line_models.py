@@ -70,11 +70,12 @@ def CO_lines_scaling_LFIR(self,SFR,pars,nu0,rng):
     inds = np.where(SFR>0)
     L = np.zeros(len(SFR))*u.Lsun
     
-    #IRX - Mstar relation from Bouwens 2017, arXiv:1606.05280
-    IRX = 10**-9.17*self.halo_catalog['SM_HALO'][inds]
-    #We get the LIR using SFRs and IRX, with coeffiencients from Kennicutt & Evans 2012
-    K_IR,K_UV = 1.49e-10, 1.71e-10
-    LIR = SFR[inds]/(K_IR + K_UV*10**-IRX)*u.Lsun
+    #IRX - Mstar relation from Bouwens 2020, arXiv:2009.10727
+    log10Ms_IRX,alpha_IRX = multivariate_normal(np.array([9.15,0.97]),np.diag(np.array([0.17**2,0.17**2])),SFR[inds].shape)
+    IRX = (self.halo_catalog['SM_HALO'][inds]/10**log10Ms_IRX)**alpha_IRX#10**-9.17*self.halo_catalog['SM_HALO'][inds]
+    #We get the LIR using SFRs and IRX, with coeffiencients from Kennicutt & Evans 2012 assuming Kroupa IMG
+    K_IR,K_UV = 1.49e-10, 1.71e-10 
+    LIR = SFR[inds]/(K_IR + K_UV/IRX)*u.Lsun
     
     std = multivariate_normal(np.array([alpha,beta]),np.diag(np.array([alpha_std**2,beta_std**2])),LIR.shape)
     alpha_par,beta_par = std[:,0],std[:,1]
