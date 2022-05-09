@@ -52,6 +52,11 @@ class Lightcone(object):
                             same components of "lines", second layer, the following
                             components: model_name, model_pars (depends on the model))
                             (default: empty dictionary)
+                            
+    -LIR_pars               Dictionary with the parameters required to compute infrared
+                            luminosity, needed to compute certain lines luminosities.
+                            Check the LIR function in line_models for the required parameters 
+                            and available models
 
     -do_external_SFR        Boolean, whether to use a SFR different than Universe Machine
                             (default:False)
@@ -79,6 +84,7 @@ class Lightcone(object):
                                NIII = dict(model_name = '', model_pars = {}), NII = dict(model_name = '', model_pars = {}), 
                                OIII_88 = dict(model_name = '', model_pars = {}), OI_63 = dict(model_name = '', model_pars = {}), 
                                OI_145 = dict(model_name = '', model_pars = {}), OII = dict(model_name = '', model_pars = {}), OIII_0p5 = dict(model_name = '', model_pars = {})),
+                 LIR_pars = {},
                  do_external_SFR = False, external_SFR = '',sig_extSFR = 0.3, SFR_pars=dict(M0=1e-6, Ma=10**8, Mb=10**12.3, a=1.9, b=3.0, c=-1.4), 
                  seed=None):
 
