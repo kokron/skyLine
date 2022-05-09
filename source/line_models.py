@@ -7,6 +7,54 @@ from numpy.random import normal,multivariate_normal
 import astropy.units as u
 import astropy.constants as cu
 
+###################
+## IR Luminosity ##
+###################
+
+def LIR(self,SFR,pars,rng):
+    '''
+    Obtain the IR luminosity from SFR or stellar mass
+    
+    Parameters:
+        -SFR:       SFR of the halo in Msun/yr
+        -pars:      Dictionary of parameters
+            -IRX_name:      The reference to use the IRX from
+            -IRX_params:    The parameters required to compute the IRX 
+                            (check each if instance below)
+            -K_IR, K_UV:    The coefficients to relate SFR to L_IR and L_UV
+    '''
+    #avoid SFR=0 issues
+    inds = np.where(SFR>0)[0]
+    
+    #Try to get IRX:
+    if 'IRX_name' not in pars:
+        IRX = 1 #dummy value
+        K_IR = pars['K_IR']
+        K_UV = 0.
+    else:
+        #IRX - Mstar relation from Bouwens 2016, arXiv:1606.05280
+        if pars['IRX_name'] == 'Bouwens2016':
+            log10IRX_0 = normal(pars['log10IRX_0'],pars['std_log10IRX_0'],inds.shape)
+            IRX = 10**log10IRX_0*self.halo_catalog['SM_HALO'][inds]
+        #IRX - Mstar relation from Bouwens 2020, arXiv:2009.10727
+        elif pars['IRX_name'] == 'Bouwens2020':
+            log10Ms_IRX,alpha_IRX = multivariate_normal(np.array([pars['log10Ms_IRX'],pars['alpha_IRX']]),np.diag(np.array([pars['std_log10Ms_IRX']**2,pars['std_alpha_IRX']**2])),inds.shape)
+            IRX = (self.halo_catalog['SM_HALO'][inds]/10**log10Ms_IRX)**alpha_IRX
+        #IRX - Mstar relation from Heinis 2014, arXiv:1310.3227
+        elif pars['IRX_name'] == 'Heinis2014':
+            log10Ms_IRX,alpha_IRX,log10IRX_0 = multivariate_normal(np.array([pars['log10Ms_IRX'],pars['alpha_IRX'],pars['log10IRX_0']]),
+                                                                   np.diag(np.array([pars['std_log10Ms_IRX']**2,pars['std_alpha_IRX']**2,pars['std_log10IRX_0']**2])),inds.shape)
+            IRX = (self.halo_catalog['SM_HALO'][inds]/10**log10Ms_IRX)**alpha_IRX*10**log10IRX_0
+        else:
+            raise ValueError('Please choose a valid IRX model')
+    
+        K_IR,K_UV = pars['K_IR'],pars['K_UV']
+        
+    LIR = SFR[inds]/(K_IR + K_UV/IRX)*u.Lsun
+    
+    return LIR
+    
+
 ##############
 ## CO LINES ##
 ##############
@@ -33,9 +81,9 @@ def CO_Li16(self,SFR,pars,nu0,rng):
     LCO_samples = np.zeros(len(SFR))*u.Lsun
 
     #Convert halo SFR to IR luminosity
-    LIR = 1e10 * SFR[inds]/delta_mf
+    L_IR = 1e10 * SFR[inds]/delta_mf
     #Transform IR luminosity to CO luminosity (log10)
-    log10_LCO = (np.log10(LIR) - beta)/alpha
+    log10_LCO = (np.log10(L_IR) - beta)/alpha
     #Add normal scatter in the log10(LCO) and transform to Lsun and give units
     sigma_base_e = sigma_L*2.302585
     LCO_samples[inds] = 10**(log10_LCO)*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, log10_LCO.shape)*4.9e-5*u.Lsun*(nu0/(115.27*u.GHz))**3
@@ -70,17 +118,12 @@ def CO_lines_scaling_LFIR(self,SFR,pars,nu0,rng):
     inds = np.where(SFR>0)
     L = np.zeros(len(SFR))*u.Lsun
     
-    #IRX - Mstar relation from Bouwens 2020, arXiv:2009.10727
-    log10Ms_IRX,alpha_IRX = multivariate_normal(np.array([9.15,0.97]),np.diag(np.array([0.17**2,0.17**2])),SFR[inds].shape)
-    IRX = (self.halo_catalog['SM_HALO'][inds]/10**log10Ms_IRX)**alpha_IRX#10**-9.17*self.halo_catalog['SM_HALO'][inds]
-    #We get the LIR using SFRs and IRX, with coeffiencients from Kennicutt & Evans 2012 assuming Kroupa IMG
-    K_IR,K_UV = 1.49e-10, 1.71e-10 
-    LIR = SFR[inds]/(K_IR + K_UV/IRX)*u.Lsun
+    L_IR = LIR(self,SFR,self.LIR_pars,rng)
     
-    std = multivariate_normal(np.array([alpha,beta]),np.diag(np.array([alpha_std**2,beta_std**2])),LIR.shape)
+    std = multivariate_normal(np.array([alpha,beta]),np.diag(np.array([alpha_std**2,beta_std**2])),L_IR.shape)
     alpha_par,beta_par = std[:,0],std[:,1]
 
-    Lp = 10**((np.log10(LIR.value)-beta_par)/alpha_par)
+    Lp = 10**((np.log10(L_IR.value)-beta_par)/alpha_par)
 
     Lmean = (4.9e-5*u.Lsun)*Lp*(nu0/(115.27*u.GHz))**3
 
@@ -284,15 +327,10 @@ def FIR_scaling_relation(self,SFR,pars,nu0,rng):
     inds = np.where(SFR>0)
     L = np.zeros(len(SFR))*u.Lsun
     
-    #IRX - Mstar relation from Bouwens 2017, arXiv:1606.05280
-    IRX = 10**-9.17*self.halo_catalog['SM_HALO'][inds]
-    #We get the LIR using SFRs and IRX, with coeffiencients from Kennicutt & Evans 2012
-    K_IR,K_UV = 1.49e-10, 1.71e-10
-    LIR = (SFR[inds]/(K_IR + K_UV*10**-IRX)*u.Lsun).to(u.erg/u.s)
+    L_IR = LIR(self,SFR,self.LIR_pars,rng).to(u.erg/u.s)
+    LIR_norm = L_IR*(1/1e41)
 
-    LIR_norm = LIR*(1/1e41)
-
-    std = multivariate_normal(np.array([alpha,beta]),np.diag(np.array([alpha_std**2,beta_std**2])),LIR.shape)
+    std = multivariate_normal(np.array([alpha,beta]),np.diag(np.array([alpha_std**2,beta_std**2])),LIR_norm.shape)
     alpha_par,beta_par = std[:,0],std[:,1]
 
     Lerg_norm = 10**(alpha_par*np.log10(LIR_norm.value)-beta_par)
