@@ -113,7 +113,7 @@ class Survey(Lightcone):
                  do_remove_mean = True,
                  do_angular = False,
                  do_gal_foregrounds = False,
-                 foreground_model=dict(dgrade_nside=2**10, survey_center=[0*u.deg, 90*u.deg], sky={'synchrotron' : True, 'dust' : True, 'freefree' : True, 'cmb' : True,'ame' : True})
+                 foreground_model=dict(dgrade_nside=2**10, survey_center=[0*u.deg, 90*u.deg], sky={'synchrotron' : True, 'dust' : True, 'freefree' : True, 'cmb' : True,'ame' : True}),
                  average_angular_proj = True,
                  nside = 2048,
                  mass=False,
@@ -582,7 +582,7 @@ class Survey(Lightcone):
 
         # add galactic foregrounds
         if self.do_gal_foregrounds:
-            field=create_foreground_map(self)
+            field=self.create_foreground_map(mins, Nmesh, Lbox)
             maps+=field
 
         #get the proper shape for the observed map
@@ -607,11 +607,10 @@ class Survey(Lightcone):
             maps = maps-maps.cmean()
 
         return maps
-        
-    @cached_survey_property
-    def create_foreground_map(self):
-        if self.dgrade_nside!=self.nside:
-            dgrade_nside=self.dgrade_nside
+    
+    def create_foreground_map(self, mins, Nmesh, Lbox):
+        if self.foreground_model['dgrade_nside']!=self.nside:
+            dgrade_nside=self.foreground_model['dgrade_nside']
         else:
             dgrade_nside=self.nside
 
@@ -621,37 +620,38 @@ class Survey(Lightcone):
         for cmp in components:
             if cmp=='synchrotron':
                 sky_config['synchrotron']=models("s1", dgrade_nside)
-            elif cmp='dust':
+            elif cmp=='dust':
                 sky_config['dust']=models("d1", dgrade_nside)
-            elif cmp='freefree':
+            elif cmp=='freefree':
                 sky_config['freefree']=models("f1", dgrade_nside)
-            elif cmp='cmb':
+            elif cmp=='cmb':
                 sky_config['cmb']=models("c1", dgrade_nside)
-            elif cmp='ame':
+            elif cmp=='ame':
                 sky_config['ame']=models("a1", dgrade_nside)
             else:
                 raise(Warning('Unknown galactic foreground component'))
 
         sky = pysm.Sky(sky_config) #create sky object using the specified model
         obs_freqs=np.linspace(self.nuObs_min, self.nuObs_max, self.supersample*self.Nchan) #frequencies observed in survey
-        dgrade_galmap=sky.signal()(obs_freqs))[:,0,:]#produce healpy maps, 0 index corresponds to intensity
-        rot_center = hp.Rotator(rot=[self.survey_center[0].to_value(u.deg), self.survey_center[1].to_value(u.deg)], inv=True) #rotation to place the center of the survey at the origin
+        dgrade_galmap=sky.signal()(obs_freqs)[:,0,:]#produce healpy maps, 0 index corresponds to intensity
+        rot_center = hp.Rotator(rot=[self.foreground_model['survey_center'][0].to_value(u.deg), self.foreground_model['survey_center'][1].to_value(u.deg)], inv=True) #rotation to place the center of the survey at the origin
 
         for i in range(len(obs_freqs)):
             dgrade_galmap_rotated=rot_center.rotate_map_pixel(dgrade_galmap[i]) #apply rotation
 
-        if self.dgrade_nside!=self.nside:
-            galmap_rotated=hp.pixelfunc.ud_grade(dgrade_galactic_2d_rotated, self.nside)
+        if self.foreground_model['dgrade_nside']!=self.nside:
+            galmap_rotated=hp.pixelfunc.ud_grade(dgrade_galmap_rotated, self.nside)
         else:
             galmap_rotated=dgrade_galactic_2d_rotated
-
+        
+        norm=hp.nside2pixarea(self.nside, degrees=True)*(u.deg**2).to(self.Omega_field.unit)/(self.Omega_field/self.Npix)
         ra_fullsky, dec_fullsky, obs_mask= observed_mask_2d(self)
         ra_insurvey=[]; dec_insurvey=[]; z_insurvey=[]; foreground_signal=[]
         for i in range(len(obs_freqs)):
             ra_insurvey.append(ra_fullsky[obs_mask])
             dec_insurvey.append(dec_fullsky[obs_mask])
             z_insurvey.append((self.line_nu0[self.target_line]/obs_freqs[i] -1)*np.ones((obs_mask.sum())))
-            foreground_signal.append(galmap_rotated[obs_mask]*u.uK)
+            foreground_signal.append(norm*galmap_rotated[obs_mask]*u.uK)
 
         ra,dec,redshift = da.broadcast_arrays(np.asarray(ra_insurvey).flatten(), np.asarray(dec_insurvey).flatten(), np.asarray(z_insurvey).flatten())
         ra,dec  = da.deg2rad(ra),da.deg2rad(dec)
@@ -681,6 +681,7 @@ class Survey(Lightcone):
         #Fourier transform fields and apply the filter
         field = field.r2c()
         return field
+        
 
     def save_map(self,name,other_map=None):
         '''
