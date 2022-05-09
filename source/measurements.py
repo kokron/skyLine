@@ -143,7 +143,7 @@ class Measure(Survey):
                 #Compensate the field for the CIC window function we apply
                 map_to_use = (map_to_use.r2c().apply(CompensateCICShotnoise, kind='circular')).c2r()
                     
-                return FFTPower(map_to_use, '2d', Nmu=self.Nmu, poles=[0,2,4], los=[1,0,0],
+                return FFTPower(map_to_use, '2d', Nmu=self.Nmu, poles=[0,2], los=[1,0,0],
                                 dk=self.dk.to(self.Mpch**-1).value,kmin=self.kmin.to(self.Mpch**-1).value,
                                 kmax=self.kmax.to(self.Mpch**-1).value,BoxSize=self.Lbox.value)
 
@@ -170,13 +170,6 @@ class Measure(Survey):
         Quadrupole of the power spectrum
         '''
         return (self.Pk_2d.poles['power_2'].real*self.Mpch**3).to(self.Mpch**3)*self.unit**2
-
-    @cached_measure_property
-    def Pk_4(self):
-        '''
-        Hexadecapole of the power spectrum
-        '''
-        return (self.Pk_2d.poles['power_4'].real*self.Mpch**3).to(self.Mpch**3)*self.unit**2
         
     ###################################################
     ## Theoretical Pk multipole covariance using lim ##
