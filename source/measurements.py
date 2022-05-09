@@ -40,15 +40,6 @@ class Measure(Survey):
     -remove_noise:          Remove the expected instrumental noise power spectrum (sigma_N^2*Vvox)
                             from the observed power spectrum (and adds it to the covariance).
                             (default: False)
-    
-    -Tmin_VID,Tmax_VID:     Minimum and maximum values to compute the VID histogram
-                            (default: 0.01 uK, 1000 uK)
-                            
-    -linear_VID_bin:        Boolean, to do linear (or log) binning for the VID histogram
-                            (default: False)
-
-    -Nbin_hist              Number of bins for the VID histogram
-                            (default: 100)
                             
     -angular_map            Whether the map used is angular (healpy map). (Default: False)
     
@@ -63,10 +54,6 @@ class Measure(Survey):
                  Nmu = 5,
                  lmax = 1000,
                  remove_noise = False,
-                 Tmin_VID = 1.0e-2*u.uK,
-                 Tmax_VID = 1000.*u.uK,
-                 linear_VID_bin = False,
-                 Nbin_hist = 100,
                  angular_map = False,
                  do_read_map = False,
                  map_name = '',
@@ -170,40 +157,4 @@ class Measure(Survey):
         '''
         return (self.Pk_2d.poles['power_2'].real*self.Mpch**3).to(self.Mpch**3)*self.unit**2
                 
-    ######################
-    ## VID measurements ##
-    ######################
-    
-    @cached_measure_property
-    def Ti_edge(self):
-        '''
-        Edges of the VID histogram bins
-        '''
-        if self.linear_VID_bin:
-            Te = np.linspace(self.Tmin_VID.value,self.Tmax_VID.value,self.Nbin_hist+1)*self.Tmin_VID.unit
-        else:
-            Te = np.logspace(np.log10(self.Tmin_VID.value),np.log10(self.Tmax_VID.value),self.Nbin_hist+1)*self.Tmin_VID.unit
-        return Te
 
-    @cached_measure_property
-    def Ti(self):
-        '''
-        Center of the VID histogram bins
-        '''
-        return (self.Ti_edge[:-1]+self.Ti_edge[1:])/2.
-
-    @cached_measure_property
-    def Bi_VID(self):
-        '''
-        Computes the histogram of temperatures in each voxel in hte observed map.
-        Equivalent to the VID
-        '''
-        return np.histogram(self.obs_3d_map.value.flatten(),
-                            bins=self.Ti_edge.value)[0]
-
-    @cached_measure_property
-    def Bi_VID_covariance(self):
-        '''
-        Covariance matrix of the VID histograms
-        '''
-        return np.diag(self.Bi_VID)
