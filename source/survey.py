@@ -12,7 +12,6 @@ import pmesh
 import healpy as hp
 from source.lightcone import Lightcone
 from source.utilities import cached_survey_property,get_default_params,check_params
-from source.utilities import set_lim, dict_lines
 
 try:
     import pysm
@@ -607,7 +606,7 @@ class Survey(Lightcone):
             maps = maps-maps.cmean()
 
         return maps
-    
+
     def create_foreground_map(self, mins, Nmesh, Lbox):
         if self.foreground_model['dgrade_nside']!=self.nside:
             dgrade_nside=self.foreground_model['dgrade_nside']
@@ -643,7 +642,7 @@ class Survey(Lightcone):
             galmap_rotated=hp.pixelfunc.ud_grade(dgrade_galmap_rotated, self.nside)
         else:
             galmap_rotated=dgrade_galactic_2d_rotated
-        
+
         norm=hp.nside2pixarea(self.nside, degrees=True)*(u.deg**2).to(self.Omega_field.unit)/(self.Omega_field/self.Npix)
         ra_fullsky, dec_fullsky, obs_mask= observed_mask_2d(self)
         ra_insurvey=[]; dec_insurvey=[]; z_insurvey=[]; foreground_signal=[]
@@ -681,7 +680,7 @@ class Survey(Lightcone):
         #Fourier transform fields and apply the filter
         field = field.r2c()
         return field
-        
+
 
     def save_map(self,name,other_map=None):
         '''
