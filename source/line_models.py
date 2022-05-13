@@ -34,19 +34,21 @@ def LIR(self,SFR,pars,rng):
     else:
         #IRX - Mstar relation from Bouwens 2016, arXiv:1606.05280
         if pars['IRX_name'] == 'Bouwens2016':
-            log10IRX_0 = normal(pars['log10IRX_0'],pars['std_log10IRX_0'],inds.shape)
+            log10IRX_0,sigma_IRX = pars['log10IRX_0'],pars['sigma_IRX']
             IRX = 10**log10IRX_0*self.halo_catalog['SM_HALO'][inds]
         #IRX - Mstar relation from Bouwens 2020, arXiv:2009.10727
         elif pars['IRX_name'] == 'Bouwens2020':
-            log10Ms_IRX,alpha_IRX = multivariate_normal(np.array([pars['log10Ms_IRX'],pars['alpha_IRX']]),np.diag(np.array([pars['std_log10Ms_IRX']**2,pars['std_alpha_IRX']**2])),inds.shape).T
+            log10Ms_IRX,alpha_IRX,sigma_IRX = pars['log10Ms_IRX'],pars['alpha_IRX'],pars['sigma_IRX']
             IRX = (self.halo_catalog['SM_HALO'][inds]/10**log10Ms_IRX)**alpha_IRX
         #IRX - Mstar relation from Heinis 2014, arXiv:1310.3227
         elif pars['IRX_name'] == 'Heinis2014':
-            log10Ms_IRX,alpha_IRX,log10IRX_0 = multivariate_normal(np.array([pars['log10Ms_IRX'],pars['alpha_IRX'],pars['log10IRX_0']]),
-                                                                   np.diag(np.array([pars['std_log10Ms_IRX']**2,pars['std_alpha_IRX']**2,pars['std_log10IRX_0']**2])),inds.shape)
+            log10Ms_IRX,alpha_IRX,log10IRX_0,sigma_IRX = pars['log10Ms_IRX'],pars['alpha_IRX'],pars['log10IRX_0'],pars['sigma_IRX']
             IRX = (self.halo_catalog['SM_HALO'][inds]/10**log10Ms_IRX)**alpha_IRX*10**log10IRX_0
         else:
             raise ValueError('Please choose a valid IRX model')
+        #Add mean-preserving lognormal scatter in the IRX relation
+        sigma_base_e = sigma_IRX*2.302585
+        IRX = IRX*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, IRX.shape)
 
         K_IR,K_UV = pars['K_IR'],pars['K_UV']
 
@@ -105,14 +107,12 @@ def CO_lines_scaling_LFIR(self,SFR,pars,nu0,rng):
         -pars:      Dictionary of parameters for the model
             -alpha
             -beta
-            -alpha_std  Std of the alpha param
-            -beta_std   Std of the beta param
             -sigma_L    Scatter in dex of the luminosity
     '''
     try:
-        alpha,beta,alpha_std,beta_std,sigma_L = pars['alpha'],pars['beta'],pars['alpha_std'],pars['beta_std'],pars['sigma_L']
+        alpha,beta,sigma_L = pars['alpha'],pars['beta'],pars['sigma_L']
     except:
-        raise ValueError('The model_pars for CO_lines_scaling_LFIR are "alpha","beta", "alpha_std", "beta_std","sigma_L" but {} were provided'.format(pars.keys()))
+        raise ValueError('The model_pars for CO_lines_scaling_LFIR are "alpha","beta", "sigma_L" but {} were provided'.format(pars.keys()))
 
     #avoid SFR=0 issues
     inds = np.where(SFR>0)
@@ -120,10 +120,7 @@ def CO_lines_scaling_LFIR(self,SFR,pars,nu0,rng):
 
     L_IR = LIR(self,SFR,self.LIR_pars,rng)
 
-    std = multivariate_normal(np.array([alpha,beta]),np.diag(np.array([alpha_std**2,beta_std**2])),L_IR.shape)
-    alpha_par,beta_par = std[:,0],std[:,1]
-
-    Lp = 10**((np.log10(L_IR.value)-beta_par)/alpha_par)
+    Lp = 10**((np.log10(L_IR.value)-beta)/alpha)
 
     Lmean = (4.9e-5*u.Lsun)*Lp*(nu0/(115.27*u.GHz))**3
 
@@ -278,17 +275,14 @@ def SFR_scaling_relation_Kennicutt(self,SFR,pars,nu0,rng):
         -SFR:       SFR of the halo in Msun/yr
         -pars:      Dictionary of parameters for the model
             -K            linear factor SFR = K*L (L in ergios/s)
-            -Kstd         Std of the linear relation
             -Aext         Extinction of the line
             -sigma_L: Scatter in dex of the luminosity
     '''
     try:
-        K,Kstd,Aext,sigma_L = pars['K'],pars['Kstd'],pars['Aext'],pars['sigma_L']
+        K,Kstd,Aext,sigma_L = pars['K'],pars['Aext'],pars['sigma_L']
     except:
-        raise ValueError('The model_pars for SFR_scaling_relation_Kennicutt are "K","Kstd", Aext, sigma_L but {} were provided'.format(pars.keys()))
-    #Spread in the linear relation
-    factor = normal(K,Kstd,len(SFR))
-    L = (SFR*factor*u.erg/u.s).to(u.Lsun)
+        raise ValueError('The model_pars for SFR_scaling_relation_Kennicutt are "K", Aext, sigma_L but {} were provided'.format(pars.keys()))
+    L = (SFR*K*u.erg/u.s).to(u.Lsun)
 
     #Add scatter to the relation
     sigma_base_e = sigma_L*2.302585
@@ -315,14 +309,12 @@ def FIR_scaling_relation(self,SFR,pars,nu0,rng):
         -pars:      Dictionary of parameters for the model
             -alpha
             -beta
-            -alpha_std  Std of the alpha param
-            -beta_std   Std of the beta param
             -sigma_L    Scatter in dex of the luminosity
     '''
     try:
-        alpha,beta,alpha_std,beta_std,sigma_L = pars['alpha'],pars['beta'],pars['alpha_std'],pars['beta_std'],pars['sigma_L']
+        alpha,beta,sigma_L = pars['alpha'],pars['beta'],pars['sigma_L']
     except:
-        raise ValueError('The model_pars for FIR_scaling_relation are "alpha","beta", "alpha_std", "beta_std","sigma_L" but {} were provided'.format(pars.keys()))
+        raise ValueError('The model_pars for FIR_scaling_relation are "alpha","beta", "sigma_L" but {} were provided'.format(pars.keys()))
     #avoid SFR=0 issues
     inds = np.where(SFR>0)
     L = np.zeros(len(SFR))*u.Lsun
@@ -330,10 +322,7 @@ def FIR_scaling_relation(self,SFR,pars,nu0,rng):
     L_IR = LIR(self,SFR,self.LIR_pars,rng).to(u.erg/u.s)
     LIR_norm = L_IR*(1/1e41)
 
-    std = multivariate_normal(np.array([alpha,beta]),np.diag(np.array([alpha_std**2,beta_std**2])),LIR_norm.shape)
-    alpha_par,beta_par = std[:,0],std[:,1]
-
-    Lerg_norm = 10**(alpha_par*np.log10(LIR_norm.value)-beta_par)
+    Lerg_norm = 10**(alpha*np.log10(LIR_norm.value)-beta)
     Lmean = (Lerg_norm*1e41*u.erg/u.s).to(u.Lsun)
 
     #Add scatter to the relation
