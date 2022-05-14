@@ -14,8 +14,7 @@ from source.lightcone import Lightcone
 from source.utilities import cached_survey_property,get_default_params,check_params
 
 try:
-    import pysm
-    from pysm.nominal import models
+    import pysm3
     NoPySM = False
 except:
     NoPySM = True
@@ -615,38 +614,34 @@ class Survey(Lightcone):
 
         #build foreground component dictionary
         components=[key for key,value in self.foreground_model['sky'].items() if value == True]
-        sky_config = {}
+        sky_config = []
         for cmp in components:
             if cmp=='synchrotron':
-                sky_config['synchrotron']=models("s1", dgrade_nside)
+                sky_config.append("s1")
             elif cmp=='dust':
-                sky_config['dust']=models("d1", dgrade_nside)
+                sky_config.append("d1")
             elif cmp=='freefree':
-                sky_config['freefree']=models("f1", dgrade_nside)
-            elif cmp=='cmb':
-                sky_config['cmb']=models("c1", dgrade_nside)
+                sky_config.append("f1")
             elif cmp=='ame':
-                sky_config['ame']=models("a1", dgrade_nside)
+                sky_config.append("a1")
             else:
                 raise(Warning('Unknown galactic foreground component'))
 
-        sky = pysm.Sky(sky_config) #create sky object using the specified model
+        sky = pysm3.Sky(nside=dgrade_nside, preset_strings=sky_config)#create sky object using the specified model
         obs_freqs=np.linspace(self.nuObs_min, self.nuObs_max, self.supersample*self.Nchan) #frequencies observed in survey
-        dgrade_galmap=sky.signal()(obs_freqs)[:,0,:]#produce healpy maps, 0 index corresponds to intensity
-        rot_center = hp.Rotator(rot=[self.foreground_model['survey_center'][0].to_value(u.deg), self.foreground_model['survey_center'][1].to_value(u.deg)], inv=True) #rotation to place the center of the survey at the origin
-
-        for i in range(len(obs_freqs)):
-            dgrade_galmap_rotated=rot_center.rotate_map_pixel(dgrade_galmap[i]) #apply rotation
-
-        if self.foreground_model['dgrade_nside']!=self.nside:
-            galmap_rotated=hp.pixelfunc.ud_grade(dgrade_galmap_rotated, self.nside)
-        else:
-            galmap_rotated=dgrade_galactic_2d_rotated
 
         norm=hp.nside2pixarea(self.nside, degrees=True)*(u.deg**2).to(self.Omega_field.unit)/(self.Omega_field/self.Npix)
         ra_fullsky, dec_fullsky, obs_mask= observed_mask_2d(self)
         ra_insurvey=[]; dec_insurvey=[]; z_insurvey=[]; foreground_signal=[]
         for i in range(len(obs_freqs)):
+            dgrade_galmap=sky.get_emission(obs_freqs[i])[0]#produce healpy maps, 0 index corresponds to intensity
+            rot_center = hp.Rotator(rot=[self.foreground_model['survey_center'][0].to_value(u.deg), self.foreground_model['survey_center'][1].to_value(u.deg)], inv=True) #rotation to place the center of the survey at the origin
+            dgrade_galmap_rotated = pysm3.apply_smoothing_and_coord_transform(dgrade_galmap, rot=rot_center)
+            if self.foreground_model['dgrade_nside']!=self.nside:
+                galmap_rotated=hp.pixelfunc.ud_grade(dgrade_galmap_rotated, self.nside)
+            else:
+                galmap_rotated=dgrade_galmap_rotated
+
             ra_insurvey.append(ra_fullsky[obs_mask])
             dec_insurvey.append(dec_fullsky[obs_mask])
             z_insurvey.append((self.line_nu0[self.target_line]/obs_freqs[i] -1)*np.ones((obs_mask.sum())))
