@@ -55,7 +55,52 @@ def LIR(self,SFR,pars,rng):
     LIR = SFR[inds]/(K_IR + K_UV/IRX)*u.Lsun
 
     return LIR
+    
 
+def LIR_and_LUV(self,SFR,pars,rng):
+    '''
+    Obtain the IR and UV luminosities from SFR or stellar mass
+    
+    -to use outside code
+
+    Parameters:
+        -SFR:       SFR of the halo in Msun/yr
+        -pars:      Dictionary of parameters
+            -IRX_name:      The reference to use the IRX from
+            -IRX_params:    The parameters required to compute the IRX
+                            (check each if instance below)
+            -K_IR, K_UV:    The coefficients to relate SFR to L_IR and L_UV
+    '''
+    #avoid SFR=0 issues
+    inds = np.where(SFR>0)[0]
+
+    #Try to get IRX:
+    if 'IRX_name' not in pars:
+        raise ValueError('To use this function you need to choose an IRX model')
+    else:
+        #IRX - Mstar relation from Bouwens 2016, arXiv:1606.05280
+        if pars['IRX_name'] == 'Bouwens2016':
+            log10IRX_0,sigma_IRX = pars['log10IRX_0'],pars['sigma_IRX']
+            IRX = 10**log10IRX_0*self.halo_catalog['SM_HALO'][inds]
+        #IRX - Mstar relation from Bouwens 2020, arXiv:2009.10727
+        elif pars['IRX_name'] == 'Bouwens2020':
+            log10Ms_IRX,alpha_IRX,sigma_IRX = pars['log10Ms_IRX'],pars['alpha_IRX'],pars['sigma_IRX']
+            IRX = (self.halo_catalog['SM_HALO'][inds]/10**log10Ms_IRX)**alpha_IRX
+        #IRX - Mstar relation from Heinis 2014, arXiv:1310.3227
+        elif pars['IRX_name'] == 'Heinis2014':
+            log10Ms_IRX,alpha_IRX,log10IRX_0,sigma_IRX = pars['log10Ms_IRX'],pars['alpha_IRX'],pars['log10IRX_0'],pars['sigma_IRX']
+            IRX = (self.halo_catalog['SM_HALO'][inds]/10**log10Ms_IRX)**alpha_IRX*10**log10IRX_0
+        else:
+            raise ValueError('Please choose a valid IRX model')
+        #Add mean-preserving lognormal scatter in the IRX relation
+        sigma_base_e = sigma_IRX*2.302585
+        IRX = IRX*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, IRX.shape)
+
+        K_IR,K_UV = pars['K_IR'],pars['K_UV']
+
+    LIR = SFR[inds]/(K_IR + K_UV/IRX)*u.Lsun
+
+    return LIR,LIR/IRX
 
 ##############
 ## CO LINES ##
