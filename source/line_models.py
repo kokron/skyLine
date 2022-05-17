@@ -322,7 +322,7 @@ def SFR_scaling_relation_Kennicutt(self,SFR,LIR,pars,nu0,rng):
             -sigma_L: Scatter in dex of the luminosity
     '''
     try:
-        K,Kstd,Aext,sigma_L = pars['K'],pars['Aext'],pars['sigma_L']
+        K,Aext,sigma_L = pars['K'],pars['Aext'],pars['sigma_L']
     except:
         raise ValueError('The model_pars for SFR_scaling_relation_Kennicutt are "K", Aext, sigma_L but {} were provided'.format(pars.keys()))
     L = (SFR*K*u.erg/u.s).to(u.Lsun)
