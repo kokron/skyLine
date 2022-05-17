@@ -243,7 +243,7 @@ class Lightcone(object):
         else:
             SFR = self.halo_catalog['SFR_HALO']
             
-        if len(self.LIR_pars.keys()>0):
+        if len(self.LIR_pars.keys())>0:
             LIR = getattr(LM,'LIR')(self,SFR,self.LIR_pars,self.rng)
         else:
             LIR = 0*u.Lsun
