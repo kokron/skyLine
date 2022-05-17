@@ -61,7 +61,7 @@ def LIR(self,SFR,pars,rng):
 ## CO LINES ##
 ##############
 
-def CO_Li16(self,SFR,pars,nu0,rng):
+def CO_Li16(self,SFR,LIR,pars,nu0,rng):
     '''
     Model for CO(1-0) line from Li+2016 (arXiv:1503.08833)
 
@@ -82,7 +82,7 @@ def CO_Li16(self,SFR,pars,nu0,rng):
     inds = np.where(SFR>0)
     LCO_samples = np.zeros(len(SFR))*u.Lsun
 
-    #Convert halo SFR to IR luminosity
+    #Convert halo SFR to IR luminosity following Li+2016 instead of our own L_IR
     L_IR = 1e10 * SFR[inds]/delta_mf
     #Transform IR luminosity to CO luminosity (log10)
     log10_LCO = (np.log10(L_IR) - beta)/alpha
@@ -93,7 +93,7 @@ def CO_Li16(self,SFR,pars,nu0,rng):
     return LCO_samples
 
 
-def CO_lines_scaling_LFIR(self,SFR,pars,nu0,rng):
+def CO_lines_scaling_LFIR(self,SFR,LIR,pars,nu0,rng):
     '''
     Returns the luminosity for CO lines lines that have empirical scaling relations with FIR luminosity
 
@@ -118,9 +118,7 @@ def CO_lines_scaling_LFIR(self,SFR,pars,nu0,rng):
     inds = np.where(SFR>0)
     L = np.zeros(len(SFR))*u.Lsun
 
-    L_IR = LIR(self,SFR,self.LIR_pars,rng)
-
-    Lp = 10**((np.log10(L_IR.value)-beta)/alpha)
+    Lp = 10**((np.log10(LIR.value)-beta)/alpha)
 
     Lmean = (4.9e-5*u.Lsun)*Lp*(nu0/(115.27*u.GHz))**3
 
@@ -135,7 +133,7 @@ def CO_lines_scaling_LFIR(self,SFR,pars,nu0,rng):
 ## CII LINE ##
 ##############
 
-def CII_Silva15(self,SFR,pars,nu0,rng):
+def CII_Silva15(self,SFR,LIR,pars,nu0,rng):
     '''
     Model for CII line from Silva+2015 (arXiv:1410.4808)
 
@@ -163,7 +161,7 @@ def CII_Silva15(self,SFR,pars,nu0,rng):
 
     return L
 
-def CII_Lagache18(self,SFR,pars,nu0,rng):
+def CII_Lagache18(self,SFR,LIR,pars,nu0,rng):
     '''
     Model for CII line from Lagache+2018 (arXiv:1711.00798)
 
@@ -197,7 +195,7 @@ def CII_Lagache18(self,SFR,pars,nu0,rng):
 ## Ly-alpha LINE ##
 ##############
 
-def Lyalpha_Chung19(self,SFR,pars,nu0,rng):
+def Lyalpha_Chung19(self,SFR,LIR,pars,nu0,rng):
     '''
     Model for Lyman-alpha line used in Chung+2019 (arXiv:1809.04550)
 
@@ -228,7 +226,7 @@ def Lyalpha_Chung19(self,SFR,pars,nu0,rng):
 ## 21-cm LINE ##
 ##############
 
-def HI_VN18(self,SFR,pars,nu0,rng):
+def HI_VN18(self,SFR,LIR,pars,nu0,rng):
     '''
     Model for 21-cm line used in Villaescusa-Navarro+2018 (arXiv:1804.09180)
 
@@ -264,7 +262,7 @@ def HI_VN18(self,SFR,pars,nu0,rng):
 ## SFR Kennicutt scaling relations ##
 #####################################
 
-def SFR_scaling_relation_Kennicutt(self,SFR,pars,nu0,rng):
+def SFR_scaling_relation_Kennicutt(self,SFR,LIR,pars,nu0,rng):
     '''
     Model for SFR-related lines used in Gong+2017 (arXiv:1610.09060),
     employing Kennicutt relations and extinctions.
@@ -295,7 +293,7 @@ def SFR_scaling_relation_Kennicutt(self,SFR,pars,nu0,rng):
 ## LIR scaling relations ##
 ###########################
 
-def FIR_scaling_relation(self,SFR,pars,nu0,rng):
+def FIR_scaling_relation(self,SFR,LIR,pars,nu0,rng):
     '''
     Returns the luminosity for lines that have empirical scaling relations with FIR luminosity
 
@@ -319,8 +317,7 @@ def FIR_scaling_relation(self,SFR,pars,nu0,rng):
     inds = np.where(SFR>0)
     L = np.zeros(len(SFR))*u.Lsun
 
-    L_IR = LIR(self,SFR,self.LIR_pars,rng).to(u.erg/u.s)
-    LIR_norm = L_IR*(1/1e41)
+    LIR_norm = LIR.to(u.erg/u.s)*(1/1e41)
 
     Lerg_norm = 10**(alpha*np.log10(LIR_norm.value)-beta)
     Lmean = (Lerg_norm*1e41*u.erg/u.s).to(u.Lsun)
