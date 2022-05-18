@@ -241,12 +241,13 @@ def HI_VN18(self,SFR,pars,nu0,rng):
     M
     '''
     try:
-        M0, Mmin, alpha,sigma_L = pars['M0'],pars['Mmin'],pars['alpha'],pars['sigma_L']
+        M0, Mmin, alpha, M0_std, Mmin_std, alpha_std, sigma_L = pars['M0'],pars['Mmin'],pars['alpha'],pars['M0_std'],pars['Mmin_std'],pars['alpha_std'],pars['sigma_L']
     except:
         raise ValueError('The model_pars for HI_VN18 are M0, Mmin, alpha, and sigma_L, but {} were provided'.format(pars.keys()))
 
     Mhalo_Msun = (self.halo_catalog['M_HALO']*self.Msunh).to(u.Msun)
-    MHI=M0*np.exp(-(Mmin/Mhalo_Msun)**0.35)*(Mhalo_Msun/Mmin)**alpha
+    M0_sample, Mmin_sample, alpha_sample = multivariate_normal(np.asarray([M0.to_value(u.Msun), Mmin.to_value(u.Msun), alpha]), np.diag([M0_std.to_value(u.Msun), Mmin_std.to_value(u.Msun), alpha_std]), len(Mhalo_Msun.value)).T
+    MHI=M0_sample*u.Msun*np.exp(-(Mmin_sample*u.Msun/Mhalo_Msun)**0.35)*np.power(Mhalo_Msun/(Mmin_sample*u.Msun), alpha_sample)
 
     A10=2.869e-15*u.s**(-1) #spontaneous emission coefficient
     coeff=((3/4)*A10*cu.h*self.line_nu0['HI']/cu.m_p).to(u.Lsun/u.Msun)

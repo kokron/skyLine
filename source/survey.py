@@ -111,7 +111,7 @@ class Survey(Lightcone):
                  do_remove_mean = True,
                  do_angular = False,
                  do_gal_foregrounds = False,
-                 foreground_model=dict(dgrade_nside=2**10, survey_center=[0*u.deg, 90*u.deg], sky={'synchrotron' : True, 'dust' : True, 'freefree' : True, 'cmb' : True,'ame' : True}),
+                 foreground_model=dict(dgrade_nside=2**10, survey_center=[0*u.deg, 90*u.deg], sky={'synchrotron' : True, 'dust' : True, 'freefree' : True,'ame' : True}),
                  average_angular_proj = True,
                  nside = 2048,
                  mass=False,
