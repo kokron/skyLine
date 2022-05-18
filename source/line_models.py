@@ -284,23 +284,22 @@ def HI_VN18(self,SFR,LIR,pars,nu0,rng):
     M
     '''
     try:
-        M0, Mmin, alpha, M0_std, Mmin_std, alpha_std, sigma_L = pars['M0'],pars['Mmin'],pars['alpha'],pars['M0_std'],pars['Mmin_std'],pars['alpha_std'],pars['sigma_L']
+        M0, Mmin, alpha, sigma_MHI = pars['M0'],pars['Mmin'],pars['alpha'],pars['sigma_MHI']
     except:
-        raise ValueError('The model_pars for HI_VN18 are M0, Mmin, alpha, and sigma_L, but {} were provided'.format(pars.keys()))
+        raise ValueError('The model_pars for HI_VN18 are M0, Mmin, alpha, and sigma_MHI, but {} were provided'.format(pars.keys()))
 
     Mhalo_Msun = (self.halo_catalog['M_HALO']*self.Msunh).to(u.Msun)
-    M0_sample, Mmin_sample, alpha_sample = multivariate_normal(np.asarray([M0.to_value(u.Msun), Mmin.to_value(u.Msun), alpha]), np.diag([M0_std.to_value(u.Msun), Mmin_std.to_value(u.Msun), alpha_std]), len(Mhalo_Msun.value)).T
-    MHI=M0_sample*u.Msun*np.exp(-(Mmin_sample*u.Msun/Mhalo_Msun)**0.35)*np.power(Mhalo_Msun/(Mmin_sample*u.Msun), alpha_sample)
+    MHI=M0*np.exp(-(Mmin/Mhalo_Msun)**0.35)*(Mhalo_Msun/Mmin)**alpha
+    
+    #Add scatter to the MHI relation
+    sigma_base_e = sigma_MHI*2.302585
+    MHI_samples = MHI*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, MHI.shape)
+
 
     A10=2.869e-15*u.s**(-1) #spontaneous emission coefficient
     coeff=((3/4)*A10*cu.h*self.line_nu0['HI']/cu.m_p).to(u.Lsun/u.Msun)
-    LHI=coeff*MHI
-
-    #Add scatter to the relation
-    sigma_base_e = sigma_L*2.302585
-    LHI_samples = LHI*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, LHI.shape)
-
-    return (LHI_samples).to(u.Lsun)
+    LHI=coeff*MHI_samples
+    return (LHI).to(u.Lsun)
 
 
 
