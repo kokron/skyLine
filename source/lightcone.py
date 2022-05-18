@@ -242,11 +242,16 @@ class Lightcone(object):
                 SFR = SFR*self.rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, SFR.shape)
         else:
             SFR = self.halo_catalog['SFR_HALO']
+            
+        if len(self.LIR_pars.keys())>0:
+            LIR = getattr(LM,'LIR')(self,SFR,self.LIR_pars,self.rng)
+        else:
+            LIR = 0*u.Lsun
 
 
         for line in self.lines.keys():
             if self.lines[line]:
-                L_line_halo[line] = getattr(LM,self.models[line]['model_name'])(self,SFR,self.models[line]['model_pars'],self.line_nu0[line],self.rng)
+                L_line_halo[line] = getattr(LM,self.models[line]['model_name'])(self,SFR,LIR,self.models[line]['model_pars'],self.line_nu0[line],self.rng)
 
         return L_line_halo
 

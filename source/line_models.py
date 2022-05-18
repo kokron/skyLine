@@ -55,13 +55,58 @@ def LIR(self,SFR,pars,rng):
     LIR = SFR[inds]/(K_IR + K_UV/IRX)*u.Lsun
 
     return LIR
+    
 
+def LIR_and_LUV(self,SFR,pars,rng):
+    '''
+    Obtain the IR and UV luminosities from SFR or stellar mass
+    
+    -to use outside code
+
+    Parameters:
+        -SFR:       SFR of the halo in Msun/yr
+        -pars:      Dictionary of parameters
+            -IRX_name:      The reference to use the IRX from
+            -IRX_params:    The parameters required to compute the IRX
+                            (check each if instance below)
+            -K_IR, K_UV:    The coefficients to relate SFR to L_IR and L_UV
+    '''
+    #avoid SFR=0 issues
+    inds = np.where(SFR>0)[0]
+
+    #Try to get IRX:
+    if 'IRX_name' not in pars:
+        raise ValueError('To use this function you need to choose an IRX model')
+    else:
+        #IRX - Mstar relation from Bouwens 2016, arXiv:1606.05280
+        if pars['IRX_name'] == 'Bouwens2016':
+            log10IRX_0,sigma_IRX = pars['log10IRX_0'],pars['sigma_IRX']
+            IRX = 10**log10IRX_0*self.halo_catalog['SM_HALO'][inds]
+        #IRX - Mstar relation from Bouwens 2020, arXiv:2009.10727
+        elif pars['IRX_name'] == 'Bouwens2020':
+            log10Ms_IRX,alpha_IRX,sigma_IRX = pars['log10Ms_IRX'],pars['alpha_IRX'],pars['sigma_IRX']
+            IRX = (self.halo_catalog['SM_HALO'][inds]/10**log10Ms_IRX)**alpha_IRX
+        #IRX - Mstar relation from Heinis 2014, arXiv:1310.3227
+        elif pars['IRX_name'] == 'Heinis2014':
+            log10Ms_IRX,alpha_IRX,log10IRX_0,sigma_IRX = pars['log10Ms_IRX'],pars['alpha_IRX'],pars['log10IRX_0'],pars['sigma_IRX']
+            IRX = (self.halo_catalog['SM_HALO'][inds]/10**log10Ms_IRX)**alpha_IRX*10**log10IRX_0
+        else:
+            raise ValueError('Please choose a valid IRX model')
+        #Add mean-preserving lognormal scatter in the IRX relation
+        sigma_base_e = sigma_IRX*2.302585
+        IRX = IRX*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, IRX.shape)
+
+        K_IR,K_UV = pars['K_IR'],pars['K_UV']
+
+    LIR = SFR[inds]/(K_IR + K_UV/IRX)*u.Lsun
+
+    return LIR,LIR/IRX
 
 ##############
 ## CO LINES ##
 ##############
 
-def CO_Li16(self,SFR,pars,nu0,rng):
+def CO_Li16(self,SFR,LIR,pars,nu0,rng):
     '''
     Model for CO(1-0) line from Li+2016 (arXiv:1503.08833)
 
@@ -82,7 +127,7 @@ def CO_Li16(self,SFR,pars,nu0,rng):
     inds = np.where(SFR>0)
     LCO_samples = np.zeros(len(SFR))*u.Lsun
 
-    #Convert halo SFR to IR luminosity
+    #Convert halo SFR to IR luminosity following Li+2016 instead of our own L_IR
     L_IR = 1e10 * SFR[inds]/delta_mf
     #Transform IR luminosity to CO luminosity (log10)
     log10_LCO = (np.log10(L_IR) - beta)/alpha
@@ -93,7 +138,7 @@ def CO_Li16(self,SFR,pars,nu0,rng):
     return LCO_samples
 
 
-def CO_lines_scaling_LFIR(self,SFR,pars,nu0,rng):
+def CO_lines_scaling_LFIR(self,SFR,LIR,pars,nu0,rng):
     '''
     Returns the luminosity for CO lines lines that have empirical scaling relations with FIR luminosity
 
@@ -118,9 +163,7 @@ def CO_lines_scaling_LFIR(self,SFR,pars,nu0,rng):
     inds = np.where(SFR>0)
     L = np.zeros(len(SFR))*u.Lsun
 
-    L_IR = LIR(self,SFR,self.LIR_pars,rng)
-
-    Lp = 10**((np.log10(L_IR.value)-beta)/alpha)
+    Lp = 10**((np.log10(LIR.value)-beta)/alpha)
 
     Lmean = (4.9e-5*u.Lsun)*Lp*(nu0/(115.27*u.GHz))**3
 
@@ -135,7 +178,7 @@ def CO_lines_scaling_LFIR(self,SFR,pars,nu0,rng):
 ## CII LINE ##
 ##############
 
-def CII_Silva15(self,SFR,pars,nu0,rng):
+def CII_Silva15(self,SFR,LIR,pars,nu0,rng):
     '''
     Model for CII line from Silva+2015 (arXiv:1410.4808)
 
@@ -163,7 +206,7 @@ def CII_Silva15(self,SFR,pars,nu0,rng):
 
     return L
 
-def CII_Lagache18(self,SFR,pars,nu0,rng):
+def CII_Lagache18(self,SFR,LIR,pars,nu0,rng):
     '''
     Model for CII line from Lagache+2018 (arXiv:1711.00798)
 
@@ -197,7 +240,7 @@ def CII_Lagache18(self,SFR,pars,nu0,rng):
 ## Ly-alpha LINE ##
 ##############
 
-def Lyalpha_Chung19(self,SFR,pars,nu0,rng):
+def Lyalpha_Chung19(self,SFR,LIR,pars,nu0,rng):
     '''
     Model for Lyman-alpha line used in Chung+2019 (arXiv:1809.04550)
 
@@ -228,7 +271,7 @@ def Lyalpha_Chung19(self,SFR,pars,nu0,rng):
 ## 21-cm LINE ##
 ##############
 
-def HI_VN18(self,SFR,pars,nu0,rng):
+def HI_VN18(self,SFR,LIR,pars,nu0,rng):
     '''
     Model for 21-cm line used in Villaescusa-Navarro+2018 (arXiv:1804.09180)
 
@@ -265,7 +308,7 @@ def HI_VN18(self,SFR,pars,nu0,rng):
 ## SFR Kennicutt scaling relations ##
 #####################################
 
-def SFR_scaling_relation_Kennicutt(self,SFR,pars,nu0,rng):
+def SFR_scaling_relation_Kennicutt(self,SFR,LIR,pars,nu0,rng):
     '''
     Model for SFR-related lines used in Gong+2017 (arXiv:1610.09060),
     employing Kennicutt relations and extinctions.
@@ -280,7 +323,7 @@ def SFR_scaling_relation_Kennicutt(self,SFR,pars,nu0,rng):
             -sigma_L: Scatter in dex of the luminosity
     '''
     try:
-        K,Kstd,Aext,sigma_L = pars['K'],pars['Aext'],pars['sigma_L']
+        K,Aext,sigma_L = pars['K'],pars['Aext'],pars['sigma_L']
     except:
         raise ValueError('The model_pars for SFR_scaling_relation_Kennicutt are "K", Aext, sigma_L but {} were provided'.format(pars.keys()))
     L = (SFR*K*u.erg/u.s).to(u.Lsun)
@@ -296,7 +339,7 @@ def SFR_scaling_relation_Kennicutt(self,SFR,pars,nu0,rng):
 ## LIR scaling relations ##
 ###########################
 
-def FIR_scaling_relation(self,SFR,pars,nu0,rng):
+def FIR_scaling_relation(self,SFR,LIR,pars,nu0,rng):
     '''
     Returns the luminosity for lines that have empirical scaling relations with FIR luminosity
 
@@ -320,8 +363,7 @@ def FIR_scaling_relation(self,SFR,pars,nu0,rng):
     inds = np.where(SFR>0)
     L = np.zeros(len(SFR))*u.Lsun
 
-    L_IR = LIR(self,SFR,self.LIR_pars,rng).to(u.erg/u.s)
-    LIR_norm = L_IR*(1/1e41)
+    LIR_norm = LIR.to(u.erg/u.s)*(1/1e41)
 
     Lerg_norm = 10**(alpha*np.log10(LIR_norm.value)-beta)
     Lmean = (Lerg_norm*1e41*u.erg/u.s).to(u.Lsun)
