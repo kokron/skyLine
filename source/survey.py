@@ -111,7 +111,7 @@ class Survey(Lightcone):
                  do_remove_mean = True,
                  do_angular = False,
                  do_gal_foregrounds = False,
-                 foreground_model=dict(dgrade_nside=2**10, survey_center=[0*u.deg, 90*u.deg], sky={'synchrotron' : True, 'dust' : True, 'freefree' : True,'ame' : True}),
+                 foreground_model=dict(precomputed_file=None, dgrade_nside=2**10, survey_center=[0*u.deg, 90*u.deg], sky={'synchrotron' : True, 'dust' : True, 'freefree' : True,'ame' : True}),
                  average_angular_proj = True,
                  nside = 2048,
                  mass=False,
@@ -611,41 +611,55 @@ class Survey(Lightcone):
             dgrade_nside=self.foreground_model['dgrade_nside']
         else:
             dgrade_nside=self.nside
-
-        #build foreground component dictionary
-        components=[key for key,value in self.foreground_model['sky'].items() if value == True]
-        sky_config = []
-        for cmp in components:
-            if cmp=='synchrotron':
-                sky_config.append("s1")
-            elif cmp=='dust':
-                sky_config.append("d1")
-            elif cmp=='freefree':
-                sky_config.append("f1")
-            elif cmp=='ame':
-                sky_config.append("a1")
-            else:
-                raise(Warning('Unknown galactic foreground component'))
-
-        sky = pysm3.Sky(nside=dgrade_nside, preset_strings=sky_config)#create sky object using the specified model
         obs_freqs=np.linspace(self.nuObs_min, self.nuObs_max, self.supersample*self.Nchan) #frequencies observed in survey
 
-        norm=hp.nside2pixarea(self.nside, degrees=True)*(u.deg**2).to(self.Omega_field.unit)/(self.Omega_field/self.Npix)
-        ra_fullsky, dec_fullsky, obs_mask= observed_mask_2d(self)
-        ra_insurvey=[]; dec_insurvey=[]; z_insurvey=[]; foreground_signal=[]
-        for i in range(len(obs_freqs)):
-            dgrade_galmap=sky.get_emission(obs_freqs[i])[0]#produce healpy maps, 0 index corresponds to intensity
-            rot_center = hp.Rotator(rot=[self.foreground_model['survey_center'][0].to_value(u.deg), self.foreground_model['survey_center'][1].to_value(u.deg)], inv=True) #rotation to place the center of the survey at the origin
-            dgrade_galmap_rotated = pysm3.apply_smoothing_and_coord_transform(dgrade_galmap, rot=rot_center)
-            if self.foreground_model['dgrade_nside']!=self.nside:
-                galmap_rotated=hp.pixelfunc.ud_grade(dgrade_galmap_rotated, self.nside)
-            else:
-                galmap_rotated=dgrade_galmap_rotated
+        if self.foreground_model['precomputed_file']!=None:
+            norm=hp.nside2pixarea(self.nside, degrees=True)*(u.deg**2).to(self.Omega_field.unit)/(self.Omega_field/self.Npix)
+            ra_fullsky, dec_fullsky, obs_mask= observed_mask_2d(self)
+            ra_insurvey=[]; dec_insurvey=[]; z_insurvey=[]; foreground_signal=[]
+            for i in range(len(obs_freqs)):
+                dgrade_galmap_rotated=hp.fitsfunc.read_map(self.foreground_model['precomputed_file'][i]) #read pre-computed healpy maps
+                if self.foreground_model['dgrade_nside']!=self.nside:
+                    galmap_rotated=hp.pixelfunc.ud_grade(dgrade_galmap_rotated, self.nside)
+                else:
+                    galmap_rotated=dgrade_galmap_rotated
+                ra_insurvey.append(ra_fullsky[obs_mask])
+                dec_insurvey.append(dec_fullsky[obs_mask])
+                z_insurvey.append((self.line_nu0[self.target_line]/obs_freqs[i] -1)*np.ones((obs_mask.sum())))
+                foreground_signal.append(norm*galmap_rotated[obs_mask]*u.uK)
+        else:
+            #build foreground component dictionary
+            components=[key for key,value in self.foreground_model['sky'].items() if value == True]
+            sky_config = []
+            for cmp in components:
+                if cmp=='synchrotron':
+                    sky_config.append("s1")
+                elif cmp=='dust':
+                    sky_config.append("d1")
+                elif cmp=='freefree':
+                    sky_config.append("f1")
+                elif cmp=='ame':
+                    sky_config.append("a1")
+                else:
+                    raise(Warning('Unknown galactic foreground component'))
 
-            ra_insurvey.append(ra_fullsky[obs_mask])
-            dec_insurvey.append(dec_fullsky[obs_mask])
-            z_insurvey.append((self.line_nu0[self.target_line]/obs_freqs[i] -1)*np.ones((obs_mask.sum())))
-            foreground_signal.append(norm*galmap_rotated[obs_mask]*u.uK)
+            sky = pysm3.Sky(nside=dgrade_nside, preset_strings=sky_config)#create sky object using the specified model
+            norm=hp.nside2pixarea(self.nside, degrees=True)*(u.deg**2).to(self.Omega_field.unit)/(self.Omega_field/self.Npix)
+            ra_fullsky, dec_fullsky, obs_mask= observed_mask_2d(self)
+            ra_insurvey=[]; dec_insurvey=[]; z_insurvey=[]; foreground_signal=[]
+            for i in range(len(obs_freqs)):
+                dgrade_galmap=sky.get_emission(obs_freqs[i])[0]#produce healpy maps, 0 index corresponds to intensity
+                rot_center = hp.Rotator(rot=[self.foreground_model['survey_center'][0].to_value(u.deg), self.foreground_model['survey_center'][1].to_value(u.deg)], inv=True) #rotation to place the center of the survey at the origin
+                dgrade_galmap_rotated = pysm3.apply_smoothing_and_coord_transform(dgrade_galmap, rot=rot_center)
+                if self.foreground_model['dgrade_nside']!=self.nside:
+                    galmap_rotated=hp.pixelfunc.ud_grade(dgrade_galmap_rotated, self.nside)
+                else:
+                    galmap_rotated=dgrade_galmap_rotated
+
+                ra_insurvey.append(ra_fullsky[obs_mask])
+                dec_insurvey.append(dec_fullsky[obs_mask])
+                z_insurvey.append((self.line_nu0[self.target_line]/obs_freqs[i] -1)*np.ones((obs_mask.sum())))
+                foreground_signal.append(norm*galmap_rotated[obs_mask]*u.uK)
 
         ra,dec,redshift = da.broadcast_arrays(np.asarray(ra_insurvey).flatten(), np.asarray(dec_insurvey).flatten(), np.asarray(z_insurvey).flatten())
         ra,dec  = da.deg2rad(ra),da.deg2rad(dec)
