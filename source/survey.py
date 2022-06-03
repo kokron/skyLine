@@ -293,6 +293,7 @@ class Survey(Lightcone):
         #return (self.Lbox.value/Nmesh).prod()*self.Lbox.unit**3
         return (self.Lbox.value/Nmesh).prod()*self.Lbox.unit**3
 
+
     #########################
     ## Create the mock map ##
     #########################
@@ -606,6 +607,9 @@ class Survey(Lightcone):
 
         return maps
 
+    def vec2pix_func(self, x, y, z):
+        return hp.vec2pix(self.nside, x, y, z)
+
     def create_foreground_map(self, mins, Nmesh, Lbox):
         if self.foreground_model['dgrade_nside']!=self.nside:
             dgrade_nside=self.foreground_model['dgrade_nside']
@@ -614,8 +618,6 @@ class Survey(Lightcone):
         obs_freqs=np.linspace(self.nuObs_min, self.nuObs_max, self.supersample*self.Nchan) #frequencies observed in survey
 
         if self.foreground_model['precomputed_file']!=None:
-            norm=hp.nside2pixarea(self.nside, degrees=True)*(u.deg**2).to(self.Omega_field.unit)/(self.Omega_field/self.Npix)
-            ra_fullsky, dec_fullsky, obs_mask= observed_mask_2d(self)
             ra_insurvey=[]; dec_insurvey=[]; z_insurvey=[]; foreground_signal=[]
             for i in range(len(obs_freqs)):
                 dgrade_galmap_rotated=hp.fitsfunc.read_map(self.foreground_model['precomputed_file'][i]) #read pre-computed healpy maps
@@ -623,10 +625,22 @@ class Survey(Lightcone):
                     galmap_rotated=hp.pixelfunc.ud_grade(dgrade_galmap_rotated, self.nside)
                 else:
                     galmap_rotated=dgrade_galmap_rotated
-                ra_insurvey.append(ra_fullsky[obs_mask])
-                dec_insurvey.append(dec_fullsky[obs_mask])
-                z_insurvey.append((self.line_nu0[self.target_line]/obs_freqs[i] -1)*np.ones((obs_mask.sum())))
-                foreground_signal.append(norm*galmap_rotated[obs_mask]*u.uK)
+                    
+                if self.do_angular_smooth:
+                    theta_beam = self.beam_FWHM.to(u.rad)
+                    galmap_rotated = hp.smoothing(galmap_rotated, theta_beam.value)
+                 
+                cart_proj=hp.projector.CartesianProj(xsize=self.Nside[0], ysize=self.Nside[1], lonra =  [self.RAObs_min.value,self.RAObs_max.value], latra=[self.DECObs_min.value,self.DECObs_max.value])
+                ipix,jpix=np.meshgrid(np.arange(0, self.Nside[0]), np.arange(0, self.Nside[1]))
+                X,Y=np.asarray(cart_proj.ij2xy(ipix,jpix))
+                X=X.flatten()
+                Y=Y.flatten()
+                galmap_cart=cart_proj.projmap(galmap_rotated, self.vec2pix_func)
+                foreground_signal.append((galmap_cart.flatten())*u.uK)
+
+                ra_insurvey.append(X)
+                dec_insurvey.append(Y)
+                z_insurvey.append((self.line_nu0[self.target_line]/obs_freqs[i] -1)*np.ones((len(X))))
         else:
             #build foreground component dictionary
             components=[key for key,value in self.foreground_model['sky'].items() if value == True]
@@ -644,22 +658,47 @@ class Survey(Lightcone):
                     raise(Warning('Unknown galactic foreground component'))
 
             sky = pysm3.Sky(nside=dgrade_nside, preset_strings=sky_config)#create sky object using the specified model
-            norm=hp.nside2pixarea(self.nside, degrees=True)*(u.deg**2).to(self.Omega_field.unit)/(self.Omega_field/self.Npix)
-            ra_fullsky, dec_fullsky, obs_mask= observed_mask_2d(self)
             ra_insurvey=[]; dec_insurvey=[]; z_insurvey=[]; foreground_signal=[]
             for i in range(len(obs_freqs)):
                 dgrade_galmap=sky.get_emission(obs_freqs[i])[0]#produce healpy maps, 0 index corresponds to intensity
                 rot_center = hp.Rotator(rot=[self.foreground_model['survey_center'][0].to_value(u.deg), self.foreground_model['survey_center'][1].to_value(u.deg)], inv=True) #rotation to place the center of the survey at the origin
-                dgrade_galmap_rotated = pysm3.apply_smoothing_and_coord_transform(dgrade_galmap, rot=rot_center)
+                
+                if self.do_angular_smooth:
+                    theta_beam = self.beam_FWHM
+                else:
+                    theta_beam = 0*u.arcmin
+                dgrade_galmap_rotated = pysm3.apply_smoothing_and_coord_transform(dgrade_galmap, rot=rot_center, fwhm=theta_beam)
                 if self.foreground_model['dgrade_nside']!=self.nside:
                     galmap_rotated=hp.pixelfunc.ud_grade(dgrade_galmap_rotated, self.nside)
                 else:
                     galmap_rotated=dgrade_galmap_rotated
+                    
+                cart_proj=hp.projector.CartesianProj(xsize=self.Nside[0], ysize=self.Nside[1], lonra =  [self.RAObs_min.value,self.RAObs_max.value], latra=[self.DECObs_min.value,self.DECObs_max.value])
+                ipix,jpix=np.meshgrid(np.arange(0, self.Nside[0]), np.arange(0, self.Nside[1]))
+                X,Y=np.asarray(cart_proj.ij2xy(ipix,jpix))
+                X=X.flatten()
+                Y=Y.flatten()
+                galmap_cart=cart_proj.projmap(galmap_rotated, self.vec2pix_func)
+                foreground_signal.append((galmap_cart.flatten())*u.uK)
 
-                ra_insurvey.append(ra_fullsky[obs_mask])
-                dec_insurvey.append(dec_fullsky[obs_mask])
-                z_insurvey.append((self.line_nu0[self.target_line]/obs_freqs[i] -1)*np.ones((obs_mask.sum())))
-                foreground_signal.append(norm*galmap_rotated[obs_mask]*u.uK)
+                ra_insurvey.append(X)
+                dec_insurvey.append(Y)
+                z_insurvey.append((self.line_nu0[self.target_line]/obs_freqs[i] -1)*np.ones((len(X))))
+
+            #norm=hp.nside2pixarea(self.nside, degrees=True)*(u.deg**2).to(self.Omega_field.unit)/(self.Omega_field/self.Npix)
+            #ra_fullsky, dec_fullsky, obs_mask= observed_mask_2d(self)
+            #ra_insurvey=[]; dec_insurvey=[]; z_insurvey=[]; foreground_signal=[]
+            #for i in range(len(obs_freqs)):
+            #    dgrade_galmap=sky.get_emission(obs_freqs[i])[0]#produce healpy maps, 0 index corresponds to intensity   
+            #    rot_center = hp.Rotator(rot=[self.foreground_model['survey_center'][0].to_value(u.deg), self.foreground_model['survey_center'][1].to_value(u.deg)], inv=True) #rotation to place the center of the survey at the origin
+            #    dgrade_galmap_rotated = pysm3.apply_smoothing_and_coord_transform(dgrade_galmap, rot=rot_center)
+            #    if self.foreground_model['dgrade_nside']!=self.nside:
+            #        galmap_rotated=hp.pixelfunc.ud_grade(dgrade_galmap_rotated, self.nside)
+            #    else:
+            #        galmap_rotated=dgrade_galmap_rotated
+            #    if self.do_angular_smooth:
+            #        theta_beam = self.beam_FWHM.to(u.rad)
+            #        galmap_rotated = hp.smoothing(galmap_rotated, theta_beam.value)
 
         ra,dec,redshift = da.broadcast_arrays(np.asarray(ra_insurvey).flatten(), np.asarray(dec_insurvey).flatten(), np.asarray(z_insurvey).flatten())
         ra,dec  = da.deg2rad(ra),da.deg2rad(dec)
@@ -760,14 +799,15 @@ def tp2ra(theta, phi):
     dec = np.rad2deg(0.5 * np.pi - theta)
     return ra, dec
 
+
 def observed_mask_2d(self):
     pix = np.arange(hp.nside2npix(self.nside), dtype=int)
     theta, phi = hp.pix2ang(self.nside, pix)
     ra, dec = tp2ra(theta, phi)
     ra[ra>180]=ra[ra>180]-360
 
-    RAmask=(ra>self.RAObs_min.value)&(ra<=self.RAObs_max.value)
-    DECmask=(dec>self.DECObs_min.value)&(dec<=self.DECObs_max.value)
+    RAmask=(ra>=self.RAObs_min.value)&(ra<self.RAObs_max.value)
+    DECmask=(dec>=self.DECObs_min.value)&(dec<self.DECObs_max.value)
 
     mask=RAmask&DECmask
     return ra, dec, mask
