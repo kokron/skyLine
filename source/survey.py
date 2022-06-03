@@ -610,12 +610,13 @@ class Survey(Lightcone):
     def vec2pix_func(self, x, y, z):
         return hp.vec2pix(self.nside, x, y, z)
 
-    def create_foreground_map(self, mins, Nmesh, Lbox):
+    def create_foreground_map(self, mins, Nmesh, Lbox, rside_obs_lim, raside_lim, decside_lim):
         if self.foreground_model['dgrade_nside']!=self.nside:
             dgrade_nside=self.foreground_model['dgrade_nside']
         else:
             dgrade_nside=self.nside
-        obs_freqs=np.linspace(self.nuObs_min, self.nuObs_max, self.supersample*self.Nchan) #frequencies observed in survey
+        obs_freqs_edge=np.linspace(self.nuObs_min, self.nuObs_max, self.supersample*self.Nchan+1)
+        obs_freqs=(obs_freqs_edge[1:]+obs_freqs_edge[:-1])/2 #frequencies observed in survey
 
         if self.foreground_model['precomputed_file']!=None:
             ra_insurvey=[]; dec_insurvey=[]; z_insurvey=[]; foreground_signal=[]
@@ -629,18 +630,24 @@ class Survey(Lightcone):
                 if self.do_angular_smooth:
                     theta_beam = self.beam_FWHM.to(u.rad)
                     galmap_rotated = hp.smoothing(galmap_rotated, theta_beam.value)
-                 
-                cart_proj=hp.projector.CartesianProj(xsize=self.Nside[0], ysize=self.Nside[1], lonra =  [self.RAObs_min.value,self.RAObs_max.value], latra=[self.DECObs_min.value,self.DECObs_max.value])
-                ipix,jpix=np.meshgrid(np.arange(0, self.Nside[0]), np.arange(0, self.Nside[1]))
-                X,Y=np.asarray(cart_proj.ij2xy(ipix,jpix))
-                X=X.flatten()
-                Y=Y.flatten()
+
+                    #Compute the signal in each voxel (with Ztrue and Vcell_true)
+                    
+                cart_proj=hp.projector.CartesianProj(xsize=self.Nside[0]*self.supersample, ysize=self.Nside[1]*self.supersample, lonra =  [self.RAObs_min.value,self.RAObs_max.value], latra=[self.DECObs_min.value,self.DECObs_max.value])  
                 galmap_cart=cart_proj.projmap(galmap_rotated, self.vec2pix_func)
                 foreground_signal.append((galmap_cart.flatten())*u.uK)
+               
+                Xedge=np.linspace(self.RAObs_min.value,self.RAObs_max.value, self.Nside[0]*self.supersample+1)
+                Yedge=np.linspace(self.DECObs_min.value,self.DECObs_max.value, self.Nside[1]*self.supersample+1)
+                X=(Xedge[1:]+Xedge[:-1])/2
+                Y=(Yedge[1:]+Yedge[:-1])/2
+                Xpix,Ypix=np.meshgrid(X,Y)
+                Xpix=Xpix.flatten()
+                Ypix=Ypix.flatten()
 
-                ra_insurvey.append(X)
-                dec_insurvey.append(Y)
-                z_insurvey.append((self.line_nu0[self.target_line]/obs_freqs[i] -1)*np.ones((len(X))))
+                ra_insurvey.append(Xpix)
+                dec_insurvey.append(Ypix)
+                z_insurvey.append((self.line_nu0[self.target_line]/obs_freqs[i] -1)*np.ones((len(Xpix))))
         else:
             #build foreground component dictionary
             components=[key for key,value in self.foreground_model['sky'].items() if value == True]
@@ -673,17 +680,21 @@ class Survey(Lightcone):
                 else:
                     galmap_rotated=dgrade_galmap_rotated
                     
-                cart_proj=hp.projector.CartesianProj(xsize=self.Nside[0], ysize=self.Nside[1], lonra =  [self.RAObs_min.value,self.RAObs_max.value], latra=[self.DECObs_min.value,self.DECObs_max.value])
-                ipix,jpix=np.meshgrid(np.arange(0, self.Nside[0]), np.arange(0, self.Nside[1]))
-                X,Y=np.asarray(cart_proj.ij2xy(ipix,jpix))
-                X=X.flatten()
-                Y=Y.flatten()
+                cart_proj=hp.projector.CartesianProj(xsize=self.Nside[0]*self.supersample, ysize=self.Nside[1]*self.supersample, lonra =  [self.RAObs_min.value,self.RAObs_max.value], latra=[self.DECObs_min.value,self.DECObs_max.value])
                 galmap_cart=cart_proj.projmap(galmap_rotated, self.vec2pix_func)
                 foreground_signal.append((galmap_cart.flatten())*u.uK)
+               
+                Xedge=np.linspace(self.RAObs_min.value,self.RAObs_max.value, self.Nside[0]*self.supersample+1)
+                Yedge=np.linspace(self.DECObs_min.value,self.DECObs_max.value, self.Nside[1]*self.supersample+1)
+                X=(Xedge[1:]+Xedge[:-1])/2
+                Y=(Yedge[1:]+Yedge[:-1])/2
+                Xpix,Ypix=np.meshgrid(X,Y)
+                Xpix=Xpix.flatten()
+                Ypix=Ypix.flatten()
 
-                ra_insurvey.append(X)
-                dec_insurvey.append(Y)
-                z_insurvey.append((self.line_nu0[self.target_line]/obs_freqs[i] -1)*np.ones((len(X))))
+                ra_insurvey.append(Xpix)
+                dec_insurvey.append(Ypix)
+                z_insurvey.append((self.line_nu0[self.target_line]/obs_freqs[i] -1)*np.ones((len(Xpix))))
 
             #norm=hp.nside2pixarea(self.nside, degrees=True)*(u.deg**2).to(self.Omega_field.unit)/(self.Omega_field/self.Npix)
             #ra_fullsky, dec_fullsky, obs_mask= observed_mask_2d(self)
@@ -711,7 +722,14 @@ class Survey(Lightcone):
         r = redshift.map_blocks(lambda zz: (((self.cosmo.comoving_radial_distance(zz)*u.Mpc).to(self.Mpch)).value),dtype=redshift.dtype)
         cartesian_pixelpos = r[:,None] * pos
         foreground_grid = np.array(cartesian_pixelpos.compute())
-
+        
+        if self.do_inner_cut:
+            filtering = (foreground_grid[:,1] >= raside_lim[0]) & (foreground_grid[:,1] < raside_lim[1]) & \
+                        (foreground_grid[:,2] >= decside_lim[0]) & (foreground_grid[:,2] < decside_lim[1])
+            foreground_grid = foreground_grid[filtering]
+            #print(np.asarray(filtering).shape, np.asarray(foreground_grid).shape, np.asarray(foreground_signal).shape)
+            foreground_signal=np.asarray(foreground_signal).flatten()[filtering]
+        #print(np.min(foreground_grid[:,0]), np.max(foreground_grid[:,0]), np.min(foreground_grid[:,1]), np.max(foreground_grid[:,1]), np.min(foreground_grid[:,2]), np.max(foreground_grid[:,2]))
         for n in range(3):
             foreground_grid[:,n] -= mins[n]
         #Set the emitter in the grid and paint using pmesh directly instead of nbk
