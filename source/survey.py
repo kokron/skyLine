@@ -472,8 +472,8 @@ class Survey(Lightcone):
         ramid = 0.5*(self.RAObs_max + self.RAObs_min)
         decmid = 0.5*(self.DECObs_max + self.DECObs_min)
         
-        ralim = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_max.value]) - ramid) 
-        declim = np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value]) - decmid)
+        ralim = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_max.value]) - ramid.value) 
+        declim = np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value]) - decmid.value)
         raside_lim = self.raside_lim
         decside_lim = self.decside_lim
         rside_obs_lim = self.rside_obs_lim
