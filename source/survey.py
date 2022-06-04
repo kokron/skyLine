@@ -251,34 +251,37 @@ class Survey(Lightcone):
         Sides of the field observed (approximated to be a rectangular cube),
         for the assumed redshift (the one corresponding to the target line)
         '''
-        #box angular limits
-        ralim = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_max.value]))
-        declim = np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value]))
-
+        #box center
         ramid = np.deg2rad(0.5*(self.RAObs_max + self.RAObs_min).value)
         decmid = np.deg2rad(0.5*(self.DECObs_max + self.DECObs_min).value)
+        
+        #box angular limits (centered)
+        ralim = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_max.value])) - ramid
+        declim = np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value])) - declim
 
         #transform Frequency band into redshift range for the target line
         zlims = (self.line_nu0[self.target_line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
         rlim = ((self.cosmo.comoving_radial_distance(zlims)*u.Mpc).to(self.Mpch)).value
         #Get the side of the box
         if self.do_inner_cut:
-
             raside = 2*rlim[0]*np.tan(0.5*(ralim[1]-ralim[0]))
             decside = 2*rlim[0]*np.tan(0.5*(declim[1]-declim[0]))
             zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
-            rside_lim = np.array([rlim[0],rlim[0]+zside])
+            
+            self.raside_lim = rlim[0]*np.tan(ralim-ramid) #min, max self.decside_lim = rlim[0]*np.tan(declim-decmid) #min, max
+            self.decside_lim = rlim[0]*np.tan(declim-decmid) #min, max
+            self.rside_obs_lim = np.array([rlim[0],rlim[0]+zside]) #min, max
         else:
             raside = 2*rlim[1]*np.tan(0.5*(ralim[1]-ralim[0]))
             decside = 2*rlim[1]*np.tan(0.5*(declim[1]-declim[0]))
             zside = rlim[1]-rlim[0]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))
-            rside_lim = np.array([rlim[1]-zside,rlim[1]])
+            
+            self.raside_lim = rlim[1]*np.tan(ralim-ramid) #min, max self.decside_lim = rlim[0]*np.tan(declim-decmid) #min, max
+            self.decside_lim = rlim[1]*np.tan(declim-decmid) #min, max
+            self.rside_obs_lim = np.array([rlim[1]-zside,rlim[1]]) #min, max
 
         Lbox = np.array([zside,raside,decside])
 
-        self.raside_lim = rlim[0]*np.tan(ralim-ramid) #min, max self.decside_lim = rlim[0]*np.tan(declim-decmid) #min, max
-        self.decside_lim = rlim[0]*np.tan(declim-decmid) #min, max
-        self.rside_obs_lim = rside_lim #min, max
         return (Lbox*self.Mpch).to(self.Mpch)
 
     @cached_survey_property
@@ -287,7 +290,7 @@ class Survey(Lightcone):
         Voxel volume (approximated as a rectangular cube) for the assumed redshift
         (the one corresponding to the target line).
 
-        Voxel dimensions given by the resolution of the experiment.
+        Voxel dimensions given by the resolution of the experiment. 
         '''
         Nmesh = np.array([self.Nchan,self.Nside[0], self.Nside[1]], dtype=int)
         #return (self.Lbox.value/Nmesh).prod()*self.Lbox.unit**3
