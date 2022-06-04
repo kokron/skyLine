@@ -257,7 +257,7 @@ class Survey(Lightcone):
         
         #box angular limits (centered)
         ralim = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_max.value])) - ramid
-        declim = np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value])) - declim
+        declim = np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value])) - decmid
 
         #transform Frequency band into redshift range for the target line
         zlims = (self.line_nu0[self.target_line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
@@ -268,16 +268,16 @@ class Survey(Lightcone):
             decside = 2*rlim[0]*np.tan(0.5*(declim[1]-declim[0]))
             zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
             
-            self.raside_lim = rlim[0]*np.tan(ralim-ramid) #min, max self.decside_lim = rlim[0]*np.tan(declim-decmid) #min, max
-            self.decside_lim = rlim[0]*np.tan(declim-decmid) #min, max
+            self.raside_lim = rlim[0]*np.tan(ralim) #min, max self.decside_lim = rlim[0]*np.tan(declim-decmid) #min, max
+            self.decside_lim = rlim[0]*np.tan(declim) #min, max
             self.rside_obs_lim = np.array([rlim[0],rlim[0]+zside]) #min, max
         else:
             raside = 2*rlim[1]*np.tan(0.5*(ralim[1]-ralim[0]))
             decside = 2*rlim[1]*np.tan(0.5*(declim[1]-declim[0]))
             zside = rlim[1]-rlim[0]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))
             
-            self.raside_lim = rlim[1]*np.tan(ralim-ramid) #min, max self.decside_lim = rlim[0]*np.tan(declim-decmid) #min, max
-            self.decside_lim = rlim[1]*np.tan(declim-decmid) #min, max
+            self.raside_lim = rlim[1]*np.tan(ralim) #min, max self.decside_lim = rlim[0]*np.tan(declim-decmid) #min, max
+            self.decside_lim = rlim[1]*np.tan(declim) #min, max
             self.rside_obs_lim = np.array([rlim[1]-zside,rlim[1]]) #min, max
 
         Lbox = np.array([zside,raside,decside])
@@ -469,14 +469,14 @@ class Survey(Lightcone):
                   self.supersample*self.Nside[1]], dtype=int)
         Lbox = self.Lbox.value
 
-        ralim = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_max.value]))
-        declim = np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value]))
+        ramid = 0.5*(self.RAObs_max + self.RAObs_min)
+        decmid = 0.5*(self.DECObs_max + self.DECObs_min)
+        
+        ralim = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_max.value]) - ramid) 
+        declim = np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value]) - decmid)
         raside_lim = self.raside_lim
         decside_lim = self.decside_lim
         rside_obs_lim = self.rside_obs_lim
-
-        ramid = 0.5*(self.RAObs_max + self.RAObs_min)
-        decmid = 0.5*(self.DECObs_max + self.DECObs_min)
 
         mins_obs = np.array([rside_obs_lim[0],raside_lim[0],decside_lim[0]])
 
@@ -528,9 +528,9 @@ class Survey(Lightcone):
                 lategrid = np.array(cartesian_halopos.compute())
                 #Filter some halos out if outside of the inner cut
                 if self.do_inner_cut:
-                    filtering = (lategrid[:,0] >= rside_obs_lim[0]) & (lategrid[:,0] < rside_obs_lim[1]) & \
-                                (lategrid[:,1] >= raside_lim[0]) & (lategrid[:,1] < raside_lim[1]) & \
-                                (lategrid[:,2] >= decside_lim[0]) & (lategrid[:,2] < decside_lim[1])
+                    filtering = (lategrid[:,0] >= rside_obs_lim[0]) & (lategrid[:,0] <= rside_obs_lim[1]) & \
+                                (lategrid[:,1] >= raside_lim[0]) & (lategrid[:,1] <= raside_lim[1]) & \
+                                (lategrid[:,2] >= decside_lim[0]) & (lategrid[:,2] <= decside_lim[1])
                     lategrid = lategrid[filtering]
                     #Compute the signal in each voxel (with Ztrue and Vcell_true)
                     Zhalo = self.halos_in_survey[line]['Ztrue'][filtering]
@@ -553,13 +553,11 @@ class Survey(Lightcone):
                             #Temperature[uK]
                             signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
                 #Locate the grid such that bottom left corner of the box is [0,0,0] which is the nbodykit convention.
-                mins = np.array([rside_obs_lim[0],raside_lim[0],decside_lim[0]])
                 for n in range(3):
-                    lategrid[:,n] -= mins[n]
+                    lategrid[:,n] -= mins_obs[n]
                 #Set the emitter in the grid and paint using pmesh directly instead of nbk
                 pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler='cic')
-                #Make realfield object                                                  BoxSize=Lbox, dtype='float32', resampler='cic')
-
+                #Make realfield object
                 field = pm.create(type='real')
                 layout = pm.decompose(lategrid)
                 #Exchange positions between different MPI ranks
