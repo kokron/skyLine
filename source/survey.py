@@ -384,14 +384,15 @@ class Survey(Lightcone):
                 #Figure out what channel the halos will be in to figure out the voxel volume, for the signal.
                 #This is what will be added to the healpy map.
                 nu_bins = self.nuObs_min.to('GHz').value + np.arange(self.Nchan)*self.dnu.to('GHz').value
-                zmid_channel = nu_bins + 0.5*self.dnu.to('GHz').value
+                zmid_channel = self.line_nu0[line].to('GHz').value/(nu_bins + 0.5*self.dnu.to('GHz').value) - 1
 
                 #Channel of each halo, can now compute voxel volumes where each of them are seamlessly
                 bin_idxs = np.digitize(self.line_nu0[line].to('GHz').value/(1+Zhalo), nu_bins)-1
                 zmids = zmid_channel[bin_idxs]
 
-                #Vcell = Omega_pix * D_A (z)^2 * (1+z) * Dnu/nu * c/H is the volume of the voxel for a given channel
-                Vcell_true = hp.nside2pixarea(self.nside)*(self.cosmo.comoving_radial_distance(zmids)*u.Mpc )**2 * (1 + zmids) * (self.delta_nuObs/self.line_nu0[line]) * (cu.c.to('km/s')/Hubble)
+                #Vcell = Omega_pix * D_A (z)^2 * (1+z) * dnu/nu_obs * c/H is the volume of the voxel for a given channel
+                                    #D_A here is comoving angular diameter distance = comoving_radial_distance in flat space
+                Vcell_true = hp.nside2pixarea(self.nside)*(self.cosmo.comoving_radial_distance(zmids)*u.Mpc )**2 * (self.dnu/self.line_nu0[line]) * (cu.c.to('km/s')/Hubble)
 
                 if not self.mass:
                     if self.do_intensity:
