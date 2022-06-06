@@ -429,13 +429,16 @@ class Survey(Lightcone):
                 hp_map = hp.ud_grade(hp_map,nside_min)
 
         #Define the mask from the rectangular footprint
-        phicorner = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_min.value,self.RAObs_max.value,self.RAObs_max.value]))
+        phicorner_list = np.arange(self.RAObs_min.value,self.RAObs_max.value,1)
         thetacorner = np.pi/2-np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value,self.DECObs_max.value,self.DECObs_min.value]))
-        vecs = hp.dir2vec(thetacorner,phi=phicorner).T
-        pix_within = hp.query_polygon(nside=self.nside,vertices=vecs,inclusive=False)
+        pix_within = np.array([])
+        for iphiedge in range(len(phicorner_list)):
+            phicorner = np.deg2rad(np.array([phicorner_list[i],phicorner_list[i],phicorner_list[i+1],phicorner_list[i+1]]))
+            vecs = hp.dir2vec(thetacorner,phi=phicorner).T
+            pix_within = np.append(pix_within,hp.query_polygon(nside=self.nside,vertices=vecs,inclusive=False))
         self.pix_within = pix_within
         mask = np.ones(hp.nside2npix(self.nside),np.bool)
-        mask[pix_within] = 0
+        mask[pix_within.astype(int)] = 0
         hp_map = hp.ma(hp_map)
         hp_map.mask = mask
 
