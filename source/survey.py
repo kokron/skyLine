@@ -581,7 +581,7 @@ class Survey(Lightcone):
 
         # add galactic foregrounds
         if self.do_gal_foregrounds:
-            field=self.create_foreground_map(mins, Nmesh, Lbox)
+            field=self.create_foreground_map(mins, Nmesh, Lbox, rside_obs_lim, raside_lim, decside_lim)
             maps+=field
 
         #get the proper shape for the observed map
@@ -632,13 +632,19 @@ class Survey(Lightcone):
                     galmap_rotated = hp.smoothing(galmap_rotated, theta_beam.value)
 
                     #Compute the signal in each voxel (with Ztrue and Vcell_true)
-                    
-                cart_proj=hp.projector.CartesianProj(xsize=self.Nside[0]*self.supersample, ysize=self.Nside[1]*self.supersample, lonra =  [self.RAObs_min.value,self.RAObs_max.value], latra=[self.DECObs_min.value,self.DECObs_max.value])  
+                ramid = 0.5*(self.RAObs_max + self.RAObs_min)
+                decmid = 0.5*(self.DECObs_max + self.DECObs_min)  
+                ramin=self.RAObs_min.value-ramid.value-(self.RAObs_max-self.RAObs_min).value/self.Nside[0]
+                ramax=self.RAObs_max.value-ramid.value+(self.RAObs_max-self.RAObs_min).value/self.Nside[0]
+                decmin=self.DECObs_min.value-decmid.value-(self.DECObs_max-self.DECObs_min).value/self.Nside[1]
+                decmax=self.DECObs_max.value-decmid.value+(self.DECObs_max-self.DECObs_min).value/self.Nside[1]
+
+                cart_proj=hp.projector.CartesianProj(xsize=self.Nside[0]*self.supersample+2, ysize=self.Nside[1]*self.supersample+2, lonra =  [ramin,ramax], latra=[decmin,decmax])  
                 galmap_cart=cart_proj.projmap(galmap_rotated, self.vec2pix_func)
                 foreground_signal.append((galmap_cart.flatten())*u.uK)
                
-                Xedge=np.linspace(self.RAObs_min.value,self.RAObs_max.value, self.Nside[0]*self.supersample+1)
-                Yedge=np.linspace(self.DECObs_min.value,self.DECObs_max.value, self.Nside[1]*self.supersample+1)
+                Xedge=np.linspace(ramin,ramax, self.Nside[0]*self.supersample+1+2)
+                Yedge=np.linspace(decmin,decmax, self.Nside[1]*self.supersample+1+2)
                 X=(Xedge[1:]+Xedge[:-1])/2
                 Y=(Yedge[1:]+Yedge[:-1])/2
                 Xpix,Ypix=np.meshgrid(X,Y)
@@ -724,8 +730,8 @@ class Survey(Lightcone):
         foreground_grid = np.array(cartesian_pixelpos.compute())
         
         if self.do_inner_cut:
-            filtering = (foreground_grid[:,1] >= raside_lim[0]) & (foreground_grid[:,1] < raside_lim[1]) & \
-                        (foreground_grid[:,2] >= decside_lim[0]) & (foreground_grid[:,2] < decside_lim[1])
+            filtering = (foreground_grid[:,1] > raside_lim[0]) & (foreground_grid[:,1] < raside_lim[1]) & \
+                        (foreground_grid[:,2] > decside_lim[0]) & (foreground_grid[:,2] < decside_lim[1])
             foreground_grid = foreground_grid[filtering]
             #print(np.asarray(filtering).shape, np.asarray(foreground_grid).shape, np.asarray(foreground_signal).shape)
             foreground_signal=np.asarray(foreground_signal).flatten()[filtering]
