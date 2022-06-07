@@ -170,7 +170,7 @@ def check_updated_params(self):
         if (min_nside > self.nside):
             warn("The minimum NSIDE to account for beam_FWHM*angular_supersample is {}, but NSIDE={} was input.".format(min_nside,self.nside))
         #Avoid inner cut if do_angular:
-        if self.do_angular and self.do_inner_cut:
+        if self.do_angular and self.do_inner_cut and not self.do_flat_sky:
             warn('If you want to work with angular maps, you do not need the inner cut, hence please use do_inner_cut = False')
 
     #Set units for observable depending on convention
