@@ -392,7 +392,7 @@ class Survey(Lightcone):
 
                 #Vcell = Omega_pix * D_A (z)^2 * (1+z) * dnu/nu_obs * c/H is the volume of the voxel for a given channel
                                     #D_A here is comoving angular diameter distance = comoving_radial_distance in flat space
-                Vcell_true = hp.nside2pixarea(self.nside)*(self.cosmo.comoving_radial_distance(zmids)*u.Mpc )**2 * (self.dnu/self.line_nu0[line]) * (cu.c.to('km/s')/Hubble)
+                Vcell_true = hp.nside2pixarea(self.nside)*(self.cosmo.comoving_radial_distance(zmids)*u.Mpc )**2 * (self.dnu/self.line_nu0[line]) * (cu.c.to('km/s')/self.cosmo.hubble_parameter(zmids)*(u.km/u.Mpc/u.s))
 
                 if not self.mass:
                     if self.do_intensity:
