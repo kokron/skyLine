@@ -56,8 +56,11 @@ class Survey(Lightcone):
 
     -target_line:           Target line of the survey (Default: CO)
 
-    -supersample:           Factor of supersample with respect to the survey resolution
-                            when making the grid. (Default: 10)
+    -angular_supersample:   Factor of supersample with respect to the survey angular resolution
+                            when making the grid. (Default: 5)
+                            
+    -spectral_supersample:  Factor of supersample with respect to the survey spectral resolution
+                            when making the grid. (Default: 1)
 
     -do_angular_smooth:     Boolean: apply smoothing filter to implement angular resolution
                             limitations. (Default: True)
@@ -103,7 +106,8 @@ class Survey(Lightcone):
                  beam_FWHM=4.1*u.arcmin,
                  tobs=6000*u.hr,
                  target_line = 'CO',
-                 supersample = 10,
+                 angular_supersample = 5,
+                 spectral_supersample = 5,
                  do_angular_smooth = True,
                  do_spectral_smooth = False,
                  do_inner_cut = True,
@@ -468,9 +472,9 @@ class Survey(Lightcone):
             raise(Warning('Mask edges might be problematic due to the expanded selection!'))
 
         #Define the mesh divisions and the box size
-        Nmesh = np.array([self.supersample*self.Nchan,
-                  self.supersample*self.Nside[0],
-                  self.supersample*self.Nside[1]], dtype=int)
+        Nmesh = np.array([self.spectral_supersample*self.Nchan,
+                  self.angular_supersample*self.Nside[0],
+                  self.angular_supersample*self.Nside[1]], dtype=int)
         Lbox = self.Lbox.value
 
         ramid = 0.5*(self.RAObs_max + self.RAObs_min)
@@ -590,7 +594,7 @@ class Survey(Lightcone):
             maps+=field
 
         #get the proper shape for the observed map
-        if self.supersample > 1 and self.do_downsample:
+        if (self.angular_supersample > 1 or self.spectral_supersample > 1) and self.do_downsample:
             pm_down = pmesh.pm.ParticleMesh(np.array([self.Nchan,self.Nside[0],self.Nside[1]], dtype=int),
                                                   BoxSize=Lbox, dtype='float32', resampler='cic')
             maps = pm_down.downsample(maps.c2r(),keep_mean=True)
@@ -603,7 +607,7 @@ class Survey(Lightcone):
             if self.do_downsample:
                 maps += self.rng.normal(0.,self.sigmaN.value,maps.shape)
             else:
-                supersample_sigmaN = self.sigmaN * (self.supersample)**1.5
+                supersample_sigmaN = self.sigmaN * (self.spectral_supersample)**0.5 * self.angular_supersample
                 maps += self.rng.normal(0.,supersample_sigmaN.value,maps.shape)
 
         #Remove mean
@@ -620,7 +624,7 @@ class Survey(Lightcone):
             dgrade_nside=self.foreground_model['dgrade_nside']
         else:
             dgrade_nside=self.nside
-        obs_freqs_edge=np.linspace(self.nuObs_min, self.nuObs_max, self.supersample*self.Nchan+1)
+        obs_freqs_edge=np.linspace(self.nuObs_min, self.nuObs_max, self.spectral_supersample*self.Nchan+1)
         obs_freqs=(obs_freqs_edge[1:]+obs_freqs_edge[:-1])/2 #frequencies observed in survey
 
         if self.foreground_model['precomputed_file']!=None:
@@ -644,12 +648,12 @@ class Survey(Lightcone):
                 decmin=self.DECObs_min.value-decmid.value-(self.DECObs_max-self.DECObs_min).value/self.Nside[1]
                 decmax=self.DECObs_max.value-decmid.value+(self.DECObs_max-self.DECObs_min).value/self.Nside[1]
 
-                cart_proj=hp.projector.CartesianProj(xsize=self.Nside[0]*self.supersample+2, ysize=self.Nside[1]*self.supersample+2, lonra =  [ramin,ramax], latra=[decmin,decmax])  
+                cart_proj=hp.projector.CartesianProj(xsize=self.Nside[0]*self.angular_supersample+2, ysize=self.Nside[1]*self.angular_supersample+2, lonra =  [ramin,ramax], latra=[decmin,decmax])  
                 galmap_cart=cart_proj.projmap(galmap_rotated, self.vec2pix_func)
                 foreground_signal.append((galmap_cart.flatten())*u.uK)
                
-                Xedge=np.linspace(ramin,ramax, self.Nside[0]*self.supersample+1+2)
-                Yedge=np.linspace(decmin,decmax, self.Nside[1]*self.supersample+1+2)
+                Xedge=np.linspace(ramin,ramax, self.Nside[0]*self.angular_supersample+1+2)
+                Yedge=np.linspace(decmin,decmax, self.Nside[1]*self.angular_supersample+1+2)
                 X=(Xedge[1:]+Xedge[:-1])/2
                 Y=(Yedge[1:]+Yedge[:-1])/2
                 Xpix,Ypix=np.meshgrid(X,Y)
@@ -691,12 +695,12 @@ class Survey(Lightcone):
                 else:
                     galmap_rotated=dgrade_galmap_rotated
                     
-                cart_proj=hp.projector.CartesianProj(xsize=self.Nside[0]*self.supersample, ysize=self.Nside[1]*self.supersample, lonra =  [self.RAObs_min.value,self.RAObs_max.value], latra=[self.DECObs_min.value,self.DECObs_max.value])
+                cart_proj=hp.projector.CartesianProj(xsize=self.Nside[0]*self.angular_supersample, ysize=self.Nside[1]*self.angular_supersample, lonra =  [self.RAObs_min.value,self.RAObs_max.value], latra=[self.DECObs_min.value,self.DECObs_max.value])
                 galmap_cart=cart_proj.projmap(galmap_rotated, self.vec2pix_func)
                 foreground_signal.append((galmap_cart.flatten())*u.uK)
                
-                Xedge=np.linspace(self.RAObs_min.value,self.RAObs_max.value, self.Nside[0]*self.supersample+1)
-                Yedge=np.linspace(self.DECObs_min.value,self.DECObs_max.value, self.Nside[1]*self.supersample+1)
+                Xedge=np.linspace(self.RAObs_min.value,self.RAObs_max.value, self.Nside[0]*self.angular_supersample+1)
+                Yedge=np.linspace(self.DECObs_min.value,self.DECObs_max.value, self.Nside[1]*self.angular_supersample+1)
                 X=(Xedge[1:]+Xedge[:-1])/2
                 Y=(Yedge[1:]+Yedge[:-1])/2
                 Xpix,Ypix=np.meshgrid(X,Y)

@@ -159,10 +159,10 @@ def check_updated_params(self):
 
     #Check healpy pixel size just in case:
     if self.do_angular:
-        npix_fullsky = 4*np.pi/((self.beam_FWHM/self.supersample)**2).to(u.sr).value
+        npix_fullsky = 4*np.pi/((self.beam_FWHM/self.angular_supersample)**2).to(u.sr).value
         min_nside = hp.pixelfunc.get_min_valid_nside(npix_fullsky)
         if (min_nside > self.nside):
-            print("WARNING!!! the minimum NSIDE to account for beam_FWHM*supersample is {}, but NSIDE={} was input.".format(min_nside,self.nside))
+            print("WARNING!!! the minimum NSIDE to account for beam_FWHM*angular_supersample is {}, but NSIDE={} was input.".format(min_nside,self.nside))
         #Avoid inner cut if do_angular:
         if self.do_angular and self.do_inner_cut:
             raise ValueError('If you want to work with angular maps, you do not need the inner cut, hence please use do_inner_cut = False')
