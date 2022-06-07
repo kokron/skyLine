@@ -169,9 +169,12 @@ def check_updated_params(self):
         min_nside = hp.pixelfunc.get_min_valid_nside(npix_fullsky)
         if (min_nside > self.nside):
             warn("The minimum NSIDE to account for beam_FWHM*angular_supersample is {}, but NSIDE={} was input.".format(min_nside,self.nside))
-        #Avoid inner cut if do_angular:
-        if self.do_angular and self.do_inner_cut and not self.do_flat_sky:
-            warn('If you want to work with angular maps, you do not need the inner cut, hence please use do_inner_cut = False')
+        # ~ #Avoid inner cut if do_angular:
+        # ~ if self.do_angular and self.do_inner_cut and not self.do_flat_sky:
+            # ~ warn('If you want to work with angular maps, you do not need the inner cut, hence please use do_inner_cut = False')
+            
+    if self.cube_mode not in self.cube_mode_options:
+            raise ValueError('The cube_mode choice must be one of {}'.format(self.cube_mode_options))
 
     #Set units for observable depending on convention
     if self.do_intensity:

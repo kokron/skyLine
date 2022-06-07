@@ -69,7 +69,16 @@ class Survey(Lightcone):
     -do_spectral_smooth:    Boolean: apply smoothing filter to implement spectral resolution
                             limitations. (Default: False)
                             
-    -do_flat_sky:           Boolean: Use flat-sky approximation when building 3d map
+    -cube_mode:             Mode to create the data rectangular cube for 3d maps (irrelevant if 
+                            do_angular == True). Options are:
+                                - 'outer_cube': The lightcone is inscribed in the cube
+                                - 'inner_cube': The cube is inscribed in the lightcone
+                                - 'mid_redshift': coordinates transverse to line of sight are obtained
+                                                  using a single redshift for all emitters (for each line)
+                                - 'flat_sky': Applies flat sky approximation on top of 'mid_redshift'
+                            (Default: 'inner_cube')
+    
+    do_flat_sky:           Boolean: Use flat-sky approximation when building 3d map
                             (Default: False) Irrelevant if do_angular == True
 
     -do_inner_cut           Get a box for which there are no empty spaces, but discards some haloes.
@@ -114,8 +123,7 @@ class Survey(Lightcone):
                  spectral_supersample = 5,
                  do_angular_smooth = True,
                  do_spectral_smooth = False,
-                 do_inner_cut = True,
-                 do_flat_sky = False,
+                 cube_mode = 'inner_cube',
                  do_downsample = True,
                  do_remove_mean = True,
                  do_angular = False,
@@ -165,9 +173,13 @@ class Survey(Lightcone):
             min_nside = hp.pixelfunc.get_min_valid_nside(npix_fullsky)
             if (min_nside > self.nside):
                 warn("The minimum NSIDE to account for beam_FWHM*angular_supersample is {}, but NSIDE={} was input.".format(min_nside,self.nside))
-            #Avoid inner cut if do_angular:
-            if self.do_angular and self.do_inner_cut and not self.do_flat_sky:
-                warn('If you want to work with angular maps, you do not need the inner cut, hence please use do_inner_cut = False')
+            # ~ #Avoid inner cut if do_angular:
+            # ~ if self.do_angular and self.do_inner_cut and not self.do_flat_sky:
+                # ~ warn('If you want to work with angular maps, you do not need the inner cut, hence please use do_inner_cut = False')
+        
+        self.cube_mode_options = ['outer_cube','inner_cube','mid_redshift','flat_sky']
+        if self.cube_mode not in self.cube_mode_options:
+            raise ValueError('The cube_mode choice must be one of {}'.format(self.cube_mode_options))
 
         if NoPySM and self.do_gal_foregrounds==True:
             raise ValueError('PySM must be installed to model galactic foregrounds')
@@ -286,40 +298,52 @@ class Survey(Lightcone):
         rlim = ((self.cosmo.comoving_radial_distance(zlims)*u.Mpc).to(self.Mpch)).value
         
         #Get the side of the box
-        if not self.do_flat_sky:
-            if self.do_inner_cut:
-                raside = 2*rlim[0]*np.tan(0.5*(ralim[1]-ralim[0]))
-                decside = 2*rlim[0]*np.tan(0.5*(declim[1]-declim[0]))
-                zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
+        if self.cube_mode == 'inner_cube':
+            raside = 2*rlim[0]*np.tan(0.5*(ralim[1]-ralim[0]))
+            decside = 2*rlim[0]*np.tan(0.5*(declim[1]-declim[0]))
+            zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
+            
+            self.rside_obs_lim = np.array([rlim[0],rlim[0]+zside]) #min, max
+            
+            warn("% of survey volume lost due to inner cube = {}".format(1-zside*raside*decside*self.Mpch**3/self.Vsurvey))
+            
+            if (raside > np.sqrt(2)*2*rlim[1]*np.sin(0.5*(ralim[1]-ralim[0])) or \
+               (decside > np.sqrt(2)*2*rlim[1]*np.sin(0.5*(declim[1]-declim[0])):
+                warn("The corners of the last perpendicular slices of the box are going to be empty. Consider using flat sky")
                 
-                self.raside_lim = rlim[0]*np.tan(ralim) #min, max self.decside_lim = rlim[0]*np.tan(declim-decmid) #min, max
-                self.decside_lim = rlim[0]*np.tan(declim) #min, max
-                self.rside_obs_lim = np.array([rlim[0],rlim[0]+zside]) #min, max
-                
-                warn("% of survey volume lost due to inner cut = {}".format(1-zside*raside*decside*self.Mpch**3/self.Vsurvey))
-                
-                if (raside > np.sqrt(2)*2*rlim[1]*np.sin(0.5*(ralim[1]-ralim[0])) or \
-                   (decside > np.sqrt(2)*2*rlim[1]*np.sin(0.5*(declim[1]-declim[0])):
-                    warn("The corners of the last perpendicular slices of the box are going to be empty. Consider using flat sky")
-                    
-            else:
-                raside = 2*rlim[1]*np.tan(0.5*(ralim[1]-ralim[0]))
-                decside = 2*rlim[1]*np.tan(0.5*(declim[1]-declim[0]))
-                zside = rlim[1]-rlim[0]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))
-                
-                self.raside_lim = rlim[1]*np.tan(ralim) #min, max self.decside_lim = rlim[0]*np.tan(declim-decmid) #min, max
-                self.decside_lim = rlim[1]*np.tan(declim) #min, max
-                self.rside_obs_lim = np.array([rlim[1]-zside,rlim[1]]) #min, max
-        else:
+        elif self.cube_mode == 'outer_cube':
+            raside = 2*rlim[1]*np.tan(0.5*(ralim[1]-ralim[0]))
+            decside = 2*rlim[1]*np.tan(0.5*(declim[1]-declim[0]))
+            zside = rlim[1]-rlim[0]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))
+            
+            self.rside_obs_lim = np.array([rlim[1]-zside,rlim[1]]) #min, max
+        
+        elif self.cube_mode == 'flat_sky':
             rmid = ((self.cosmo.comoving_radial_distance(self.zmid)*u.Mpc).to(self.Mpch)).value
             raside = 2*rmid*np.tan(0.5*(ralim[1]-ralim[0]))
             decside = 2*rmid*np.tan(0.5*(declim[1]-declim[0]))
             zside = rlim[1]-rlim[0]
             
-            self.raside_lim = rmid*np.tan(ralim) #min, max self.decside_lim = rlim[0]*np.tan(declim-decmid) #min, max
-            self.decside_lim = rmid*np.tan(declim) #min, max
             self.rside_obs_lim = np.array([rlim[0],rlim[1]]) #min, max
+            
+        elif self.cube_mode == 'mid_redshift':
+            rmid = ((self.cosmo.comoving_radial_distance(self.zmid)*u.Mpc).to(self.Mpch)).value
+            raside = 2*rmid*np.tan(0.5*(ralim[1]-ralim[0]))
+            decside = 2*rmid*np.tan(0.5*(declim[1]-declim[0]))
+            #to avoid cut at high redshift end
+            zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
+            
+            self.rside_obs_lim = np.array([rlim[0],rlim[0]+zside]) #min, max
+            
+            warn("% of survey volume lost due to cutting the spherical cap at high redshift end = {}".format(1-zside*raside*decside*self.Mpch**3/self.Vsurvey))
+            
+            if (raside > np.sqrt(2)*2*rlim[1]*np.sin(0.5*(ralim[1]-ralim[0])) or \
+               (decside > np.sqrt(2)*2*rlim[1]*np.sin(0.5*(declim[1]-declim[0])):
+                warn("The corners of the last perpendicular slices of the box are going to be empty. Consider using flat sky")
 
+        self.raside_lim = rlim[0]*np.tan(ralim) #min, max self.decside_lim = rlim[0]*np.tan(declim-decmid) #min, max
+        self.decside_lim = rlim[0]*np.tan(declim) #min, max
+            
         Lbox = np.array([zside,raside,decside])
 
         return (Lbox*self.Mpch).to(self.Mpch)
@@ -536,24 +560,30 @@ class Survey(Lightcone):
                 zlims = (self.line_nu0[line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
                 rlim = ((self.cosmo.comoving_radial_distance(zlims)*u.Mpc).to(self.Mpch)).value
                 #Get the side of the box
-                if not self.do_flat_sky:
-                    if self.do_inner_cut:
-                        raside = 2*rlim[0]*np.tan(0.5*(ralim[1]-ralim[0]))
-                        decside = 2*rlim[0]*np.tan(0.5*(declim[1]-declim[0]))
-                        zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
-                        rside_lim = np.array([rlim[0],rlim[0]+zside])
-                    else:
-                        raside = 2*rlim[1]*np.tan(0.5*(ralim[1]-ralim[0]))
-                        decside = 2*rlim[1]*np.tan(0.5*(declim[1]-declim[0]))
-                        zside = rlim[1]-rlim[0]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))
-                        rside_lim = np.array([rlim[1]-zside,rlim[1]])
-                else:
+                if self.cube_mode == 'inner_cube':
+                    raside = 2*rlim[0]*np.tan(0.5*(ralim[1]-ralim[0]))
+                    decside = 2*rlim[0]*np.tan(0.5*(declim[1]-declim[0]))
+                    zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
+                        
+                elif self.cube_mode == 'outer_cube':
+                    raside = 2*rlim[1]*np.tan(0.5*(ralim[1]-ralim[0]))
+                    decside = 2*rlim[1]*np.tan(0.5*(declim[1]-declim[0]))
+                    zside = rlim[1]-rlim[0]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))
+                    
+                elif self.cube_mode == 'flat_sky':
                     zmid = (self.line_nu0[line]/self.nuObs_mean).decompose()-1
                     rmid = ((self.cosmo.comoving_radial_distance(zmid)*u.Mpc).to(self.Mpch)).value
                     raside = 2*rmid*np.tan(0.5*(ralim[1]-ralim[0]))
                     decside = 2*rmid*np.tan(0.5*(declim[1]-declim[0]))
                     zside = rlim[1]-rlim[0]
-                    rside_lim = np.array([rlim[0],rlim[1]])
+                    
+                elif self.cube_mode == 'mid_redshift':
+                    zmid = (self.line_nu0[line]/self.nuObs_mean).decompose()-1
+                    rmid = ((self.cosmo.comoving_radial_distance(zmid)*u.Mpc).to(self.Mpch)).value
+                    raside = 2*rmid*np.tan(0.5*(ralim[1]-ralim[0]))
+                    decside = 2*rmid*np.tan(0.5*(declim[1]-declim[0]))
+                    #to avoid cut at high redshift end
+                    zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
 
                 Lbox_true = np.array([zside,raside,decside])
                 Vcell_true = (Lbox_true/Nmesh).prod()*(self.Mpch**3).to(self.Mpch**3)
@@ -571,23 +601,27 @@ class Survey(Lightcone):
                 dec -= decmid.value
 
                 ra,dec  = da.deg2rad(ra),da.deg2rad(dec)
-                if not self.do_flat_sky:
-                    # cartesian coordinates in unit sphere
-                    x = da.cos(dec) * da.cos(ra)
-                    y = da.cos(dec) * da.sin(ra)
-                    z = da.sin(dec)
-                    pos = da.vstack([x,y,z]).T                    
-                else:
+                if self.cube_mode == 'flat_sky':
                     # cartesian coordinates in flat sky
                     x = da.ones(ra.shape[0])
                     y = da.sin(ra)/r*rmid # only ra?
                     z = da.sin(dec)/r*rmid # only dec?
-                    pos = da.vstack([x,y,z]).T
-                                        
+                elif self.cube_mode == 'mid_redshift':
+                    # cartesian coordinates in unit sphere but preparing for only one distance for ra and dec
+                    x = da.cos(dec) * da.cos(ra)
+                    y = da.sin(ra)/r*rmid # only ra?
+                    z = da.sin(dec)/r*rmid # only dec?
+                else:
+                    # cartesian coordinates in unit sphere
+                    x = da.cos(dec) * da.cos(ra)
+                    y = da.cos(dec) * da.sin(ra)
+                    z = da.sin(dec)
+                    
+                pos = da.vstack([x,y,z]).T                    
                 cartesian_halopos = r[:,None] * pos
                 lategrid = np.array(cartesian_halopos.compute())
-                #Filter some halos out if outside of the inner cut
-                if self.do_inner_cut and not self.do_flat_sky:
+                #Filter some halos out if outside of the cube mode
+                if self.cube_mode == 'inner_cube' or self.cube_mode == 'mid_redshift':
                     filtering = (lategrid[:,0] >= rside_obs_lim[0]) & (lategrid[:,0] <= rside_obs_lim[1]) & \
                                 (lategrid[:,1] >= raside_lim[0]) & (lategrid[:,1] <= raside_lim[1]) & \
                                 (lategrid[:,2] >= decside_lim[0]) & (lategrid[:,2] <= decside_lim[1])
@@ -595,6 +629,9 @@ class Survey(Lightcone):
                     #Compute the signal in each voxel (with Ztrue and Vcell_true)
                     Zhalo = self.halos_in_survey[line]['Ztrue'][filtering]
                     Hubble = self.cosmo.hubble_parameter(Zhalo)*(u.km/u.Mpc/u.s)
+                    
+                    warn("% of emitters of {} line left out filtering = {}".format(line, 1-len(Zhalo)/len(filtering))
+
                     if not self.mass:
                         if self.do_intensity:
                             #intensity[Jy/sr]
@@ -669,9 +706,15 @@ class Survey(Lightcone):
         return maps
 
     def vec2pix_func(self, x, y, z):
+        '''
+        Alias for hp.vec2pix(nside,x,y,z) function to use in the cartesian projection
+        '''
         return hp.vec2pix(self.nside, x, y, z)
 
     def create_foreground_map(self, mins, Nmesh, Lbox, rside_obs_lim, raside_lim, decside_lim):
+        '''
+        Creates a map of galactic continuum foregrounds using pySM
+        '''
         if self.foreground_model['dgrade_nside']!=self.nside:
             dgrade_nside=self.foreground_model['dgrade_nside']
         else:
@@ -788,19 +831,24 @@ class Survey(Lightcone):
         dec -= decmid.value
 
         ra,dec  = da.deg2rad(ra),da.deg2rad(dec)
-        if not self.do_flat_sky:
-            # cartesian coordinates in unit sphere
-            x = da.cos(dec) * da.cos(ra)
-            y = da.cos(dec) * da.sin(ra)
-            z = da.sin(dec)
-            pos = da.vstack([x,y,z]).T                    
-        else:
+        if self.cube_mode == 'flat_sky':
+            rmid = ((self.cosmo.comoving_radial_distance(self.zmid)*u.Mpc).to(self.Mpch)).value
             # cartesian coordinates in flat sky
             x = da.ones(ra.shape[0])
             y = da.sin(ra)/r*rmid # only ra?
             z = da.sin(dec)/r*rmid # only dec?
-            pos = da.vstack([x,y,z]).T
-        
+        elif self.cube_mode == 'mid_redshift':
+            rmid = ((self.cosmo.comoving_radial_distance(self.zmid)*u.Mpc).to(self.Mpch)).value
+            # cartesian coordinates in unit sphere but preparing for only one distance for ra and dec
+            x = da.cos(dec) * da.cos(ra)
+            y = da.sin(ra)/r*rmid # only ra?
+            z = da.sin(dec)/r*rmid # only dec?
+        else:
+            # cartesian coordinates in unit sphere
+            x = da.cos(dec) * da.cos(ra)
+            y = da.cos(dec) * da.sin(ra)
+            z = da.sin(dec)
+                    
         # ~ ra,dec  = da.deg2rad(ra),da.deg2rad(dec)
         # ~ # cartesian coordinates
         # ~ x = da.cos(dec) * da.cos(ra)
@@ -810,6 +858,7 @@ class Survey(Lightcone):
         # ~ #radial distances in Mpch/h
         # ~ r = redshift.map_blocks(lambda zz: (((self.cosmo.comoving_radial_distance(zz)*u.Mpc).to(self.Mpch)).value),dtype=redshift.dtype)
         
+        pos = da.vstack([x,y,z]).T
         cartesian_pixelpos = r[:,None] * pos
         foreground_grid = np.array(cartesian_pixelpos.compute())
         
