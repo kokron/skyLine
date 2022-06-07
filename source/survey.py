@@ -12,6 +12,7 @@ import pmesh
 import healpy as hp
 from source.lightcone import Lightcone
 from source.utilities import cached_survey_property,get_default_params,check_params
+from warnings import warn
 
 try:
     import pysm3
@@ -145,24 +146,26 @@ class Survey(Lightcone):
         # Check that the observed footprint is contained in the lightcone
         if self.RAObs_min < self.RA_min or self.RAObs_max > self.RA_max or \
            self.DECObs_min < self.DEC_min or self.DECObs_max > self.DEC_max:
-            raise ValueError('Please, your observed limits RA_Obs=[{},{}], DEC_Obs=[{},{}] must be within the lightcone limits RA=[{},{}], DEC=[{},{}].'.format(self.RAObs_min,self.RAObs_max,self.DECObs_min,self.DECObs_max,self.RA_min,self.RA_max,self.DEC_min,self.DEC_max))
+            warn('Please, your observed limits RA_Obs=[{},{}], DEC_Obs=[{},{}] must be within the lightcone limits RA=[{},{}], DEC=[{},{}].'.format(self.RAObs_min,self.RAObs_max,self.DECObs_min,self.DECObs_max,self.RA_min,self.RA_max,self.DEC_min,self.DEC_max))
 
         # Check that the bandwidth and lines used are included in the lightcone limits
         for line in self.lines.keys():
             if self.lines[line]:
                 zlims = (self.line_nu0[line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
                 if zlims[0] <= self.zmin or zlims [1] >= self.zmax:
-                    raise ValueError('The line {} on the bandwidth [{:.2f},{:.2f}] corresponds to z range [{:.2f},{:.2f}], while the included redshifts in the lightcone are within [{:.2f},{:.2f}]. Please remove the line, increase the zmin,zmax range or reduce the bandwith.'.format(line,self.nuObs_max,self.nuObs_min,zlims[0],zlims[1],self.zmin,self.zmax))
+                    warn('The line {} on the bandwidth [{:.2f},{:.2f}] corresponds to z range [{:.2f},{:.2f}], while the included redshifts in the lightcone are within [{:.2f},{:.2f}]. Please remove the line, increase the zmin,zmax range or reduce the bandwith.'.format(line,self.nuObs_max,self.nuObs_min,zlims[0],zlims[1],self.zmin,self.zmax))
 
         #Check healpy pixel size just in case:
         if self.do_angular:
-            if (self.beam_FWHM.to(u.arcmin)).value < hp.nside2resol(self.nside, arcmin=True):
-                print("WARNING!!! the healpy pixel side chosen, from NSIDE = {}, is {:.2f} times bigger than the beam_FWHM. Consider increasing NSIDE (remember that it must be a power of 2)".format(self.nside,hp.nside2resol(self.nside, arcmin=True)/self.beam_FWHM.to(u.arcmin)).value)
+            npix_fullsky = 4*np.pi/((self.beam_FWHM/self.angular_supersample)**2).to(u.sr).value
+            min_nside = hp.pixelfunc.get_min_valid_nside(npix_fullsky)
+            if (min_nside > self.nside):
+                warn("The minimum NSIDE to account for beam_FWHM*angular_supersample is {}, but NSIDE={} was input.".format(min_nside,self.nside))
             #Avoid inner cut if do_angular:
             if self.do_angular and self.do_inner_cut:
-                raise ValueError('If you want to work with angular maps, you do not need the inner cut, hence please use do_inner_cut = False')
+                warn('If you want to work with angular maps, you do not need the inner cut, hence please use do_inner_cut = False')
 
-        if NoPySM and do_gal_foregrounds==True:
+        if NoPySM and self.do_gal_foregrounds==True:
             raise ValueError('PySM must be installed to model galactic foregrounds')
 
         #Set units for observable depending on convention
@@ -364,7 +367,7 @@ class Survey(Lightcone):
         #Define the mesh divisions and the box size
 
         if not self.do_angular:
-            raise(Warning('Mask edges will be funky in this case, might see some vignetting'))
+            warn('Mask edges will be funky in this case, might see some vignetting')
         npix = hp.nside2npix(self.nside)
 
         #This is too much memory
@@ -469,7 +472,7 @@ class Survey(Lightcone):
         '''
 
         if self.do_angular:
-            raise(Warning('Mask edges might be problematic due to the expanded selection!'))
+            warn('Mask edges might be problematic due to the expanded selection!')
 
         #Define the mesh divisions and the box size
         Nmesh = np.array([self.spectral_supersample*self.Nchan,
@@ -677,7 +680,7 @@ class Survey(Lightcone):
                 elif cmp=='ame':
                     sky_config.append("a1")
                 else:
-                    raise(Warning('Unknown galactic foreground component'))
+                    warn('Unknown galactic foreground component: {}'.format(cmp))
 
             sky = pysm3.Sky(nside=dgrade_nside, preset_strings=sky_config)#create sky object using the specified model
             ra_insurvey=[]; dec_insurvey=[]; z_insurvey=[]; foreground_signal=[]

@@ -5,10 +5,16 @@ Set of functions useful in some modules
 import source.line_models as LM
 import source.external_sfrs as extSFRs
 import inspect
-from lim import lim
 import astropy.units as u
 import numpy as np
 import healpy as hp
+from warnings import warn
+
+try:
+    import pysm3
+    NoPySM = False
+except:
+    NoPySM = True
 
 class cached_lightcone_property(object):
     """
@@ -113,14 +119,16 @@ def check_params(input_params, default_params):
             if key == 'seed':
                 if type(input_value) == int:
                     continue
-
             else:
                 raise TypeError("Parameter "+key+" must be a "+
                                 str(type(default_value)))
 
         # Special requirements for some parameters
+        line_dict = getattr(LM,'lines_included')(self)
         if key == 'lines':
             for line in input_value.keys():
+                if line not in line_dict:
+                    raise ValueError('The line {} is currently not included in the code. Please correct or modify "lines_included" in line_models.py'.format(line))
                 if input_value[line]:
                     if input_params['models'][line]['model_name'] == '':
                         raise ValueError('Please input a "model_name" within "models" for the {} line.'.format(line))
@@ -128,16 +136,14 @@ def check_params(input_params, default_params):
                         raise ValueError('{} not found in line_models.py'.format(input_params['models'][line]['model_name']))
                     if input_params['models'][line]['model_pars'] == {}:
                         raise ValueError('Please input the parameters of the model in "model_pars" within "models" for the {} line.'.format(line))
+                    
         elif key == 'do_external_SFR':
             if input_value and not hasattr(extSFRs,input_params['external_SFR']):
                 raise ValueError('{} not found in external_sfrs.py'.format(input_params['external_SFR']))
 
         elif key == 'target_line':
-            lines_available = ['CO_J10','CII','Halpha','Hbeta','Lyalpha','HI',
-                              'CO_J21','CO_J32','CO_J43','CO_J54','CO_J65','CO_J76',
-                              'NIII','NII','OIII_88','OI_63','OI_145','OII','OIII_0p5']
-            if input_value not in lines_available:
-                raise ValueError('The target line {} must be one of the available lines: {}'.format(input_value,lines_available))
+            if input_value not in line_dict:
+                    raise ValueError('The line {} is currently not included in the code. Please correct or modify "lines_included" in line_models.py'.format(line))
 
     return
     
@@ -148,24 +154,24 @@ def check_updated_params(self):
     # Check that the observed footprint is contained in the lightcone
     if self.RAObs_min < self.RA_min or self.RAObs_max > self.RA_max or \
        self.DECObs_min < self.DEC_min or self.DECObs_max > self.DEC_max:
-        raise ValueError('Please, your observed limits RA_Obs=[{},{}], DEC_Obs=[{},{}] must be within the lightcone limits RA=[{},{}], DEC=[{},{}].'.format(self.RAObs_min,self.RAObs_max,self.DECObs_min,self.DECObs_max,self.RA_min,self.RA_max,self.DEC_min,self.DEC_max))
+        warn('Please, your observed limits RA_Obs=[{},{}], DEC_Obs=[{},{}] must be within the lightcone limits RA=[{},{}], DEC=[{},{}].'.format(self.RAObs_min,self.RAObs_max,self.DECObs_min,self.DECObs_max,self.RA_min,self.RA_max,self.DEC_min,self.DEC_max))
 
     # Check that the bandwidth and lines used are included in the lightcone limits
     for line in self.lines.keys():
         if self.lines[line]:
             zlims = (self.line_nu0[line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
             if zlims[0] <= self.zmin or zlims [1] >= self.zmax:
-                raise ValueError('The line {} on the bandwidth [{:.2f},{:.2f}] corresponds to z range [{:.2f},{:.2f}], while the included redshifts in the lightcone are within [{:.2f},{:.2f}]. Please remove the line, increase the zmin,zmax range or reduce the bandwith.'.format(line,self.nuObs_max,self.nuObs_min,zlims[0],zlims[1],self.zmin,self.zmax))
+                warn('The line {} on the bandwidth [{:.2f},{:.2f}] corresponds to z range [{:.2f},{:.2f}], while the included redshifts in the lightcone are within [{:.2f},{:.2f}]. Please remove the line, increase the zmin,zmax range or reduce the bandwith.'.format(line,self.nuObs_max,self.nuObs_min,zlims[0],zlims[1],self.zmin,self.zmax))
 
     #Check healpy pixel size just in case:
     if self.do_angular:
         npix_fullsky = 4*np.pi/((self.beam_FWHM/self.angular_supersample)**2).to(u.sr).value
         min_nside = hp.pixelfunc.get_min_valid_nside(npix_fullsky)
         if (min_nside > self.nside):
-            print("WARNING!!! the minimum NSIDE to account for beam_FWHM*angular_supersample is {}, but NSIDE={} was input.".format(min_nside,self.nside))
+            warn("The minimum NSIDE to account for beam_FWHM*angular_supersample is {}, but NSIDE={} was input.".format(min_nside,self.nside))
         #Avoid inner cut if do_angular:
         if self.do_angular and self.do_inner_cut:
-            raise ValueError('If you want to work with angular maps, you do not need the inner cut, hence please use do_inner_cut = False')
+            warn('If you want to work with angular maps, you do not need the inner cut, hence please use do_inner_cut = False')
 
     #Set units for observable depending on convention
     if self.do_intensity:
@@ -175,6 +181,9 @@ def check_updated_params(self):
         
     if self.do_angular != self.angular_map:
         raise ValueError("'do_angular' and 'angular_map' must be the same when the map is computed")
+        
+    if NoPySM and self.do_gal_foregrounds==True:
+        raise ValueError('PySM must be installed to model galactic foregrounds')
         
     return
 
