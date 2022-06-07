@@ -7,6 +7,23 @@ from numpy.random import normal,multivariate_normal
 import astropy.units as u
 import astropy.constants as cu
 
+######################
+## Lines considered ##
+######################
+
+def lines_included(self):
+    '''
+    Returns a dictionary with the lines that are considered within the code.
+    Add here a line and the rest-frame frequency if required
+    '''
+    lines = dict(CO_J10 = 115.271*u.GHz, CO_J21 = 2*115.271*u.GHz, CO_J32 = 3*115.271*u.GHz,CO_J43 = 4*115.271*u.GHz,
+                        CO_J54 = 5*115.271*u.GHz, CO_J65 = 6*115.271*u.GHz, CO_J76 = 7*115.271*u.GHz,
+                        CII = 1900.539*u.GHz, HI = 1.4204134*u.GHz,NIII = 5230.1545*u.GHz,NII = 2459.3311*u.GHz,
+                        OIII_88 = 3392.8526*u.GHz, OI_63 = 4745.0531*u.GHz, OI_145 = 2060.4293*u.GHz, 
+                        Lyalpha = 2465398.5*u.GHz, Halpha = 456805.72*u.GHz, Hbeta = 616730.01028595*u.GHz,
+                        OII = 804380.08585994*u.GHz, OIII_0p5 = 598746.67066107*u.GHz)
+    return lines
+
 ###################
 ## IR Luminosity ##
 ###################
