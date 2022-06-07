@@ -307,8 +307,8 @@ class Survey(Lightcone):
             
             warn("% of survey volume lost due to inner cube = {}".format(1-zside*raside*decside*self.Mpch**3/self.Vsurvey))
             
-            if (raside > np.sqrt(2)*2*rlim[1]*np.sin(0.5*(ralim[1]-ralim[0])) or \
-               (decside > np.sqrt(2)*2*rlim[1]*np.sin(0.5*(declim[1]-declim[0])):
+            if (raside > np.sqrt(2)*2*rlim[1]*np.sin(0.5*(ralim[1]-ralim[0]))) or \
+               (decside > np.sqrt(2)*2*rlim[1]*np.sin(0.5*(declim[1]-declim[0]))):
                 warn("The corners of the last perpendicular slices of the box are going to be empty. Consider using flat sky")
                 
         elif self.cube_mode == 'outer_cube':
