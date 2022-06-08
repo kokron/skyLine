@@ -69,7 +69,7 @@ class Measure(Survey):
         self._measure_params.pop('self')
         self._measure_params.pop('lightcone_survey_kwargs')
         self._default_measure_params = get_default_params(Measure.__init__)
-        check_params(self._measure_params,self._default_measure_params)
+        check_params(self,self._measure_params,self._default_measure_params)
         
         # Set measure parameters
         for key in self._measure_params:

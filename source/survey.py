@@ -145,7 +145,7 @@ class Survey(Lightcone):
         self._survey_params.pop('self')
         self._survey_params.pop('lightcone_kwargs')
         self._default_survey_params = get_default_params(Survey.__init__)
-        check_params(self._survey_params,self._default_survey_params)
+        check_params(self,self._survey_params,self._default_survey_params)
 
         # Set survey parameters
         for key in self._survey_params:
@@ -205,7 +205,7 @@ class Survey(Lightcone):
         '''
         Effective mid redshift (obtained from nuObs_mean):
         '''
-        return (self.line_nu0[self.target_line]/self.nuObs_mean).decompose()-1
+        return ((self.line_nu0[self.target_line]/self.nuObs_mean).decompose()).value-1
 
     @cached_survey_property
     def delta_nuObs(self):
@@ -276,8 +276,9 @@ class Survey(Lightcone):
         '''
         #Omega_field * D_A (z)^2 * (1+z) * Delta_nu/nu_obs * c/H is the volume of the survey
             #D_A here is comoving angular diameter distance = comoving_radial_distance in flat space
-        Vol = self.Omega_field*(self.cosmo.comoving_radial_distance(self.zmid)*u.Mpc)**2 * (self.delta_nuObs/self.line_nu0[self.target_line]) * (cu.c.to('km/s')/self.cosmo.hubble_parameter(self.zmid)*(u.km/u.Mpc/u.s))
-        return Vol.to(u.Mpc**3)
+        Area = self.Omega_field/u.sr*(self.cosmo.comoving_radial_distance(self.zmid)*u.Mpc)**2
+        Depth = self.delta_nuObs/(0.5*(self.nuObs_max+self.nuObs_min))*(1+self.zmid)*(cu.c.to('km/s')/self.cosmo.hubble_parameter(self.zmid)/(u.km/u.Mpc/u.s))
+        return (Area*Depth).to(u.Mpc**3)
 
     @cached_survey_property
     def Lbox(self):
@@ -297,25 +298,36 @@ class Survey(Lightcone):
         zlims = (self.line_nu0[self.target_line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
         rlim = ((self.cosmo.comoving_radial_distance(zlims)*u.Mpc).to(self.Mpch)).value
         
+        #projection to the unit sphere
+        xlim = np.cos(declim) * np.cos(ralim)
+        ylim = np.cos(declim) * np.sin(ralim)
+        zlim = np.sin(declim)
+        
+        posedge = np.vstack([xlim,ylim,zlim]).T
+        edges = rlim[:,None]*posedge[1] #All positive
+        
         #Get the side of the box
         if self.cube_mode == 'inner_cube':
             raside = 2*rlim[0]*np.tan(0.5*(ralim[1]-ralim[0]))
             decside = 2*rlim[0]*np.tan(0.5*(declim[1]-declim[0]))
             zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
             
+            self.raside_lim = rlim[0]*np.tan(ralim) #min, max 
+            self.decside_lim = rlim[0]*np.tan(declim) #min, max
             self.rside_obs_lim = np.array([rlim[0],rlim[0]+zside]) #min, max
             
             warn("% of survey volume lost due to inner cube = {}".format(1-zside*raside*decside*self.Mpch**3/self.Vsurvey))
             
-            if (raside > np.sqrt(2)*2*rlim[1]*np.sin(0.5*(ralim[1]-ralim[0]))) or \
-               (decside > np.sqrt(2)*2*rlim[1]*np.sin(0.5*(declim[1]-declim[0]))):
+            if edges[1,0] < rlim[0]+zside:
                 warn("The corners of the last perpendicular slices of the box are going to be empty. Consider using flat sky")
                 
         elif self.cube_mode == 'outer_cube':
-            raside = 2*rlim[1]*np.tan(0.5*(ralim[1]-ralim[0]))
-            decside = 2*rlim[1]*np.tan(0.5*(declim[1]-declim[0]))
-            zside = rlim[1]-rlim[0]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))
+            raside = 2*rlim[1]*np.sin(0.5*(ralim[1]-ralim[0]))
+            decside = 2*rlim[1]*np.sin(0.5*(declim[1]-declim[0]))
+            zside = rlim[1]-edges[0,0]
             
+            self.raside_lim = rlim[1]*np.sin(ralim) #min, max 
+            self.decside_lim = rlim[1]*np.sin(declim) #min, max
             self.rside_obs_lim = np.array([rlim[1]-zside,rlim[1]]) #min, max
         
         elif self.cube_mode == 'flat_sky':
@@ -324,6 +336,8 @@ class Survey(Lightcone):
             decside = 2*rmid*np.tan(0.5*(declim[1]-declim[0]))
             zside = rlim[1]-rlim[0]
             
+            self.raside_lim = rmid*np.tan(ralim) #min, max 
+            self.decside_lim = rmid*np.tan(declim) #min, max
             self.rside_obs_lim = np.array([rlim[0],rlim[1]]) #min, max
             
         elif self.cube_mode == 'mid_redshift':
@@ -333,16 +347,15 @@ class Survey(Lightcone):
             #to avoid cut at high redshift end
             zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
             
+            self.raside_lim = rmid*np.tan(ralim) #min, max 
+            self.decside_lim = rmid*np.tan(declim) #min, max
             self.rside_obs_lim = np.array([rlim[0],rlim[0]+zside]) #min, max
             
             warn("% of survey volume lost due to cutting the spherical cap at high redshift end = {}".format(1-zside*raside*decside*self.Mpch**3/self.Vsurvey))
             
-            if (raside > np.sqrt(2)*2*rlim[1]*np.sin(0.5*(ralim[1]-ralim[0])) or \
-               (decside > np.sqrt(2)*2*rlim[1]*np.sin(0.5*(declim[1]-declim[0])):
+            if (raside > np.sqrt(2)*rlim[1]*np.sin(0.5*(ralim[1]-ralim[0]))) or \
+               (decside > np.sqrt(2)*rlim[1]*np.sin(0.5*(declim[1]-declim[0]))):
                 warn("The corners of the last perpendicular slices of the box are going to be empty. Consider using flat sky")
-
-        self.raside_lim = rlim[0]*np.tan(ralim) #min, max self.decside_lim = rlim[0]*np.tan(declim-decmid) #min, max
-        self.decside_lim = rlim[0]*np.tan(declim) #min, max
             
         Lbox = np.array([zside,raside,decside])
 
@@ -456,7 +469,7 @@ class Survey(Lightcone):
 
                 #Vcell = Omega_pix * D_A (z)^2 * (1+z) * dnu/nu_obs * c/H is the volume of the voxel for a given channel
                                     #D_A here is comoving angular diameter distance = comoving_radial_distance in flat space
-                Vcell_true = hp.nside2pixarea(self.nside)*(self.cosmo.comoving_radial_distance(zmids)*u.Mpc )**2 * (self.dnu/self.line_nu0[line]) * (cu.c.to('km/s')/self.cosmo.hubble_parameter(zmids)*(u.km/u.Mpc/u.s))
+                Vcell_true = hp.nside2pixarea(self.nside)*(self.cosmo.comoving_radial_distance(zmids)*u.Mpc )**2 * (self.dnu/nu_bins[bin_idxs]) * (1+zmids) * (cu.c.to('km/s')/self.cosmo.hubble_parameter(zmids)*(u.km/u.Mpc/u.s))
 
                 if not self.mass:
                     if self.do_intensity:
@@ -560,16 +573,25 @@ class Survey(Lightcone):
                 zlims = (self.line_nu0[line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
                 rlim = ((self.cosmo.comoving_radial_distance(zlims)*u.Mpc).to(self.Mpch)).value
                 #Get the side of the box
+                #projection to the unit sphere
+                xlim = np.cos(declim) * np.cos(ralim)
+                ylim = np.cos(declim) * np.sin(ralim)
+                zlim = np.sin(declim)
+
+                posedge = np.vstack([xlim,ylim,zlim]).T
+                edges = rlim[:,None]*posedge[1] #All positive
+
+                #Get the side of the box
                 if self.cube_mode == 'inner_cube':
                     raside = 2*rlim[0]*np.tan(0.5*(ralim[1]-ralim[0]))
                     decside = 2*rlim[0]*np.tan(0.5*(declim[1]-declim[0]))
                     zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
-                        
+
                 elif self.cube_mode == 'outer_cube':
-                    raside = 2*rlim[1]*np.tan(0.5*(ralim[1]-ralim[0]))
-                    decside = 2*rlim[1]*np.tan(0.5*(declim[1]-declim[0]))
-                    zside = rlim[1]-rlim[0]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))
-                    
+                    raside = 2*rlim[1]*np.sin(0.5*(ralim[1]-ralim[0]))
+                    decside = 2*rlim[1]*np.sin(0.5*(declim[1]-declim[0]))
+                    zside = rlim[1]-edges[0,0]
+
                 elif self.cube_mode == 'flat_sky':
                     zmid = (self.line_nu0[line]/self.nuObs_mean).decompose()-1
                     rmid = ((self.cosmo.comoving_radial_distance(zmid)*u.Mpc).to(self.Mpch)).value
@@ -630,7 +652,7 @@ class Survey(Lightcone):
                     Zhalo = self.halos_in_survey[line]['Ztrue'][filtering]
                     Hubble = self.cosmo.hubble_parameter(Zhalo)*(u.km/u.Mpc/u.s)
                     
-                    warn("% of emitters of {} line left out filtering = {}".format(line, 1-len(Zhalo)/len(filtering))
+                    warn("% of emitters of {} line left out filtering = {}".format(line, 1-len(Zhalo)/len(filtering)))
 
                     if not self.mass:
                         if self.do_intensity:

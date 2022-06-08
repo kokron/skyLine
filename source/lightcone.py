@@ -95,7 +95,7 @@ class Lightcone(object):
         # Get list of input names and default values
         self._default_lightcone_params = get_default_params(Lightcone.__init__)
         # Check that input values have the correct type and units
-        check_params(self._lightcone_params,self._default_lightcone_params)
+        check_params(self,self._lightcone_params,self._default_lightcone_params)
         # Fill lines no included with false
         for key in list(self._default_lightcone_params['lines'].keys()):
             if key not in self._lightcone_params['lines'].keys():
@@ -269,7 +269,7 @@ class Lightcone(object):
     ########################################################################
     def update(self, **new_params):
         # Check if params dict contains valid parameters
-        check_params(new_params,self._default_params)
+        check_params(self,new_params,self._default_params)
         #update the class that corresponds
         lightcone_params = list(self._default_lightcone_params.keys())
         survey_params = list(self._default_survey_params.keys())

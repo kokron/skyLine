@@ -101,7 +101,7 @@ class cached_measure_property(object):
         res = instance.__dict__[self.func.__name__] = self.func(instance)
         return res
 
-def check_params(input_params, default_params):
+def check_params(self,input_params, default_params):
     '''
     Check input parameter values to ensure that they have the required type
     '''
