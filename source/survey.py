@@ -757,7 +757,6 @@ class Survey(Lightcone):
                     theta_beam = self.beam_FWHM.to(u.rad)
                     galmap_rotated = hp.smoothing(galmap_rotated, theta_beam.value)
 
-                    #Compute the signal in each voxel (with Ztrue and Vcell_true)
                 ramid = 0.5*(self.RAObs_max + self.RAObs_min)
                 decmid = 0.5*(self.DECObs_max + self.DECObs_min)  
                 ramin=self.RAObs_min.value-ramid.value-(self.RAObs_max-self.RAObs_min).value/self.Npixside[0]
@@ -857,8 +856,8 @@ class Survey(Lightcone):
             rmid = ((self.cosmo.comoving_radial_distance(self.zmid)*u.Mpc).to(self.Mpch)).value
             # cartesian coordinates in flat sky
             x = da.ones(ra.shape[0])
-            y = da.sin(ra)/r*rmid # only ra?
-            z = da.sin(dec)/r*rmid # only dec?
+            y = ra/r*rmid 
+            z = dec/r*rmid 
         elif self.cube_mode == 'mid_redshift':
             rmid = ((self.cosmo.comoving_radial_distance(self.zmid)*u.Mpc).to(self.Mpch)).value
             # cartesian coordinates in unit sphere but preparing for only one distance for ra and dec
