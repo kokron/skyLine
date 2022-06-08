@@ -332,8 +332,8 @@ class Survey(Lightcone):
         
         elif self.cube_mode == 'flat_sky':
             rmid = ((self.cosmo.comoving_radial_distance(self.zmid)*u.Mpc).to(self.Mpch)).value
-            raside = 2*rmid*np.tan(0.5*(ralim[1]-ralim[0]))
-            decside = 2*rmid*np.tan(0.5*(declim[1]-declim[0]))
+            raside = 2*rmid*np.sin(0.5*(ralim[1]-ralim[0]))
+            decside = 2*rmid*np.sin(0.5*(declim[1]-declim[0]))
             zside = rlim[1]-rlim[0]
             
             self.raside_lim = rmid*np.tan(ralim) #min, max 
@@ -342,13 +342,13 @@ class Survey(Lightcone):
             
         elif self.cube_mode == 'mid_redshift':
             rmid = ((self.cosmo.comoving_radial_distance(self.zmid)*u.Mpc).to(self.Mpch)).value
-            raside = 2*rmid*np.tan(0.5*(ralim[1]-ralim[0]))
-            decside = 2*rmid*np.tan(0.5*(declim[1]-declim[0]))
+            raside = 2*rmid*np.sin(0.5*(ralim[1]-ralim[0]))
+            decside = 2*rmid*np.sin(0.5*(declim[1]-declim[0]))
             #to avoid cut at high redshift end
             zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
             
-            self.raside_lim = rmid*np.tan(ralim) #min, max 
-            self.decside_lim = rmid*np.tan(declim) #min, max
+            self.raside_lim = rmid*np.sin(ralim) #min, max 
+            self.decside_lim = rmid*np.sin(declim) #min, max
             self.rside_obs_lim = np.array([rlim[0],rlim[0]+zside]) #min, max
             
             warn("% of survey volume lost due to cutting the spherical cap at high redshift end = {}".format(1-zside*raside*decside*self.Mpch**3/self.Vsurvey))
@@ -593,17 +593,17 @@ class Survey(Lightcone):
                     zside = rlim[1]-edges[0,0]
 
                 elif self.cube_mode == 'flat_sky':
-                    zmid = (self.line_nu0[line]/self.nuObs_mean).decompose()-1
+                    zmid = ((self.line_nu0[line]/self.nuObs_mean).decompose()).value-1
                     rmid = ((self.cosmo.comoving_radial_distance(zmid)*u.Mpc).to(self.Mpch)).value
-                    raside = 2*rmid*np.tan(0.5*(ralim[1]-ralim[0]))
-                    decside = 2*rmid*np.tan(0.5*(declim[1]-declim[0]))
+                    raside = 2*rmid*np.sin(0.5*(ralim[1]-ralim[0]))
+                    decside = 2*rmid*np.sin(0.5*(declim[1]-declim[0]))
                     zside = rlim[1]-rlim[0]
                     
                 elif self.cube_mode == 'mid_redshift':
-                    zmid = (self.line_nu0[line]/self.nuObs_mean).decompose()-1
+                    zmid = ((self.line_nu0[line]/self.nuObs_mean).decompose()).value-1
                     rmid = ((self.cosmo.comoving_radial_distance(zmid)*u.Mpc).to(self.Mpch)).value
-                    raside = 2*rmid*np.tan(0.5*(ralim[1]-ralim[0]))
-                    decside = 2*rmid*np.tan(0.5*(declim[1]-declim[0]))
+                    raside = 2*rmid*np.sin(0.5*(ralim[1]-ralim[0]))
+                    decside = 2*rmid*np.sin(0.5*(declim[1]-declim[0]))
                     #to avoid cut at high redshift end
                     zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
 
@@ -626,8 +626,8 @@ class Survey(Lightcone):
                 if self.cube_mode == 'flat_sky':
                     # cartesian coordinates in flat sky
                     x = da.ones(ra.shape[0])
-                    y = da.sin(ra)/r*rmid # only ra?
-                    z = da.sin(dec)/r*rmid # only dec?
+                    y = ra/r*rmid 
+                    z = dec/r*rmid 
                 elif self.cube_mode == 'mid_redshift':
                     # cartesian coordinates in unit sphere but preparing for only one distance for ra and dec
                     x = da.cos(dec) * da.cos(ra)
