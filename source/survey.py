@@ -77,12 +77,6 @@ class Survey(Lightcone):
                                                   using a single redshift for all emitters (for each line)
                                 - 'flat_sky': Applies flat sky approximation on top of 'mid_redshift'
                             (Default: 'inner_cube')
-    
-    do_flat_sky:           Boolean: Use flat-sky approximation when building 3d map
-                            (Default: False) Irrelevant if do_angular == True
-
-    -do_inner_cut           Get a box for which there are no empty spaces, but discards some haloes.
-                            (Default: True). Irrelevant if do_flat_sky == True or do_angular == True
 
     -do_downsample          Boolean: Downsample the map such as supersample=1.
                             (Default: True; make if False for nice plots)
@@ -303,8 +297,8 @@ class Survey(Lightcone):
         ylim = np.cos(declim) * np.sin(ralim)
         zlim = np.sin(declim)
         
-        posedge = np.vstack([xlim,ylim,zlim]).T
-        edges = rlim[:,None]*posedge[1] #All positive
+        poscorner = np.vstack([xlim,ylim,zlim]).T
+        corners = rlim[:,None]*poscorner[1] #All positive
         
         #Get the side of the box
         if self.cube_mode == 'inner_cube':
@@ -318,13 +312,13 @@ class Survey(Lightcone):
             
             warn("% of survey volume lost due to inner cube = {}".format(1-zside*raside*decside*self.Mpch**3/self.Vsurvey))
             
-            if edges[1,0] < rlim[0]+zside:
+            if corners[1,0] < rlim[0]+zside:
                 warn("The corners of the last perpendicular slices of the box are going to be empty. Consider using flat sky")
                 
         elif self.cube_mode == 'outer_cube':
             raside = 2*rlim[1]*np.sin(0.5*(ralim[1]-ralim[0]))
             decside = 2*rlim[1]*np.sin(0.5*(declim[1]-declim[0]))
-            zside = rlim[1]-edges[0,0]
+            zside = rlim[1]-corners[0,0]
             
             self.raside_lim = rlim[1]*np.sin(ralim) #min, max 
             self.decside_lim = rlim[1]*np.sin(declim) #min, max
@@ -353,8 +347,7 @@ class Survey(Lightcone):
             
             warn("% of survey volume lost due to cutting the spherical cap at high redshift end = {}".format(1-zside*raside*decside*self.Mpch**3/self.Vsurvey))
             
-            if (raside > np.sqrt(2)*rlim[1]*np.sin(0.5*(ralim[1]-ralim[0]))) or \
-               (decside > np.sqrt(2)*rlim[1]*np.sin(0.5*(declim[1]-declim[0]))):
+            if corners[1,0] < rlim[0]+zside:
                 warn("The corners of the last perpendicular slices of the box are going to be empty. Consider using flat sky")
             
         Lbox = np.array([zside,raside,decside])
@@ -578,8 +571,8 @@ class Survey(Lightcone):
                 ylim = np.cos(declim) * np.sin(ralim)
                 zlim = np.sin(declim)
 
-                posedge = np.vstack([xlim,ylim,zlim]).T
-                edges = rlim[:,None]*posedge[1] #All positive
+                poscorner = np.vstack([xlim,ylim,zlim]).T
+                corners = rlim[:,None]*poscorner[1] #All positive
 
                 #Get the side of the box
                 if self.cube_mode == 'inner_cube':
@@ -590,7 +583,7 @@ class Survey(Lightcone):
                 elif self.cube_mode == 'outer_cube':
                     raside = 2*rlim[1]*np.sin(0.5*(ralim[1]-ralim[0]))
                     decside = 2*rlim[1]*np.sin(0.5*(declim[1]-declim[0]))
-                    zside = rlim[1]-edges[0,0]
+                    zside = rlim[1]-corners[0,0]
 
                 elif self.cube_mode == 'flat_sky':
                     zmid = ((self.line_nu0[line]/self.nuObs_mean).decompose()).value-1
@@ -674,11 +667,15 @@ class Survey(Lightcone):
                 #Locate the grid such that bottom left corner of the box is [0,0,0] which is the nbodykit convention.
                 for n in range(3):
                     lategrid[:,n] -= mins_obs[n]
+                #padding in LOS direction to avoid leakage
+                lategrid[:,0] -= 0.5*Lbox[0]/Nmesh[0]
+                
                 #Set the emitter in the grid and paint using pmesh directly instead of nbk
                 pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler='cic')
                 #Make realfield object
                 field = pm.create(type='real')
-                layout = pm.decompose(lategrid)
+                field[:] = 0.
+                layout = pm.decompose(lategrid,smoothing=0.5*pm.resampler.support)
                 #Exchange positions between different MPI ranks
                 p = layout.exchange(lategrid)
                 #Assign weights following the layout of particles
@@ -701,14 +698,14 @@ class Survey(Lightcone):
 
         # add galactic foregrounds
         if self.do_gal_foregrounds:
-            field=self.create_foreground_map(mins, Nmesh, Lbox, rside_obs_lim, raside_lim, decside_lim)
+            field=self.create_foreground_map(mins_obs, Nmesh, Lbox, rside_obs_lim, raside_lim, decside_lim)
             maps+=field
 
         #get the proper shape for the observed map
         if (self.angular_supersample > 1 or self.spectral_supersample > 1) and self.do_downsample:
             pm_down = pmesh.pm.ParticleMesh(np.array([self.Nchan,self.Npixside[0],self.Npixside[1]], dtype=int),
                                                   BoxSize=Lbox, dtype='float32', resampler='cic')
-            maps = pm_down.downsample(maps.c2r(),keep_mean=True)
+            maps = pm_down.downsample(maps.c2r(),keep_mean=True,resampler='cic')
         else:
             maps = maps.c2r()
 
@@ -883,21 +880,25 @@ class Survey(Lightcone):
         cartesian_pixelpos = r[:,None] * pos
         foreground_grid = np.array(cartesian_pixelpos.compute())
         
-        if self.do_inner_cut and not self.do_flat_sky:
-            filtering = (foreground_grid[:,1] > raside_lim[0]) & (foreground_grid[:,1] < raside_lim[1]) & \
-                        (foreground_grid[:,2] > decside_lim[0]) & (foreground_grid[:,2] < decside_lim[1])
+        if self.cube_mode == 'inner_cube' or self.cube_mode == 'mid_redshift':
+            filtering = (foreground_grid[:,0] >= rside_obs_lim[0]) & (foreground_grid[:,0] <= rside_obs_lim[1]) & \
+                        (foreground_grid[:,1] >= raside_lim[0]) & (foreground_grid[:,1] <= raside_lim[1]) & \
+                        (foreground_grid[:,2] >= decside_lim[0]) & (foreground_grid[:,2] <= decside_lim[1])
             foreground_grid = foreground_grid[filtering]
             #print(np.asarray(filtering).shape, np.asarray(foreground_grid).shape, np.asarray(foreground_signal).shape)
             foreground_signal=np.asarray(foreground_signal).flatten()[filtering]
         #print(np.min(foreground_grid[:,0]), np.max(foreground_grid[:,0]), np.min(foreground_grid[:,1]), np.max(foreground_grid[:,1]), np.min(foreground_grid[:,2]), np.max(foreground_grid[:,2]))
         for n in range(3):
             foreground_grid[:,n] -= mins[n]
+            
+        #THINK ABOUT PADDING HERE!
+        
         #Set the emitter in the grid and paint using pmesh directly instead of nbk
         pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler='cic')
         #Make realfield object
 
         field = pm.create(type='real')
-        layout = pm.decompose(foreground_grid)
+        layout = pm.decompose(foreground_grid,smoothing=0.5*pm.resampler.support)
         #Exchange positions between different MPI ranks
         p = layout.exchange(foreground_grid)
         #Assign weights following the layout of particles
