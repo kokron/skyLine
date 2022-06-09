@@ -134,6 +134,7 @@ class Survey(Lightcone):
                  mass=False,
                  Mhalo_min=0.,
                  Mstar_min=0.,
+                 resampler='cic', 
                  **lightcone_kwargs):
 
         # Initiate Lightcone() parameters
@@ -469,7 +470,7 @@ class Survey(Lightcone):
 
                 #Vcell = Omega_pix * D_A (z)^2 * (1+z) * dnu/nu_obs * c/H is the volume of the voxel for a given channel
                                     #D_A here is comoving angular diameter distance = comoving_radial_distance in flat space
-                Vcell_true = hp.nside2pixarea(self.nside)*(self.cosmo.comoving_radial_distance(zmids)*u.Mpc )**2 * (self.dnu/nu_bins[bin_idxs]) * (1+zmids) * (cu.c.to('km/s')/self.cosmo.hubble_parameter(zmids)*(u.km/u.Mpc/u.s))
+                Vcell_true = hp.nside2pixarea(self.nside)*(self.cosmo.comoving_radial_distance(zmids)*u.Mpc )**2 * (self.dnu.value/nu_bins[bin_idxs]) * (1+zmids) * (cu.c.to('km/s')/self.cosmo.hubble_parameter(zmids)/(u.km/u.Mpc/u.s))
 
                 if not self.mass:
                     if self.do_intensity:
@@ -675,7 +676,7 @@ class Survey(Lightcone):
                 for n in range(3):
                     lategrid[:,n] -= mins_obs[n]
                 #Set the emitter in the grid and paint using pmesh directly instead of nbk
-                pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler='cic')
+                pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler=self.resampler)
                 #Make realfield object
                 field = pm.create(type='real')
                 layout = pm.decompose(lategrid)
@@ -683,10 +684,10 @@ class Survey(Lightcone):
                 p = layout.exchange(lategrid)
                 #Assign weights following the layout of particles
                 if self.mass:
-                    pm.paint(p, out=field, mass=1, resampler='cic')
+                    pm.paint(p, out=field, mass=1, resampler=self.resampler)
                 else:
                     m = layout.exchange(signal.value)
-                    pm.paint(p, out=field, mass=m, resampler='cic')
+                    pm.paint(p, out=field, mass=m, resampler=self.resampler)
                 #Fourier transform fields and apply the filter
                 field = field.r2c()
                 #This smoothing comes from the resolution window function.
@@ -707,7 +708,7 @@ class Survey(Lightcone):
         #get the proper shape for the observed map
         if (self.angular_supersample > 1 or self.spectral_supersample > 1) and self.do_downsample:
             pm_down = pmesh.pm.ParticleMesh(np.array([self.Nchan,self.Npixside[0],self.Npixside[1]], dtype=int),
-                                                  BoxSize=Lbox, dtype='float32', resampler='cic')
+                                                  BoxSize=Lbox, dtype='float32', resampler=self.resampler)
             maps = pm_down.downsample(maps.c2r(),keep_mean=True)
         else:
             maps = maps.c2r()
@@ -893,7 +894,7 @@ class Survey(Lightcone):
         for n in range(3):
             foreground_grid[:,n] -= mins[n]
         #Set the emitter in the grid and paint using pmesh directly instead of nbk
-        pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler='cic')
+        pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler=self.resampler)
         #Make realfield object
 
         field = pm.create(type='real')
@@ -902,7 +903,7 @@ class Survey(Lightcone):
         p = layout.exchange(foreground_grid)
         #Assign weights following the layout of particles
         m = layout.exchange(np.asarray(foreground_signal).flatten())
-        pm.paint(p, out=field, mass=m, resampler='cic')
+        pm.paint(p, out=field, mass=m, resampler=self.resampler)
         #Fourier transform fields and apply the filter
         field = field.r2c()
         return field
