@@ -157,4 +157,19 @@ class Measure(Survey):
         '''
         return (self.Pk_2d.poles['power_2'].real*self.Mpch**3).to(self.Mpch**3)*self.unit**2
                 
+    @cached_measure_property
 
+    def c_ell(self):
+        '''
+        Computes the angular power spectrum C_ell of the map
+        uses the fsky approximation to deconvolve mask effects. 
+
+        TO-DO: Could switch to namaster implementation.
+        '''
+        map_to_use = self.obs_2d_map
+        fsky = (self.RAObs_max - self.RAObs_min).to(u.radian)*(self.DECObs_max - self.DECObs_min).to(u.radian) / (4*np.pi * u.sr)
+        cl = hp.anafast(map_to_use, lmax=self.lmax)/fsky
+
+        print('With fsky=%0.3f your ell_min should be around %d so be careful above that'%(fsky, 1./fsky))
+
+        return cl
