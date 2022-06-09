@@ -77,6 +77,9 @@ class Survey(Lightcone):
                                                   using a single redshift for all emitters (for each line)
                                 - 'flat_sky': Applies flat sky approximation on top of 'mid_redshift'
                             (Default: 'inner_cube')
+                            
+    -do_z_buffering:        Boolean: add higher z emitters to fill corners at high-z end. Only relevant if 
+                            cube_mode = 'inner_cube' or 'mid_redshift'. (Default: True)
 
     -do_downsample          Boolean: Downsample the map such as supersample=1.
                             (Default: True; make if False for nice plots)
@@ -120,6 +123,7 @@ class Survey(Lightcone):
                  do_angular_smooth = True,
                  do_spectral_smooth = False,
                  cube_mode = 'inner_cube',
+                 do_z_buffering = True,
                  do_downsample = True,
                  do_remove_mean = True,
                  do_angular = False,
@@ -315,8 +319,8 @@ class Survey(Lightcone):
             
             warn("% of survey volume lost due to inner cube = {}".format(1-zside*raside*decside*self.Mpch**3/self.Vsurvey))
             
-            if corners[1,0] < rlim[0]+zside:
-                warn("The corners of the last perpendicular slices of the box are going to be empty. Consider using flat sky")
+            if (corners[1,0] < rlim[0]+zside) and (self.do_z_buffering == False):
+                warn("The corners of the last perpendicular slices of the box are going to be empty. Consider using 'inner_cube'=True or 'do_z_buffering'=True")
                 
         elif self.cube_mode == 'outer_cube':
             raside = 2*rlim[1]*np.sin(0.5*(ralim[1]-ralim[0]))
@@ -350,8 +354,8 @@ class Survey(Lightcone):
             
             warn("% of survey volume lost due to cutting the spherical cap at high redshift end = {}".format(1-zside*raside*decside*self.Mpch**3/self.Vsurvey))
             
-            if corners[1,0] < rlim[0]+zside:
-                warn("The corners of the last perpendicular slices of the box are going to be empty. Consider using flat sky")
+            if (corners[1,0] < rlim[0]+zside) and (self.do_z_buffering == False):
+                warn("The corners of the last perpendicular slices of the box are going to be empty. Consider using 'inner_cube'=True or 'do_z_buffering'=True")
             
         Lbox = np.array([zside,raside,decside])
 
@@ -398,6 +402,8 @@ class Survey(Lightcone):
             inds_RA = (self.halo_catalog['RA'] > mid_ra - delta_ra)&(self.halo_catalog['RA'] < delta_ra  +mid_ra)
             inds_DEC = (self.halo_catalog['DEC'] > mid_dec - delta_dec)&(self.halo_catalog['DEC'] < mid_dec + delta_dec)
         else:
+            #make sure Lbox is run
+            Lbox = self.Lbox
             inds_RA = (self.halo_catalog['RA'] > self.RAObs_min.value)&(self.halo_catalog['RA'] < self.RAObs_max.value)
             inds_DEC = (self.halo_catalog['DEC'] > self.DECObs_min.value)&(self.halo_catalog['DEC'] < self.DECObs_max.value)
         inds_sky = inds_RA&inds_DEC
@@ -412,8 +418,24 @@ class Survey(Lightcone):
         for line in self.lines.keys():
             if self.lines[line]:
                 halos_survey[line] = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),Ztrue=np.array([]),Lhalo=np.array([])*u.Lsun)
+                
+                #Get a lower nu_Obs_min to buffer high redshifts and fill corners if required
+                if (self.do_angular == False) and (self.do_z_buffering) and \
+                   (self.cube_mode == 'inner_cube' or self.cube_mode == 'mid_redshift'):
+                    cornerside = (self.raside_lim[1]**2+self.decside_lim[1]**2)**0.5
+                    ang = np.arctan(cornerside/self.rside_obs_lim[1])
+                    rbuffer = cornerside/np.sin(ang)
+                    zbuffer = self.cosmo.redshift_at_comoving_radial_distance((rbuffer*self.Mpch).value)
+                    nu_min = self.line_nu0[line]/(zbuffer+1)
+                    
+                    print('The {:s} line requires z_max = {:.3f} instead of the nominal {:.3f}'.format(line,zbuffer,(self.line_nu0[line]/self.nuObs_min).value-1))
+                    if zbuffer < self.zmax:
+                        warn('Filling the corners requires a buffering z_max = {:.3f}, but input z_max = {:.3f}. Corners will not be completely filled'.format(zbuffer,self.zmax))
+                else:
+                    nu_min = self.nuObs_min
+                    
                 #inds = (self.nuObs_line_halo[line] >= self.nuObs_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky
-                inds = (self.nuObs_line_halo[line] >= self.nuObs_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky&inds_mass
+                inds = (self.nuObs_line_halo[line] >= nu_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky&inds_mass
                 halos_survey[line]['RA'] = np.append(halos_survey[line]['RA'],self.halo_catalog['RA'][inds])
                 halos_survey[line]['DEC'] = np.append(halos_survey[line]['DEC'],self.halo_catalog['DEC'][inds])
                 halos_survey[line]['Zobs'] = np.append(halos_survey[line]['Zobs'],(self.line_nu0[self.target_line]/self.nuObs_line_halo[line][inds]).decompose()-1)
@@ -541,10 +563,14 @@ class Survey(Lightcone):
             warn('Mask edges might be problematic due to the expanded selection!')
 
         #Define the mesh divisions and the box size
-        Nmesh = np.array([self.spectral_supersample*self.Nchan,
+        zmid = (self.line_nu0[self.target_line]/self.nuObs_mean).decompose().value-1
+        sigma_par_target = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
+        
+        Lbox = self.Lbox.value
+        
+        Nmesh = np.array([self.spectral_supersample*np.ceil(Lbox[0]/sigma_par_target),
                   self.angular_supersample*self.Npixside[0],
                   self.angular_supersample*self.Npixside[1]], dtype=int)
-        Lbox = self.Lbox.value
 
         ramid = 0.5*(self.RAObs_max + self.RAObs_min)
         decmid = 0.5*(self.DECObs_max + self.DECObs_min)
@@ -670,8 +696,9 @@ class Survey(Lightcone):
                 #Locate the grid such that bottom left corner of the box is [0,0,0] which is the nbodykit convention.
                 for n in range(3):
                     lategrid[:,n] -= mins_obs[n]
-                #padding in LOS direction to avoid leakage
-                lategrid[:,0] -= 0.5*Lbox[0]/Nmesh[0]
+                    #padding in LOS direction to avoid leakage
+                    lategrid[:,n] -= 0.5*Lbox[n]/Nmesh[n]
+                
                 
                 #Set the emitter in the grid and paint using pmesh directly instead of nbk
                 pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler=self.resampler)
@@ -741,6 +768,9 @@ class Survey(Lightcone):
             dgrade_nside=self.foreground_model['dgrade_nside']
         else:
             dgrade_nside=self.nside
+                          
+        #TO DO!! ADD case for z_buffering option!
+                          
         obs_freqs_edge=np.linspace(self.nuObs_min, self.nuObs_max, self.spectral_supersample*self.Nchan+1)
         obs_freqs=(obs_freqs_edge[1:]+obs_freqs_edge[:-1])/2 #frequencies observed in survey
 
