@@ -117,8 +117,8 @@ class Measure(Survey):
             print("ERROR!!! Fourier power spectrum measurements are available only if 'angular_map == False'")
             return None
         else:
-            if self.cube_mode != 'inner_cube':
-                print("ERROR!!: Fourier power spectrum measurements are only available at the moment if 'do_inner_cut == True'")
+            if self.cube_mode == 'outer_cube':
+                print("ERROR!!: Fourier power spectrum measurements for 'cube_mode = outer_cube' are not available")
                 return None
             else:
                 if self.do_read_map:
