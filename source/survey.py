@@ -582,7 +582,7 @@ class Survey(Lightcone):
         rside_obs_lim = self.rside_obs_lim
 
         #Setting the box with the origin at 0 plus additional padding to get voxel coordinates at their center
-        mins_obs = np.array([rside_obs_lim[0],raside_lim[0],decside_lim[0]])-0.49999*0.5*Lbox[n]/Nmesh[n]
+        mins_obs = np.array([rside_obs_lim[0],raside_lim[0],decside_lim[0]])-0.49999*0.5*Lbox/Nmesh
 
         global sigma_par
         global sigma_perp
