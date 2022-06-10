@@ -581,7 +581,8 @@ class Survey(Lightcone):
         decside_lim = self.decside_lim
         rside_obs_lim = self.rside_obs_lim
 
-        mins_obs = np.array([rside_obs_lim[0],raside_lim[0],decside_lim[0]])
+        #Setting the box with the origin at 0 plus additional padding to get voxel coordinates at their center
+        mins_obs = np.array([rside_obs_lim[0],raside_lim[0],decside_lim[0]])-0.49999*0.5*Lbox[n]/Nmesh[n]
 
         global sigma_par
         global sigma_perp
@@ -695,10 +696,7 @@ class Survey(Lightcone):
                             signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
                 #Locate the grid such that bottom left corner of the box is [0,0,0] which is the nbodykit convention.
                 for n in range(3):
-                    lategrid[:,n] -= mins_obs[n]
-                    #padding in LOS direction to avoid leakage
-                    lategrid[:,n] -= 0.5*Lbox[n]/Nmesh[n]
-                
+                    lategrid[:,n] -= mins_obs[n]                
                 
                 #Set the emitter in the grid and paint using pmesh directly instead of nbk
                 pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler=self.resampler)
@@ -922,9 +920,7 @@ class Survey(Lightcone):
         #print(np.min(foreground_grid[:,0]), np.max(foreground_grid[:,0]), np.min(foreground_grid[:,1]), np.max(foreground_grid[:,1]), np.min(foreground_grid[:,2]), np.max(foreground_grid[:,2]))
         for n in range(3):
             foreground_grid[:,n] -= mins[n]
-            
-        #THINK ABOUT PADDING HERE!
-        
+                    
         #Set the emitter in the grid and paint using pmesh directly instead of nbk
         pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler=self.resampler)
         #Make realfield object
