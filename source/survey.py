@@ -794,12 +794,12 @@ class Survey(Lightcone):
                 decmin=self.DECObs_min.value-decmid.value-(self.DECObs_max-self.DECObs_min).value/self.Npixside[1]
                 decmax=self.DECObs_max.value-decmid.value+(self.DECObs_max-self.DECObs_min).value/self.Npixside[1]
 
-                cart_proj=hp.projector.CartesianProj(xsize=self.Npixside[0]*self.angular_supersample+2, ysize=self.Npixside[1]*self.angular_supersample+2, lonra =  [ramin,ramax], latra=[decmin,decmax])  
+                cart_proj=hp.projector.CartesianProj(xsize=self.Npixside[0]*self.angular_supersample, ysize=self.Npixside[1]*self.angular_supersample, lonra =  [ramin,ramax], latra=[decmin,decmax])  
                 galmap_cart=cart_proj.projmap(galmap_rotated, self.vec2pix_func)
                 foreground_signal.append((galmap_cart.flatten())*u.uK)
                
-                Xedge=np.linspace(ramin,ramax, self.Npixside[0]*self.angular_supersample+1+2)
-                Yedge=np.linspace(decmin,decmax, self.Npixside[1]*self.angular_supersample+1+2)
+                Xedge=np.linspace(ramin,ramax, self.Npixside[0]*self.angular_supersample+1)
+                Yedge=np.linspace(decmin,decmax, self.Npixside[1]*self.angular_supersample+1)
                 X=(Xedge[1:]+Xedge[:-1])/2
                 Y=(Yedge[1:]+Yedge[:-1])/2
                 Xpix,Ypix=np.meshgrid(X,Y)
@@ -829,8 +829,7 @@ class Survey(Lightcone):
             ra_insurvey=[]; dec_insurvey=[]; z_insurvey=[]; foreground_signal=[]
             for i in range(len(obs_freqs)):
                 dgrade_galmap=sky.get_emission(obs_freqs[i])[0]#produce healpy maps, 0 index corresponds to intensity
-                rot_center = hp.Rotator(rot=[self.foreground_model['survey_center'][0].to_value(u.deg), self.foreground_model['survey_center'][1].to_value(u.deg)], inv=True) #rotation to place the center of the survey at the origin
-                
+                rot_center = hp.Rotator(rot=[self.foreground_model['survey_center'][0].to_value(u.deg), self.foreground_model['survey_center'][1].to_value(u.deg)], inv=True) #rotation to place the center of the survey at the origin              
                 if self.do_angular_smooth:
                     theta_beam = self.beam_FWHM
                 else:
