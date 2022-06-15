@@ -119,6 +119,9 @@ def check_params(self,input_params, default_params):
             if key == 'seed':
                 if type(input_value) == int:
                     continue
+            elif key == 'kmax' or key == 'dk':
+                if type(input_value) == u.quantity.Quantity:
+                    continue
             else:
                 raise TypeError("Parameter "+key+" must be a "+
                                 str(type(default_value)))
