@@ -27,10 +27,10 @@ class Measure(Survey):
     INPUT PARAMETERS:
     ------------------
     
-    -dk:                    k spacing for the power spectrum (default: 0.02 Mpc^-1~0.01 h/Mpc)
+    -dk:                    k spacing for the power spectrum (default: None -> to be set by nbodykit)
 
     -kmin,kmax:             Minimum and maximum k values for the power spectrum
-                            (default: 0., 3 Mpc^-1 ~ 5 h/Mpc)
+                            (default: 0., None -> to be set by nbodykit)
 
     -Nmu:                   Number of sampling in mu to compute the power spectrum
                             (default: 10)
@@ -48,9 +48,9 @@ class Measure(Survey):
     -map_name               The name of the map to read (Default: '')
     '''   
     def __init__(self,
-                 dk = 0.02*u.Mpc**-1,
+                 dk = None,
                  kmin = 0.0*u.Mpc**-1,
-                 kmax = 3.*u.Mpc**-1,
+                 kmax = None,
                  Nmu = 5,
                  lmax = 1000,
                  remove_noise = False,
@@ -134,10 +134,20 @@ class Measure(Survey):
                     
                 #Compensate the field for the CIC window function we apply
                 map_to_use = (map_to_use.r2c().apply(self.compensation[0][1], kind=self.compensation[0][2])).c2r()
+                
+                try:
+                    dk = self.dk.to(self.Mpch**-1).value
+                except:
+                    dk = self.dk
+                    
+                try:
+                    kmax = self.kmax.to(self.Mpch**-1).value
+                except:
+                    kmax = self.kmax
                     
                 return FFTPower(map_to_use, '2d', Nmu=self.Nmu, poles=[0,2], los=[1,0,0],
-                                dk=self.dk.to(self.Mpch**-1).value,kmin=self.kmin.to(self.Mpch**-1).value,
-                                kmax=self.kmax.to(self.Mpch**-1).value,BoxSize=self.Lbox.value)
+                                dk=dk,kmin=self.kmin.to(self.Mpch**-1).value,
+                                kmax=kmax,BoxSize=self.Lbox.value)
 
     @cached_measure_property
     def k_Pk_poles(self):
