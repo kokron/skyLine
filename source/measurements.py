@@ -82,12 +82,6 @@ class Measure(Survey):
         self._input_params.update(self._measure_params)
         self._default_params.update(self._default_measure_params)
         # Load in compensation function from the inherited lightcone survey resampler
-        if self.resampler=='nearest':
-            #Jing et al equation 20 states that the `CompensateNGPShotnoise` function is just 1. 
-            self.compensation = [('Complex', CompensateNGPShotnoise, "circular")]
-        else:
-            #We're not doing interlacing so get the approximate correction instead
-            self.compensation = get_compensation(interlaced=False,resampler=self.resampler)
     ##################
     ## Read the map ##
     ##################
@@ -119,6 +113,12 @@ class Measure(Survey):
         '''
         Computes the 2d power spectrum P(k,mu) of the map
         '''
+        if self.resampler=='nearest':
+            #Jing et al equation 20 states that the `CompensateNGPShotnoise` function is just 1. 
+            self.compensation = [('Complex', CompensateNGPShotnoise, "circular")]
+        else:
+            #We're not doing interlacing so get the approximate correction instead
+            self.compensation = get_compensation(interlaced=False,resampler=self.resampler)
         if self.angular_map:
             print("ERROR!!! Fourier power spectrum measurements are available only if 'angular_map == False'")
             return None
@@ -133,7 +133,7 @@ class Measure(Survey):
                     map_to_use = self.obs_3d_map
                     
                 #Compensate the field for the CIC window function we apply
-                map_to_use = (map_to_use.r2c().apply(self.compensation, kind='circular')).c2r()
+                map_to_use = (map_to_use.r2c().apply(self.compensation[0][1], kind=self.compensation[0][2])).c2r()
                     
                 return FFTPower(map_to_use, '2d', Nmu=self.Nmu, poles=[0,2], los=[1,0,0],
                                 dk=self.dk.to(self.Mpch**-1).value,kmin=self.kmin.to(self.Mpch**-1).value,
