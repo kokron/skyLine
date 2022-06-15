@@ -582,7 +582,7 @@ class Survey(Lightcone):
         rside_obs_lim = self.rside_obs_lim
 
         #Setting the box with the origin at 0 plus additional padding to get voxel coordinates at their center
-        mins_obs = np.array([rside_obs_lim[0],raside_lim[0],decside_lim[0]])-0.49999*0.5*Lbox/Nmesh
+        mins_obs = np.array([rside_obs_lim[0],raside_lim[0],decside_lim[0]])-0.49999*Lbox/Nmesh
 
         global sigma_par
         global sigma_perp
@@ -787,17 +787,17 @@ class Survey(Lightcone):
 
                 ramid = 0.5*(self.RAObs_max + self.RAObs_min)
                 decmid = 0.5*(self.DECObs_max + self.DECObs_min)  
-                ramin=self.RAObs_min.value-ramid.value-(self.RAObs_max-self.RAObs_min).value/self.Npixside[0]
-                ramax=self.RAObs_max.value-ramid.value+(self.RAObs_max-self.RAObs_min).value/self.Npixside[0]
-                decmin=self.DECObs_min.value-decmid.value-(self.DECObs_max-self.DECObs_min).value/self.Npixside[1]
-                decmax=self.DECObs_max.value-decmid.value+(self.DECObs_max-self.DECObs_min).value/self.Npixside[1]
+                ramin=(self.RAObs_min.value-ramid.value)*2
+                ramax=(self.RAObs_max.value-ramid.value)*2
+                decmin=(self.DECObs_min.value-decmid.value)*2
+                decmax=(self.DECObs_max.value-decmid.value)*2
 
-                cart_proj=hp.projector.CartesianProj(xsize=self.Npixside[0]*self.angular_supersample, ysize=self.Npixside[1]*self.angular_supersample, lonra =  [ramin,ramax], latra=[decmin,decmax])  
+                cart_proj=hp.projector.CartesianProj(xsize=2*self.Npixside[0]*self.angular_supersample, ysize=2*self.Npixside[1]*self.angular_supersample, lonra =  [ramin,ramax], latra=[decmin,decmax])  
                 galmap_cart=cart_proj.projmap(galmap_rotated, self.vec2pix_func)
                 foreground_signal.append((galmap_cart.flatten())*u.uK)
                
-                Xedge=np.linspace(ramin,ramax, self.Npixside[0]*self.angular_supersample+1)
-                Yedge=np.linspace(decmin,decmax, self.Npixside[1]*self.angular_supersample+1)
+                Xedge=np.linspace(ramin,ramax, 2*(self.Npixside[0]*self.angular_supersample)+1)
+                Yedge=np.linspace(decmin,decmax, 2*(self.Npixside[1]*self.angular_supersample)+1)
                 X=(Xedge[1:]+Xedge[:-1])/2
                 Y=(Yedge[1:]+Yedge[:-1])/2
                 Xpix,Ypix=np.meshgrid(X,Y)
@@ -875,8 +875,8 @@ class Survey(Lightcone):
                                 dtype=redshift.dtype)
                                 
         #Shift the ra and dec of the halo such that they are centered in (0,0)
-        ra -= ramid.value
-        dec -= decmid.value
+        #ra -= ramid.value
+        #dec -= decmid.value
 
         ra,dec  = da.deg2rad(ra),da.deg2rad(dec)
         if self.cube_mode == 'flat_sky':
