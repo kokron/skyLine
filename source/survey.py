@@ -787,17 +787,17 @@ class Survey(Lightcone):
 
                 ramid = 0.5*(self.RAObs_max + self.RAObs_min)
                 decmid = 0.5*(self.DECObs_max + self.DECObs_min)  
-                ramin=(self.RAObs_min.value-ramid.value)*2
-                ramax=(self.RAObs_max.value-ramid.value)*2
-                decmin=(self.DECObs_min.value-decmid.value)*2
-                decmax=(self.DECObs_max.value-decmid.value)*2
+                ramin=(self.RAObs_min.value-ramid.value)
+                ramax=(self.RAObs_max.value-ramid.value)
+                decmin=(self.DECObs_min.value-decmid.value)
+                decmax=(self.DECObs_max.value-decmid.value)
 
-                cart_proj=hp.projector.CartesianProj(xsize=2*self.Npixside[0]*self.angular_supersample, ysize=2*self.Npixside[1]*self.angular_supersample, lonra =  [ramin,ramax], latra=[decmin,decmax])  
+                cart_proj=hp.projector.CartesianProj(xsize=self.Npixside[0]*self.angular_supersample, ysize=self.Npixside[1]*self.angular_supersample, lonra =  [ramin,ramax], latra=[decmin,decmax])  
                 galmap_cart=cart_proj.projmap(galmap_rotated, self.vec2pix_func)
                 foreground_signal.append((galmap_cart.flatten())*u.uK)
                
-                Xedge=np.linspace(ramin,ramax, 2*(self.Npixside[0]*self.angular_supersample)+1)
-                Yedge=np.linspace(decmin,decmax, 2*(self.Npixside[1]*self.angular_supersample)+1)
+                Xedge=np.linspace(ramin,ramax, (self.Npixside[0]*self.angular_supersample)+1)
+                Yedge=np.linspace(decmin,decmax, (self.Npixside[1]*self.angular_supersample)+1)
                 X=(Xedge[1:]+Xedge[:-1])/2
                 Y=(Yedge[1:]+Yedge[:-1])/2
                 Xpix,Ypix=np.meshgrid(X,Y)
