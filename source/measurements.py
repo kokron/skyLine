@@ -27,10 +27,10 @@ class Measure(Survey):
     INPUT PARAMETERS:
     ------------------
     
-    -dk:                    k spacing for the power spectrum (default: 0.02 Mpc^-1~0.01 h/Mpc)
+    -dk:                    k spacing for the power spectrum (default: None -> to be set by nbodykit)
 
     -kmin,kmax:             Minimum and maximum k values for the power spectrum
-                            (default: 0., 3 Mpc^-1 ~ 5 h/Mpc)
+                            (default: 0., None -> to be set by nbodykit)
 
     -Nmu:                   Number of sampling in mu to compute the power spectrum
                             (default: 10)
