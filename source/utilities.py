@@ -219,3 +219,25 @@ def merge_dicts(D):
     for k in D:
         dic.update(k)
     return dic
+
+def CompensateNGPShotnoise(w, v):
+    """
+    Return the Fourier-space kernel that accounts for the convolution of
+    the gridded field with the NGP window function in configuration space,
+    as well as the approximate aliasing correction to the first order
+
+    For NGP this is just 1. 
+
+    .. note::
+        see equation 20 of
+        `Jing et al 2005 <https://arxiv.org/abs/astro-ph/0409240>`_
+
+    Parameters
+    ----------
+    w : list of arrays
+        the list of "circular" coordinate arrays, ranging from
+        :math:`[-\pi, \pi)`.
+    v : array_like
+        the field array
+    """
+    return v
