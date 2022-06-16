@@ -774,7 +774,7 @@ class Survey(Lightcone):
             ang = np.arctan(cornerside/self.rside_obs_lim[1])
             rbuffer = cornerside/np.sin(ang)
             zbuffer = self.cosmo.redshift_at_comoving_radial_distance((rbuffer*self.Mpch).value)
-            nu_min = self.line_nu0[line]/(zbuffer+1)
+            nu_min = self.line_nu0[self.target_line]/(zbuffer+1)
         else:
             nu_min = self.nuObs_min
         obs_freqs_edge=np.linspace(nu_min, self.nuObs_max, self.spectral_supersample*self.Nchan+1)
