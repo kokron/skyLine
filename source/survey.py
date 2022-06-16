@@ -768,8 +768,16 @@ class Survey(Lightcone):
             dgrade_nside=self.nside
                           
         #TO DO!! ADD case for z_buffering option!
-                          
-        obs_freqs_edge=np.linspace(self.nuObs_min, self.nuObs_max, self.spectral_supersample*self.Nchan+1)
+        
+        if (self.do_angular == False) and (self.do_z_buffering) and (self.cube_mode == 'inner_cube' or self.cube_mode == 'mid_redshift'):
+            cornerside = (self.raside_lim[1]**2+self.decside_lim[1]**2)**0.5
+            ang = np.arctan(cornerside/self.rside_obs_lim[1])
+            rbuffer = cornerside/np.sin(ang)
+            zbuffer = self.cosmo.redshift_at_comoving_radial_distance((rbuffer*self.Mpch).value)
+            nu_min = self.line_nu0[line]/(zbuffer+1)
+        else:
+            nu_min = self.nuObs_min
+        obs_freqs_edge=np.linspace(nu_min, self.nuObs_max, self.spectral_supersample*self.Nchan+1)
         obs_freqs=(obs_freqs_edge[1:]+obs_freqs_edge[:-1])/2 #frequencies observed in survey
 
         if self.foreground_model['precomputed_file']!=None:
@@ -838,12 +846,19 @@ class Survey(Lightcone):
                 else:
                     galmap_rotated=dgrade_galmap_rotated
                     
-                cart_proj=hp.projector.CartesianProj(xsize=self.Npixside[0]*self.angular_supersample, ysize=self.Npixside[1]*self.angular_supersample, lonra =  [self.RAObs_min.value,self.RAObs_max.value], latra=[self.DECObs_min.value,self.DECObs_max.value])
+                ramid = 0.5*(self.RAObs_max + self.RAObs_min)
+                decmid = 0.5*(self.DECObs_max + self.DECObs_min)  
+                ramin=(self.RAObs_min.value-ramid.value)
+                ramax=(self.RAObs_max.value-ramid.value)
+                decmin=(self.DECObs_min.value-decmid.value)
+                decmax=(self.DECObs_max.value-decmid.value)
+
+                cart_proj=hp.projector.CartesianProj(xsize=self.Npixside[0]*self.angular_supersample, ysize=self.Npixside[1]*self.angular_supersample, lonra =  [ramin,ramax], latra=[decmin,decmax])  
                 galmap_cart=cart_proj.projmap(galmap_rotated, self.vec2pix_func)
                 foreground_signal.append((galmap_cart.flatten())*u.uK)
                
-                Xedge=np.linspace(self.RAObs_min.value,self.RAObs_max.value, self.Npixside[0]*self.angular_supersample+1)
-                Yedge=np.linspace(self.DECObs_min.value,self.DECObs_max.value, self.Npixside[1]*self.angular_supersample+1)
+                Xedge=np.linspace(ramin,ramax, (self.Npixside[0]*self.angular_supersample)+1)
+                Yedge=np.linspace(decmin,decmax, (self.Npixside[1]*self.angular_supersample)+1)
                 X=(Xedge[1:]+Xedge[:-1])/2
                 Y=(Yedge[1:]+Yedge[:-1])/2
                 Xpix,Ypix=np.meshgrid(X,Y)
