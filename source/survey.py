@@ -357,7 +357,7 @@ class Survey(Lightcone):
             if (corners[1,0] < rlim[0]+zside) and (self.do_z_buffering == False):
                 warn("The corners of the last perpendicular slices of the box are going to be empty. Consider using 'inner_cube'=True or 'do_z_buffering'=True")
             
-        Lbox = np.array([zside,raside,decside])
+        Lbox = np.array([zside,raside,decside], dtype=np.float32)
 
         return (Lbox*self.Mpch).to(self.Mpch)
 
