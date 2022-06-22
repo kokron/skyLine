@@ -537,14 +537,6 @@ class Survey(Lightcone):
         hp_map = hp.ma(hp_map)
         hp_map.mask = mask
 
-        #add noise
-        if self.Tsys.value > 0.:
-            #rescale the noise per pixel to the healpy pixel size
-            hp_sigmaN = self.sigmaN * (pix_within.size/self.Npix)**0.5
-            if self.average_angular_proj:
-                hp_sigmaN *= 1./(self.Nchan)**0.5
-            hp_map[pix_within] += self.rng.normal(0.,hp_sigmaN.value,pix_within.size)
-
         #remove the monopole
         if self.do_remove_mean:
             hp_map = hp.pixelfunc.remove_monopole(hp_map,copy=False)
@@ -736,22 +728,40 @@ class Survey(Lightcone):
             maps = pm_down.downsample(maps.c2r(),keep_mean=True)
         else:
             maps = maps.c2r()
-
-        #Add noise in the cosmic volume probed by target line to the 3d maps
-        if self.Tsys.value > 0.:
-            #add the noise, distribution is gaussian with 0 mean
-            if self.do_downsample:
-                maps += self.rng.normal(0.,self.sigmaN.value,maps.shape)
-            else:
-                supersample_sigmaN = self.sigmaN * (self.spectral_supersample)**0.5 * self.angular_supersample
-                maps += self.rng.normal(0.,supersample_sigmaN.value,maps.shape)
-
+        
         #Remove mean
         if self.do_remove_mean:
             maps = maps-maps.cmean()
 
         return maps
+    
+    @cached_survey_property
+    def noise_3d_map(self):
+        '''
+        3d map with the instrumental noise in the cosmic volume probed by target line
+        '''
+        #add the noise, distribution is gaussian with 0 mean
+        if self.do_downsample:
+            noise_map = self.rng.normal(0.,self.sigmaN.value,self.obs_3d_map.shape)
+        else:
+            supersample_sigmaN = self.sigmaN * (self.spectral_supersample)**0.5 * self.angular_supersample
+            noise_map = self.rng.normal(0.,supersample_sigmaN.value,self.obs_3d_map.shape)
 
+        return noise_map
+    
+    @cached_survey_property
+    def noise_2d_map(self):
+        '''
+        2d angular map with the instrumental noise in the cosmic volume probed by target line
+        '''
+        #rescale the noise per pixel to the healpy pixel size
+        hp_sigmaN = self.sigmaN * (self.pix_within.size/self.Npix)**0.5
+        #add the noise, distribution is gaussian with 0 mean
+        noise_map = np.zeros(len(self.obs_2d_map))
+        noise_map[pix_within] = self.rng.normal(0.,hp_sigmaN.value,pix_within.size)
+
+        return noise_map
+                
     def vec2pix_func(self, x, y, z):
         '''
         Alias for hp.vec2pix(nside,x,y,z) function to use in the cartesian projection

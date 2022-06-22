@@ -134,6 +134,9 @@ class Measure(Survey):
                     
                 #Compensate the field for the CIC window function we apply
                 map_to_use = (map_to_use.r2c().apply(self.compensation[0][1], kind=self.compensation[0][2])).c2r()
+                #Add noise
+                if self.Tsys.value > 0.:
+                    map_to_use += self.noise_3d_map
                 
                 try:
                     dk = self.dk.to(self.Mpch**-1).value
@@ -183,6 +186,10 @@ class Measure(Survey):
         TO-DO: Could switch to namaster implementation.
         '''
         map_to_use = self.obs_2d_map
+        #add noise
+        if self.Tsys.value > 0.:
+            map_to_use[self.pix_within] += self.noise_2d_map[self.pix_within]
+            
         fsky = (self.RAObs_max - self.RAObs_min).to(u.radian)*(self.DECObs_max - self.DECObs_min).to(u.radian) / (4*np.pi * u.sr)
         cl = hp.anafast(map_to_use, lmax=self.lmax)/fsky
 
