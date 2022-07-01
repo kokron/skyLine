@@ -421,9 +421,9 @@ class Survey(Lightcone):
             ang = np.arctan(cornerside/self.rside_obs_lim[1])
             rbuffer = cornerside/np.sin(ang)
             zbuffer = self.cosmo.redshift_at_comoving_radial_distance((rbuffer*self.Mpch).value)
-            nu_min = self.line_nu0[line]/(zbuffer+1)
+            nu_min = self.line_nu0[self.target_line]/(zbuffer+1)
 
-            print('The target line requires z_max = {:.3f} instead of the nominal {:.3f}'.format(line,zbuffer,(self.line_nu0[line]/self.nuObs_min).value-1))
+            print('The target line requires z_max = {:.3f} instead of the nominal {:.3f}'.format(zbuffer,(self.line_nu0[self.target_line]/self.nuObs_min).value-1))
             if zbuffer < self.zmax:
                 warn('Filling the corners requires a buffering z_max = {:.3f}, but input z_max = {:.3f}. Corners will not be completely filled'.format(zbuffer,self.zmax))
         else:
