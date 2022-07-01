@@ -424,7 +424,7 @@ class Survey(Lightcone):
             nu_min = self.line_nu0[self.target_line]/(zbuffer+1)
 
             print('The target line requires z_max = {:.3f} instead of the nominal {:.3f}'.format(zbuffer,(self.line_nu0[self.target_line]/self.nuObs_min).value-1))
-            if zbuffer < self.zmax:
+            if zbuffer > self.zmax:
                 warn('Filling the corners requires a buffering z_max = {:.3f}, but input z_max = {:.3f}. Corners will not be completely filled'.format(zbuffer,self.zmax))
         else:
             nu_min = self.nuObs_min
