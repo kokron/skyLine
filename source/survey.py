@@ -1010,11 +1010,12 @@ def aniso_filter(k, v):
     newk[2] *= rper
 
     #Build smoothed values
-    kk = sum(ki**2 for ki in newk)
+    kk2_perp = newk[1]**2+newk[2]**2  
+    
+    newmap = np.exp(-0.5*kk2_perp)*rpar*np.sinc(newk[0]/2) * v
+    newmap[kk2_perp+newk[0]**2 == 0] == 0
 
-    kk[kk==0]==1
-
-    return np.exp(-0.5*kk)*v
+    return newmap
 
 def rd2tp(ra,dec):
     """ convert ra/dec to theta,phi"""
