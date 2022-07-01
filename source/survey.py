@@ -413,26 +413,26 @@ class Survey(Lightcone):
             inds_mass = inds_mass&(self.halo_catalog['M_HALO']>=self.Mhalo_min)
         if self.Mstar_min != 0.:
             inds_mass = inds_mass&(self.halo_catalog['SM_HALO']>=self.Mstar_min)
+            
+        #Get a lower nu_Obs_min to buffer high redshifts and fill corners if required
+        if (self.do_angular == False) and (self.do_z_buffering) and \
+           (self.cube_mode == 'inner_cube' or self.cube_mode == 'mid_redshift'):
+            cornerside = (self.raside_lim[1]**2+self.decside_lim[1]**2)**0.5
+            ang = np.arctan(cornerside/self.rside_obs_lim[1])
+            rbuffer = cornerside/np.sin(ang)
+            zbuffer = self.cosmo.redshift_at_comoving_radial_distance((rbuffer*self.Mpch).value)
+            nu_min = self.line_nu0[line]/(zbuffer+1)
+
+            print('The target line requires z_max = {:.3f} instead of the nominal {:.3f}'.format(line,zbuffer,(self.line_nu0[line]/self.nuObs_min).value-1))
+            if zbuffer < self.zmax:
+                warn('Filling the corners requires a buffering z_max = {:.3f}, but input z_max = {:.3f}. Corners will not be completely filled'.format(zbuffer,self.zmax))
+        else:
+            nu_min = self.nuObs_min
 
         #Loop over lines to see what halos are within nuObs
         for line in self.lines.keys():
             if self.lines[line]:
                 halos_survey[line] = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),Ztrue=np.array([]),Lhalo=np.array([])*u.Lsun)
-                
-                #Get a lower nu_Obs_min to buffer high redshifts and fill corners if required
-                if (self.do_angular == False) and (self.do_z_buffering) and \
-                   (self.cube_mode == 'inner_cube' or self.cube_mode == 'mid_redshift'):
-                    cornerside = (self.raside_lim[1]**2+self.decside_lim[1]**2)**0.5
-                    ang = np.arctan(cornerside/self.rside_obs_lim[1])
-                    rbuffer = cornerside/np.sin(ang)
-                    zbuffer = self.cosmo.redshift_at_comoving_radial_distance((rbuffer*self.Mpch).value)
-                    nu_min = self.line_nu0[line]/(zbuffer+1)
-                    
-                    print('The {:s} line requires z_max = {:.3f} instead of the nominal {:.3f}'.format(line,zbuffer,(self.line_nu0[line]/self.nuObs_min).value-1))
-                    if zbuffer < self.zmax:
-                        warn('Filling the corners requires a buffering z_max = {:.3f}, but input z_max = {:.3f}. Corners will not be completely filled'.format(zbuffer,self.zmax))
-                else:
-                    nu_min = self.nuObs_min
                     
                 #inds = (self.nuObs_line_halo[line] >= self.nuObs_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky
                 inds = (self.nuObs_line_halo[line] >= nu_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky&inds_mass
