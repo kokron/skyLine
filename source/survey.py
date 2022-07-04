@@ -1012,9 +1012,7 @@ def aniso_filter(k, v):
     else:
         w = np.exp(-0.5*kk2_perp * rper**2)
 
-    print(newk[0].shape,newk[1].shape,newk[2].shape,v.shape)
-    print(w.shape,kk2_perp.shape)
-    w[newk[0] == 0] = 1.0
+    #w[newk[0] == 0] = 1.0
     return w*v
 
 
