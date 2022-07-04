@@ -1003,6 +1003,8 @@ def aniso_filter(k, v):
     rper = sigma_perp
     rpar = sigma_par
     newk = copy.deepcopy(k)
+    
+    k = sum(ki ** 2 for ki in newk) ** 0.5
 
     #Smooth the k-modes anisotropically
     newk[0] *= rpar
@@ -1012,10 +1014,13 @@ def aniso_filter(k, v):
     #Build smoothed values
     kk2_perp = newk[1]**2+newk[2]**2  
     
-    newmap = np.exp(-0.5*kk2_perp)*rpar*np.sinc(newk[0]/2) * v
-    newmap[kk2_perp+newk[0]**2 == 0] == 0
+    if rpar > 0:
+        w = np.exp(-0.5*kk2_perp)*rpar*np.sinc(newk[0]/2) * v
+    else:
+        w = np.exp(-0.5*kk2_perp) * v
 
-    return newmap
+    w[k == 0] = 1.0
+    return w*v
 
 def rd2tp(ra,dec):
     """ convert ra/dec to theta,phi"""
