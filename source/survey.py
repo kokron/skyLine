@@ -1012,8 +1012,47 @@ def aniso_filter(k, v):
     else:
         w = np.exp(-0.5*kk2_perp * rper**2)
 
-    w[kk == 0] = 1.0
+    print(newk[0].shape,newk[1].shape,newk[2].shape,v.shape)
+    print(w.shape,kk2_perp.shape)
+    w[newk[0] == 0] = 1.0
     return w*v
+
+
+def old_aniso_filter(k, v):
+    '''
+    Filter for k_perp and k_par modes separately.
+    Applies to an nbodykit mesh object as a regular filter.
+
+    Uses globally defined variables:
+        sigma_perp - 'angular' smoothing in the flat sky approximation
+        sigma_par - 'radial' smoothing from number of channels.
+
+    Usage:
+        mesh.apply(perp_filter, mode='complex', kind='wavenumber')
+
+    NOTES:
+    k[0] *= modifies the next iteration in the loop.
+    Coordinates are fixed except for the k[1] which are
+    the coordinate that sets what slab is being altered?
+
+    '''
+    rper = sigma_perp
+    rpar = sigma_par
+    newk = copy.deepcopy(k)
+
+    #Smooth the k-modes anisotropically
+    newk[0] *= rpar
+    newk[1] *= rper
+    newk[2] *= rper
+
+    #Build smoothed values
+    kk = sum(ki**2 for ki in newk)
+
+    kk[kk==0]==1
+
+    return np.exp(-0.5*kk)*v
+
+
 
 def rd2tp(ra,dec):
     """ convert ra/dec to theta,phi"""
