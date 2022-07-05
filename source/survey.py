@@ -812,7 +812,7 @@ class Survey(Lightcone):
 
                 cart_proj=hp.projector.CartesianProj(xsize=self.Npixside[0]*self.angular_supersample, ysize=self.Npixside[1]*self.angular_supersample, lonra =  [ramin,ramax], latra=[decmin,decmax])  
                 galmap_cart=cart_proj.projmap(galmap_rotated, self.vec2pix_func)
-                foreground_signal.append((galmap_cart.flatten())*u.uK)
+                foreground_signal.append((galmap_cart.flatten())*self.unit)
                
                 Xedge=np.linspace(ramin,ramax, (self.Npixside[0]*self.angular_supersample)+1)
                 Yedge=np.linspace(decmin,decmax, (self.Npixside[1]*self.angular_supersample)+1)
