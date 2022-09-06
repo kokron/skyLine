@@ -219,8 +219,16 @@ class Survey(Lightcone):
     def Omega_field(self):
         '''
         Solid angle covered by the survey
+
+        Assumes contiguous / simple survey geometry...
         '''
-        return (self.RAObs_max-self.RAObs_min)*(self.DECObs_max-self.DECObs_min)
+        phimax = self.RAObs_max.to(u.radian).value
+        phimin = self.RAObs_min.to(u.radian).value
+        thetamax = np.pi/2 - self.DECObs_max.to(u.radian).value
+        thetamin = np.pi/2 - self.DECObs_min.to(u.radian).value
+        
+        omega = (phimax - phimin) * (np.cos(thetamax) - np.cos(thetamin))
+        return omega 
 
     @cached_survey_property
     def beam_width(self):
@@ -530,6 +538,8 @@ class Survey(Lightcone):
         for iphiedge in range(len(phicorner_list)-1):
             phicorner = np.deg2rad(np.array([phicorner_list[iphiedge],phicorner_list[iphiedge],phicorner_list[iphiedge+1],phicorner_list[iphiedge+1]]))
             vecs = hp.dir2vec(thetacorner,phi=phicorner).T
+            #catch repeat vecs
+            vecs = np.unique(vecs, axis=0)
             pix_within = np.append(pix_within,hp.query_polygon(nside=self.nside,vertices=vecs,inclusive=False))
         self.pix_within = pix_within
         mask = np.ones(hp.nside2npix(self.nside),np.bool)
