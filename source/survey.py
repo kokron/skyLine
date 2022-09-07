@@ -227,7 +227,7 @@ class Survey(Lightcone):
         thetamax = np.pi/2 - self.DECObs_max.to(u.radian).value
         thetamin = np.pi/2 - self.DECObs_min.to(u.radian).value
         
-        omega = (phimax - phimin) * (np.cos(thetamax) - np.cos(thetamin))
+        omega = (phimax - phimin) * (np.cos(thetamax) - np.cos(thetamin))*u.sr
         return omega 
 
     @cached_survey_property

@@ -172,8 +172,13 @@ class Lightcone(object):
         print(fnames[sort_ind[inds_in[0]]])
 
         #Start the catalog appending everything
-        bigcat = np.array(fil[1].data)
+        #Also add the angular cut
+        data = np.array(fil[1].data)
+        inds_RA = (data['RA'] > self.RA_min.value)&(data['RA'] < self.RA_max.value)
+        inds_DEC = (data['DEC'] > self.DEC_min.value)&(data['DEC'] < self.DEC_max.value)
+        bigcat = data[inds_RA&inds_DEC]
         #Open the rest and append
+        Ngals = len(bigcat)
         for ifile in range(1,N_in):
             print(fnames[sort_ind[inds_in[ifile]]])
             fil = fits.open(fnames[sort_ind[inds_in[ifile]]])
@@ -181,8 +186,10 @@ class Lightcone(object):
             inds_RA = (data['RA'] > self.RA_min.value)&(data['RA'] < self.RA_max.value)
             inds_DEC = (data['DEC'] > self.DEC_min.value)&(data['DEC'] < self.DEC_max.value)
             inds_sky = inds_RA&inds_DEC
+            Ngals += len(data[inds_sky])
             bigcat = np.append(bigcat, data[inds_sky])
-
+            #print(bigcat.shape)
+        print("Number of gals is %d"%Ngals)
         return bigcat
 
     @cached_lightcone_property
