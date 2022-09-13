@@ -148,12 +148,11 @@ class Lightcone(object):
     ######################
     # Catalog Management #
     ######################
+    def halo_slices(self):  
+        '''
+        Gets the names and slices to be loaded in iteratively (or in total)
+        '''
 
-    @cached_read_property
-    def halo_catalog(self):
-        '''
-        Reads all the files from the halo catalog and appends the slices
-        '''
         fnames = glob(self.halo_lightcone_dir+'/*')
         Nfiles = len(fnames)
         #get the sorted indices from fnames
@@ -167,33 +166,54 @@ class Lightcone(object):
         max_dist = self.cosmo.comoving_radial_distance(self.zmax)
         inds_in = np.where(np.logical_and(dist_edges[:-1] >= min_dist, dist_edges[1:] <= max_dist))[0]
         N_in = len(inds_in)
-        #open the first one
-        fil = fits.open(fnames[sort_ind[inds_in[0]]])
-        print(fnames[sort_ind[inds_in[0]]])
+        fnames = np.array(fnames)
 
-        #Start the catalog appending everything
-        #Also add the angular cut
+        fnamelist = fnames[sort_ind[inds_in]]
+        
+        indlist = ind[sort_ind[inds_in]]
+        
+        return fnamelist, indlist
+    #@cached_read_property
+    def halo_catalog_read(self, fnames):
+        '''
+        Reads all the files from the halo catalog and appends the slices
+
+        fnames : list of file names to open for this slice
+        '''
+        #Check if going to iterate or not:
+        nfiles = len(fnames)
+        print(nfiles)
+        print(fnames[0])
+        fil = fits.open(fnames[0])
         data = np.array(fil[1].data)
+
         inds_RA = (data['RA'] > self.RA_min.value)&(data['RA'] < self.RA_max.value)
         inds_DEC = (data['DEC'] > self.DEC_min.value)&(data['DEC'] < self.DEC_max.value)
+        
+        #Start the catalog appending everything
+        #Also add the angular cut
         bigcat = data[inds_RA&inds_DEC]
+        if nfiles > 1:
+            
+            for ifile in range(1,nfiles):
+                print(fnames[sort_ind[inds_in[ifile]]])
+                fil = fits.open(fnames[ifile])
+                data = np.array(fil[1].data)
+                inds_RA = (data['RA'] > self.RA_min.value)&(data['RA'] < self.RA_max.value)
+                inds_DEC = (data['DEC'] > self.DEC_min.value)&(data['DEC'] < self.DEC_max.value)
+                inds_sky = inds_RA&inds_DEC
+                Ngals += len(data[inds_sky])
+                bigcat = np.append(bigcat, data[inds_sky])
+
+
         #Open the rest and append
         Ngals = len(bigcat)
-        for ifile in range(1,N_in):
-            print(fnames[sort_ind[inds_in[ifile]]])
-            fil = fits.open(fnames[sort_ind[inds_in[ifile]]])
-            data = np.array(fil[1].data)
-            inds_RA = (data['RA'] > self.RA_min.value)&(data['RA'] < self.RA_max.value)
-            inds_DEC = (data['DEC'] > self.DEC_min.value)&(data['DEC'] < self.DEC_max.value)
-            inds_sky = inds_RA&inds_DEC
-            Ngals += len(data[inds_sky])
-            bigcat = np.append(bigcat, data[inds_sky])
             #print(bigcat.shape)
         print("Number of gals is %d"%Ngals)
         return bigcat
 
-    @cached_lightcone_property
-    def L_line_halo(self):
+    #@cached_lightcone_property
+    def L_line_halo_make(self):
         '''
         Computes the halo luminosity for each of the lines of interest
         '''
@@ -256,10 +276,10 @@ class Lightcone(object):
             if self.lines[line]:
                 L_line_halo[line] = getattr(LM,self.models[line]['model_name'])(self,SFR,LIR,self.models[line]['model_pars'],self.line_nu0[line],self.rng)
 
-        return L_line_halo
+        self.L_line_halo=L_line_halo
 
-    @cached_lightcone_property
-    def nuObs_line_halo(self):
+    #@cached_lightcone_property
+    def nuObs_line_halo_make(self):
         '''
         Computes the observed frequency for each halo and line
         '''
@@ -268,8 +288,8 @@ class Lightcone(object):
         for line in self.lines.keys():
             if self.lines[line]:
                 nuObs_line_halo[line] = self.line_nu0[line]/(1+self.halo_catalog['Z']+self.halo_catalog['DZ'])
-
-        return nuObs_line_halo
+        
+        self.nuObs_line_halo = nuObs_line_halo
 
     ########################################################################
     # Method for updating input parameters and resetting cached properties #

@@ -386,16 +386,17 @@ class Survey(Lightcone):
     ## Create the mock map ##
     #########################
 
-    @cached_survey_property
-    def halos_in_survey(self):
+    #@cached_survey_property
+    def halos_in_survey_make(self):
         '''
         Filters the halo catalog and only takes those that have observed
         frequencies within the experimental frequency bandwitdh and lie in the
         observed RA - DEC ranges
         '''
         #empty catalog
+        
         halos_survey = {}
-
+        
         #halos within footprint
         if self.do_angular:
             #Enhance the survey selection a bit to prevent healpy masking from giving limited objects at edges
@@ -441,7 +442,8 @@ class Survey(Lightcone):
         for line in self.lines.keys():
             if self.lines[line]:
                 halos_survey[line] = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),Ztrue=np.array([]),Lhalo=np.array([])*u.Lsun)
-                    
+                self.nuObs_line_halo_make()    
+                self.L_line_halo_make()
                 #inds = (self.nuObs_line_halo[line] >= self.nuObs_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky
                 inds = (self.nuObs_line_halo[line] >= nu_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky&inds_mass
                 halos_survey[line]['RA'] = np.append(halos_survey[line]['RA'],self.halo_catalog['RA'][inds])
@@ -471,58 +473,69 @@ class Survey(Lightcone):
 
         hp_map = np.zeros(npix)
 
+
+        #>>>>>>>>>>>>>>>HERE
+        fnamelist, indlist = self.halo_slices()
+        #hcat = self.halo_catalog(self, 
+        print(fnamelist)
+        Ngal = 0 
+        ##NOTE THE -4 IN THIS FOR LOOP NOTE
+        for n, ind in enumerate(indlist):
+            self.halo_catalog = self.halo_catalog_read([fnamelist[n]]) 
+
         # First, compute the intensity/temperature of each halo in the catalog we will include
-        for line in self.lines.keys():
-            if self.lines[line]:
-                hp_map_line = np.zeros(npix)
+            for line in self.lines.keys():
+                if self.lines[line]:
+                    hp_map_line = np.zeros(npix)
+                    self.halos_in_survey = self.halos_in_survey_make()
+                    Ngal += len(self.halos_in_survey[line]['RA'])
+                    #Get true cell volume
+                    #Get positions using the observed redshift
+                    ra,dec,redshift = da.broadcast_arrays(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'],
+                                                          self.halos_in_survey[line]['Zobs'])
 
-                #Get true cell volume
-                #Get positions using the observed redshift
-                ra,dec,redshift = da.broadcast_arrays(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'],
-                                                      self.halos_in_survey[line]['Zobs'])
+                    Zhalo = self.halos_in_survey[line]['Ztrue']
+                    Hubble = self.cosmo.hubble_parameter(Zhalo)*(u.km/u.Mpc/u.s)
 
-                Zhalo = self.halos_in_survey[line]['Ztrue']
-                Hubble = self.cosmo.hubble_parameter(Zhalo)*(u.km/u.Mpc/u.s)
+                    #Figure out what channel the halos will be in to figure out the voxel volume, for the signal.
+                    #This is what will be added to the healpy map.
+                    nu_bins = self.nuObs_min.to('GHz').value + np.arange(self.Nchan)*self.dnu.to('GHz').value
+                    zmid_channel = self.line_nu0[line].to('GHz').value/(nu_bins + 0.5*self.dnu.to('GHz').value) - 1
 
-                #Figure out what channel the halos will be in to figure out the voxel volume, for the signal.
-                #This is what will be added to the healpy map.
-                nu_bins = self.nuObs_min.to('GHz').value + np.arange(self.Nchan)*self.dnu.to('GHz').value
-                zmid_channel = self.line_nu0[line].to('GHz').value/(nu_bins + 0.5*self.dnu.to('GHz').value) - 1
+                    #Channel of each halo, can now compute voxel volumes where each of them are seamlessly
+                    bin_idxs = np.digitize(self.line_nu0[line].to('GHz').value/(1+Zhalo), nu_bins)-1
+                    zmids = zmid_channel[bin_idxs]
 
-                #Channel of each halo, can now compute voxel volumes where each of them are seamlessly
-                bin_idxs = np.digitize(self.line_nu0[line].to('GHz').value/(1+Zhalo), nu_bins)-1
-                zmids = zmid_channel[bin_idxs]
+                    #Vcell = Omega_pix * D_A (z)^2 * (1+z) * dnu/nu_obs * c/H is the volume of the voxel for a given channel
+                                        #D_A here is comoving angular diameter distance = comoving_radial_distance in flat space
+                    Vcell_true = hp.nside2pixarea(self.nside)*(self.cosmo.comoving_radial_distance(zmids)*u.Mpc )**2 * (self.dnu.value/nu_bins[bin_idxs]) * (1+zmids) * (cu.c.to('km/s')/self.cosmo.hubble_parameter(zmids)/(u.km/u.Mpc/u.s))
 
-                #Vcell = Omega_pix * D_A (z)^2 * (1+z) * dnu/nu_obs * c/H is the volume of the voxel for a given channel
-                                    #D_A here is comoving angular diameter distance = comoving_radial_distance in flat space
-                Vcell_true = hp.nside2pixarea(self.nside)*(self.cosmo.comoving_radial_distance(zmids)*u.Mpc )**2 * (self.dnu.value/nu_bins[bin_idxs]) * (1+zmids) * (cu.c.to('km/s')/self.cosmo.hubble_parameter(zmids)/(u.km/u.Mpc/u.s))
-
-                if not self.mass:
-                    if self.do_intensity:
-                        #intensity[Jy/sr]
-                        signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
+                    if not self.mass:
+                        if self.do_intensity:
+                            #intensity[Jy/sr]
+                            signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
+                        else:
+                            #Temperature[uK]
+                            signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
                     else:
-                        #Temperature[uK]
-                        signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
-                else:
-                    #number counts [empty unit]
-                    signal = np.ones(len(Zhalo))*(1*self.unit/self.unit)
+                        #number counts [empty unit]
+                        signal = np.ones(len(Zhalo))*(1*self.unit/self.unit)
 
-                #Paste the signals to the map
-                theta, phi = rd2tp(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'])
-                pixel_idxs = hp.ang2pix(self.nside, theta, phi)
+                    #Paste the signals to the map
+                    theta, phi = rd2tp(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'])
+                    pixel_idxs = hp.ang2pix(self.nside, theta, phi)
 
-                if self.average_angular_proj:
-                    #averaging over the number of channels
-                    np.add.at(hp_map_line, pixel_idxs, signal.value/self.Nchan)
-                else:
-                    np.add.at(hp_map_line, pixel_idxs, signal.value)
-                #should smoothing be after masking?
-                #could lead to bleeding of the zeros with the boundary
-                if self.do_angular_smooth:
-                    theta_beam = self.beam_FWHM.to(u.rad)
-                    hp_map_line = hp.smoothing(hp_map_line, theta_beam.value)
-                hp_map += hp_map_line
+                    if self.average_angular_proj:
+                        #averaging over the number of channels
+                        np.add.at(hp_map_line, pixel_idxs, signal.value/self.Nchan)
+                    else:
+                        np.add.at(hp_map_line, pixel_idxs, signal.value)
+                    #should smoothing be after masking?
+                    #could lead to bleeding of the zeros with the boundary
+                    if self.do_angular_smooth:
+                        theta_beam = self.beam_FWHM.to(u.rad)
+                        hp_map_line = hp.smoothing(hp_map_line, theta_beam.value)
+                    hp_map += hp_map_line
 
         #get the proper nside for the observed map
         if self.do_downsample:
@@ -532,21 +545,25 @@ class Survey(Lightcone):
                 hp_map = hp.ud_grade(hp_map,nside_min)
 
         #Define the mask from the rectangular footprint
-        phicorner_list = np.append(np.arange(self.RAObs_min.value,self.RAObs_max.value,1),self.RAObs_max.value)
-        thetacorner = np.pi/2-np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value,self.DECObs_max.value,self.DECObs_min.value]))
-        pix_within = np.array([])
-        for iphiedge in range(len(phicorner_list)-1):
-            phicorner = np.deg2rad(np.array([phicorner_list[iphiedge],phicorner_list[iphiedge],phicorner_list[iphiedge+1],phicorner_list[iphiedge+1]]))
-            vecs = hp.dir2vec(thetacorner,phi=phicorner).T
-            #catch repeat vecs
-            vecs = np.unique(vecs, axis=0)
-            pix_within = np.append(pix_within,hp.query_polygon(nside=self.nside,vertices=vecs,inclusive=False))
-        self.pix_within = pix_within
-        mask = np.ones(hp.nside2npix(self.nside),np.bool)
-        mask[pix_within.astype(int)] = 0
-        hp_map = hp.ma(hp_map)
-        hp_map.mask = mask
-
+#        phicorner_list = np.append(np.arange(self.RAObs_min.value,self.RAObs_max.value,1),self.RAObs_max.value)
+#        thetacorner = np.pi/2-np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value,self.DECObs_max.value,self.DECObs_min.value]))
+#        pix_within = np.array([])
+#        for iphiedge in range(len(phicorner_list)-1):
+#            phicorner = np.deg2rad(np.array([phicorner_list[iphiedge],phicorner_list[iphiedge],phicorner_list[iphiedge+1],phicorner_list[iphiedge+1]]))
+#            vecs = hp.dir2vec(thetacorner,phi=phicorner).T
+#            #catch repeat vecs
+#            vecs = np.unique(vecs, axis=0)
+#            try:
+#                pix_within = np.append(pix_within,hp.query_polygon(nside=LC_CO.nside,vertices=vecs,inclusive=False))
+#            except:
+#                pix_within = np.append(pix_within, [])
+#        self.pix_within = pix_within
+#        mask = np.ones(hp.nside2npix(self.nside),np.bool)
+#        mask[pix_within.astype(int)] = 0
+#        hp_map = hp.ma(hp_map)
+#        hp_map.mask = mask
+        
+        print(Ngal)
         #remove the monopole
         if self.do_remove_mean:
             hp_map = hp.pixelfunc.remove_monopole(hp_map,copy=False)
