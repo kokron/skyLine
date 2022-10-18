@@ -101,6 +101,8 @@ class Survey(Lightcone):
 
     -Mstar_min              Minimum stellar mass in a halo (in Msun) to be ncluded in the survey (filter for halos_in_survey). Default:0
     
+    -gal_type               Whether to select only LRGs or ELGs, or all galaxies. Options: 'all', 'lrg', 'elg'.
+    
     -resampler              Set the resampling window for the 3d maps (Irrelevant if do_angular=True). (Default: 'cic')
 
     '''
@@ -134,6 +136,8 @@ class Survey(Lightcone):
                  mass=False,
                  Mhalo_min=0.,
                  Mstar_min=0.,
+                 gal_type='all',
+                 ngal=0.*u.Mpc**-3,
                  resampler='cic', 
                  **lightcone_kwargs):
 
@@ -181,6 +185,20 @@ class Survey(Lightcone):
         self.cube_mode_options = ['outer_cube','inner_cube','mid_redshift','flat_sky']
         if self.cube_mode not in self.cube_mode_options:
             raise ValueError('The cube_mode choice must be one of {}'.format(self.cube_mode_options))
+            
+        if self.gal_type not in ['all','lrg','elg']:
+            raise ValueError('gal_type input must be one of {}'.format(['all','lrg','elg']))
+            
+        if self.do_angular:
+            try:
+                self.ngal = self.ngal.to(u.sr**-1)
+            except:
+                raise ValueError('Please use angular number density for ngal if do_angular = True')
+        else:
+            try:
+                self.ngal = self.ngal.to(self.Mpch**-3)
+            except:
+                raise ValueError('Please use 3D number density for ngal if do_angular = False')
 
         if NoPySM and self.do_gal_foregrounds==True:
             raise ValueError('PySM must be installed to model galactic foregrounds')
@@ -423,6 +441,26 @@ class Survey(Lightcone):
         if self.Mstar_min != 0.:
             inds_mass = inds_mass&(self.halo_catalog_all['SM_HALO']>=self.Mstar_min)
             
+        inds_gal = np.ones(len(inds_sky),dtype=bool)
+        if self.gal_type != 'all':
+            #separate between ELGs and LRGs
+            sSFR = self.halo_catalog_all['SFR_HALO']/self.halo_catalog_all['SM_HALO']
+            hist,bins = np.histogram(sSFR,bins=101)
+            inds_hist = [np.argmax(hist[:50],np.argmax[50:]]
+            indlim = np.argmin(hist[inds_hist[0]:inds_hist[1])
+            if selg.gal_type == 'elg':
+                inds_gal = inds_gal&(sSFR > bins[indlim])
+            else:
+                inds_gal = inds_gal&(sSFR < bins[indlim])
+            #Get the N brightest (e.g., higher Mstar) up to matching number density
+            if self.do_angular:
+                Ngal_tot = self.ngal*self.Omega_field
+            else:
+                Ngal_tot = self.ngal*((self.Lbox.value).prod()*(self.Mpch**3).to(self.Mpch**3))
+            argsort = np.argsort(self.halo_catalog_all['SM_HALO'])[::-1]
+            indlim = np.where(np.cumsum(inds_gal[argsort])==Ngal_tot)[0][0]
+            inds_gal[argsort[:indlim]] = False
+                            
         #Get a lower nu_Obs_min to buffer high redshifts and fill corners if required
         if (self.do_angular == False) and (self.do_z_buffering) and \
            (self.cube_mode == 'inner_cube' or self.cube_mode == 'mid_redshift'):
@@ -443,7 +481,7 @@ class Survey(Lightcone):
             if self.lines[line]:
                 halos_survey[line] = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),Ztrue=np.array([]),Lhalo=np.array([])*u.Lsun)
                     
-                inds = (self.nuObs_line_halo_all[line] >= nu_min)&(self.nuObs_line_halo_all[line] <= self.nuObs_max)&inds_sky&inds_mass
+                inds = (self.nuObs_line_halo_all[line] >= nu_min)&(self.nuObs_line_halo_all[line] <= self.nuObs_max)&inds_sky&inds_mass&inds_gal
                 halos_survey[line]['RA'] = np.append(halos_survey[line]['RA'],self.halo_catalog_all['RA'][inds])
                 halos_survey[line]['DEC'] = np.append(halos_survey[line]['DEC'],self.halo_catalog_all['DEC'][inds])
                 halos_survey[line]['Zobs'] = np.append(halos_survey[line]['Zobs'],(self.line_nu0[self.target_line]/self.nuObs_line_halo_all[line][inds]).decompose()-1)
@@ -491,6 +529,26 @@ class Survey(Lightcone):
         if self.Mstar_min != 0.:
             inds_mass = inds_mass&(self.halo_catalog['SM_HALO']>=self.Mstar_min)
             
+        inds_gal = np.ones(len(inds_sky),dtype=bool)
+        if self.gal_type != 'all':
+            #separate between ELGs and LRGs
+            sSFR = self.halo_catalog['SFR_HALO']/self.halo_catalog['SM_HALO']
+            hist,bins = np.histogram(sSFR,bins=101)
+            inds_hist = [np.argmax(hist[:50],np.argmax[50:]]
+            indlim = np.argmin(hist[inds_hist[0]:inds_hist[1])
+            if selg.gal_type == 'elg':
+                inds_gal = inds_gal&(sSFR > bins[indlim])
+            else:
+                inds_gal = inds_gal&(sSFR < bins[indlim])
+            #Get the N brightest (e.g., higher Mstar) up to matching number density
+            if self.do_angular:
+                Ngal_tot = self.ngal*self.Omega_field
+            else:
+                Ngal_tot = self.ngal*((self.Lbox.value).prod()*(self.Mpch**3).to(self.Mpch**3))
+            argsort = np.argsort(self.halo_catalog['SM_HALO'])[::-1]
+            indlim = np.where(np.cumsum(inds_gal[argsort])==Ngal_tot)[0][0]
+            inds_gal[argsort[:indlim]] = False
+            
         #Get a lower nu_Obs_min to buffer high redshifts and fill corners if required
         if (self.do_angular == False) and (self.do_z_buffering) and \
            (self.cube_mode == 'inner_cube' or self.cube_mode == 'mid_redshift'):
@@ -511,7 +569,7 @@ class Survey(Lightcone):
         #get observed freqs and 
         self.nuObs_line_halo_slice(line)
         self.L_line_halo_slice(line)
-        inds = (self.nuObs_line_halo[line] >= nu_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky&inds_mass
+        inds = (self.nuObs_line_halo[line] >= nu_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky&inds_mass&inds_gal
         halos_survey[line]['RA'] = np.append(halos_survey[line]['RA'],self.halo_catalog['RA'][inds])
         halos_survey[line]['DEC'] = np.append(halos_survey[line]['DEC'],self.halo_catalog['DEC'][inds])
         halos_survey[line]['Zobs'] = np.append(halos_survey[line]['Zobs'],(self.line_nu0[self.target_line]/self.nuObs_line_halo[line][inds]).decompose()-1)
