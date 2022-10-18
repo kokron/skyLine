@@ -739,10 +739,10 @@ class Survey(Lightcone):
                         self.halo_catalog_slice(fnames[ifile])
                         self.halos_in_survey_slice(line)
                         #add the contribution from these halos
-                        field += paint_3d(self.halos_in_survey[line],line,rmid,mins_obs,pm)
+                        field += paint_3d(self.halos_in_survey[line],line,rmid,mins_obs,Vcell_true,pm)
                         
                 else:
-                    field += paint_3d(self.halos_in_survey_all[line],line,rmid,mins_obs,pm)
+                    field += paint_3d(self.halos_in_survey_all[line],line,rmid,mins_obs,Vcell_true,pm)
                 
                 #turn the field to complex
                 field = field.r2c()
@@ -774,7 +774,7 @@ class Survey(Lightcone):
 
         return maps
         
-    def paint_3d(self,halos,line,rmid,mins_obs,pm,field):
+    def paint_3d(self,halos,line,rmid,mins_obs,Vcell_true,pm):
         '''
         Adds the contribution from a slice to the 3d pmesh map
         '''
