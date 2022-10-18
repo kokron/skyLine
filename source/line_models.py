@@ -28,11 +28,12 @@ def lines_included(self):
 ## IR Luminosity ##
 ###################
 
-def LIR(self,SFR,pars,rng):
+def LIR(self,halos,SFR,pars,rng):
     '''
     Obtain the IR luminosity from SFR or stellar mass
 
     Parameters:
+        -halos:     Halos to take into account (with all halo props)
         -SFR:       SFR of the halo in Msun/yr
         -pars:      Dictionary of parameters
             -IRX_name:      The reference to use the IRX from
@@ -52,15 +53,15 @@ def LIR(self,SFR,pars,rng):
         #IRX - Mstar relation from Bouwens 2016, arXiv:1606.05280
         if pars['IRX_name'] == 'Bouwens2016':
             log10IRX_0,sigma_IRX = pars['log10IRX_0'],pars['sigma_IRX']
-            IRX = 10**log10IRX_0*self.halo_catalog['SM_HALO'][inds]
+            IRX = 10**log10IRX_0*halos['SM_HALO'][inds]
         #IRX - Mstar relation from Bouwens 2020, arXiv:2009.10727
         elif pars['IRX_name'] == 'Bouwens2020':
             log10Ms_IRX,alpha_IRX,sigma_IRX = pars['log10Ms_IRX'],pars['alpha_IRX'],pars['sigma_IRX']
-            IRX = (self.halo_catalog['SM_HALO'][inds]/10**log10Ms_IRX)**alpha_IRX
+            IRX = (halos['SM_HALO'][inds]/10**log10Ms_IRX)**alpha_IRX
         #IRX - Mstar relation from Heinis 2014, arXiv:1310.3227
         elif pars['IRX_name'] == 'Heinis2014':
             log10Ms_IRX,alpha_IRX,log10IRX_0,sigma_IRX = pars['log10Ms_IRX'],pars['alpha_IRX'],pars['log10IRX_0'],pars['sigma_IRX']
-            IRX = (self.halo_catalog['SM_HALO'][inds]/10**log10Ms_IRX)**alpha_IRX*10**log10IRX_0
+            IRX = (halos['SM_HALO'][inds]/10**log10Ms_IRX)**alpha_IRX*10**log10IRX_0
         else:
             raise ValueError('Please choose a valid IRX model')
         #Add mean-preserving lognormal scatter in the IRX relation
@@ -74,13 +75,14 @@ def LIR(self,SFR,pars,rng):
     return LIR
     
 
-def LIR_and_LUV(self,SFR,pars,rng):
+def LIR_and_LUV(self,halos,SFR,pars,rng):
     '''
     Obtain the IR and UV luminosities from SFR or stellar mass
     
     -to use outside code
 
     Parameters:
+        -halos:     Halos to take into account (with all halo props)
         -SFR:       SFR of the halo in Msun/yr
         -pars:      Dictionary of parameters
             -IRX_name:      The reference to use the IRX from
@@ -98,15 +100,15 @@ def LIR_and_LUV(self,SFR,pars,rng):
         #IRX - Mstar relation from Bouwens 2016, arXiv:1606.05280
         if pars['IRX_name'] == 'Bouwens2016':
             log10IRX_0,sigma_IRX = pars['log10IRX_0'],pars['sigma_IRX']
-            IRX = 10**log10IRX_0*self.halo_catalog['SM_HALO'][inds]
+            IRX = 10**log10IRX_0*halos['SM_HALO'][inds]
         #IRX - Mstar relation from Bouwens 2020, arXiv:2009.10727
         elif pars['IRX_name'] == 'Bouwens2020':
             log10Ms_IRX,alpha_IRX,sigma_IRX = pars['log10Ms_IRX'],pars['alpha_IRX'],pars['sigma_IRX']
-            IRX = (self.halo_catalog['SM_HALO'][inds]/10**log10Ms_IRX)**alpha_IRX
+            IRX = (halos['SM_HALO'][inds]/10**log10Ms_IRX)**alpha_IRX
         #IRX - Mstar relation from Heinis 2014, arXiv:1310.3227
         elif pars['IRX_name'] == 'Heinis2014':
             log10Ms_IRX,alpha_IRX,log10IRX_0,sigma_IRX = pars['log10Ms_IRX'],pars['alpha_IRX'],pars['log10IRX_0'],pars['sigma_IRX']
-            IRX = (self.halo_catalog['SM_HALO'][inds]/10**log10Ms_IRX)**alpha_IRX*10**log10IRX_0
+            IRX = (halos['SM_HALO'][inds]/10**log10Ms_IRX)**alpha_IRX*10**log10IRX_0
         else:
             raise ValueError('Please choose a valid IRX model')
         #Add mean-preserving lognormal scatter in the IRX relation
@@ -123,11 +125,12 @@ def LIR_and_LUV(self,SFR,pars,rng):
 ## CO LINES ##
 ##############
 
-def CO_Li16(self,SFR,LIR,pars,nu0,rng):
+def CO_Li16(self,halos,SFR,LIR,pars,nu0,rng):
     '''
     Model for CO(1-0) line from Li+2016 (arXiv:1503.08833)
 
     Parameters:
+        -halos:     Halos to take into account (with all halo props)
         -SFR:       SFR of the halo in Msun/yr
         -pars:      Dictionary of parameters for the model
             -delta_mf:  IMF normalization
@@ -155,7 +158,7 @@ def CO_Li16(self,SFR,LIR,pars,nu0,rng):
     return LCO_samples
 
 
-def CO_lines_scaling_LFIR(self,SFR,LIR,pars,nu0,rng):
+def CO_lines_scaling_LFIR(self,halos,SFR,LIR,pars,nu0,rng):
     '''
     Returns the luminosity for CO lines lines that have empirical scaling relations with FIR luminosity
 
@@ -165,6 +168,7 @@ def CO_lines_scaling_LFIR(self,SFR,LIR,pars,nu0,rng):
     Relation is: log10(LFIR) = alpha*log10(LCO')+beta
 
     Parameters:
+        -halos:     Halos to take into account (with all halo props)
         -SFR:       SFR of the halo in Msun/yr
         -pars:      Dictionary of parameters for the model
             -alpha
@@ -195,11 +199,12 @@ def CO_lines_scaling_LFIR(self,SFR,LIR,pars,nu0,rng):
 ## CII LINE ##
 ##############
 
-def CII_Silva15(self,SFR,LIR,pars,nu0,rng):
+def CII_Silva15(self,halos,SFR,LIR,pars,nu0,rng):
     '''
     Model for CII line from Silva+2015 (arXiv:1410.4808)
 
     Parameters:
+        -halos:     Halos to take into account (with all halo props)
         -SFR:       SFR of the halo in Msun/yr
         -pars:      Dictionary of parameters for the model
             -aLCII,bLCII    Fit to log10(L_CII/Lsun) = aLCII*log10(SFR/(Msun/yr)) + bLCII
@@ -223,11 +228,12 @@ def CII_Silva15(self,SFR,LIR,pars,nu0,rng):
 
     return L
 
-def CII_Lagache18(self,SFR,LIR,pars,nu0,rng):
+def CII_Lagache18(self,halos,SFR,LIR,pars,nu0,rng):
     '''
     Model for CII line from Lagache+2018 (arXiv:1711.00798)
 
     Parameters:
+        -halos:     Halos to take into account (with all halo props)
         -SFR:       SFR of the halo in Msun/yr
         -pars:      Dictionary of parameters for the model
             -alpha1, alpha2, beta1, beta2    Fit to log10(L_CII/Lsun) = alpha*log10(SFR/(Msun/yr)) + beta, where alpha=alpha1 + alpha2*z and beta=beta1 + beta2*z
@@ -242,8 +248,8 @@ def CII_Lagache18(self,SFR,LIR,pars,nu0,rng):
     L = np.zeros(len(SFR))*u.Lsun
 
     # LCII relation
-    alpha=alpha1+alpha2*self.halo_catalog['Z'][inds]
-    beta=beta1+beta2*self.halo_catalog['Z'][inds]
+    alpha=alpha1+alpha2*halos['Z'][inds]
+    beta=beta1+beta2*halos['Z'][inds]
 
     Lmean = 10**(alpha*np.log10(SFR[inds])+beta)*u.Lsun
 
@@ -257,11 +263,12 @@ def CII_Lagache18(self,SFR,LIR,pars,nu0,rng):
 ## Ly-alpha LINE ##
 ##############
 
-def Lyalpha_Chung19(self,SFR,LIR,pars,nu0,rng):
+def Lyalpha_Chung19(self,halos,SFR,LIR,pars,nu0,rng):
     '''
     Model for Lyman-alpha line used in Chung+2019 (arXiv:1809.04550)
 
     Parameters:
+        -halos:     Halos to take into account (with all halo props)
         -SFR:       SFR of the halo in Msun/yr
         -pars:      Dictionary of parameters for the model
             -C      Conversion between SFR and Ly-alpha luminosity
@@ -275,7 +282,7 @@ def Lyalpha_Chung19(self,SFR,LIR,pars,nu0,rng):
     except:
         raise ValueError('The model_pars for Lyalpha_Chung19 are C, xi, zeta, psi, z0, f0, SFR0, and sigma_L, but {} were provided'.format(pars.keys()))
 
-    fesc=(((1+np.exp(-xi*(self.halo_catalog['Z']-z0)))**(-zeta))*(f0+((1-f0)/(1+(SFR/SFR0)**(psi)))))**2
+    fesc=(((1+np.exp(-xi*(halos['Z']-z0)))**(-zeta))*(f0+((1-f0)/(1+(SFR/SFR0)**(psi)))))**2
     LLya=C*SFR*fesc
 
     #Add scatter to the relation
@@ -288,11 +295,12 @@ def Lyalpha_Chung19(self,SFR,LIR,pars,nu0,rng):
 ## 21-cm LINE ##
 ##############
 
-def HI_VN18(self,SFR,LIR,pars,nu0,rng):
+def HI_VN18(self,halos,SFR,LIR,pars,nu0,rng):
     '''
     Model for 21-cm line used in Villaescusa-Navarro+2018 (arXiv:1804.09180)
 
     Parameters:
+        -halos:     Halos to take into account (with all halo props)
         -SFR:       SFR of the halo in Msun/yr
         -pars:      Dictionary of parameters for the model
             -M0, Mmin, alpha    Normalization, cutoff mass, and slope in the M_HI-M_halo relation
@@ -305,7 +313,7 @@ def HI_VN18(self,SFR,LIR,pars,nu0,rng):
     except:
         raise ValueError('The model_pars for HI_VN18 are M0, Mmin, alpha, and sigma_MHI, but {} were provided'.format(pars.keys()))
 
-    Mhalo_Msun = (self.halo_catalog['M_HALO']*self.Msunh).to(u.Msun)
+    Mhalo_Msun = (halos['M_HALO']*self.Msunh).to(u.Msun)
     MHI=M0*np.exp(-(Mmin/Mhalo_Msun)**0.35)*(Mhalo_Msun/Mmin)**alpha
     
     #Add scatter to the MHI relation
@@ -324,7 +332,7 @@ def HI_VN18(self,SFR,LIR,pars,nu0,rng):
 ## SFR Kennicutt scaling relations ##
 #####################################
 
-def SFR_scaling_relation_Kennicutt(self,SFR,LIR,pars,nu0,rng):
+def SFR_scaling_relation_Kennicutt(self,halos,SFR,LIR,pars,nu0,rng):
     '''
     Model for SFR-related lines used in Gong+2017 (arXiv:1610.09060),
     employing Kennicutt relations and extinctions.
@@ -332,6 +340,7 @@ def SFR_scaling_relation_Kennicutt(self,SFR,LIR,pars,nu0,rng):
     Examples include: Halpha, Hbeta, OII, OIII_0p5
 
     Parameters:
+        -halos:     Halos to take into account (with all halo props)
         -SFR:       SFR of the halo in Msun/yr
         -pars:      Dictionary of parameters for the model
             -K            linear factor SFR = K*L (L in ergios/s)
@@ -355,7 +364,7 @@ def SFR_scaling_relation_Kennicutt(self,SFR,LIR,pars,nu0,rng):
 ## LIR scaling relations ##
 ###########################
 
-def FIR_scaling_relation(self,SFR,LIR,pars,nu0,rng):
+def FIR_scaling_relation(self,halos,SFR,LIR,pars,nu0,rng):
     '''
     Returns the luminosity for lines that have empirical scaling relations with FIR luminosity
 
@@ -365,6 +374,7 @@ def FIR_scaling_relation(self,SFR,LIR,pars,nu0,rng):
     Relation is: log10(L/(1e41 erg/s)) = alpha*log10(LIR/(1e41 erg/s))-beta
 
     Parameters:
+        -halos:     Halos to take into account (with all halo props)
         -SFR:       SFR of the halo in Msun/yr
         -pars:      Dictionary of parameters for the model
             -alpha

@@ -193,6 +193,7 @@ class Survey(Lightcone):
 
         sigma_perp = 0.
         sigma_par = 0.
+        self.keep_iterating = True
 
     @cached_survey_property
     def nuObs_mean(self):
@@ -385,16 +386,83 @@ class Survey(Lightcone):
     #########################
     ## Create the mock map ##
     #########################
-
-    #@cached_survey_property
-    def halos_in_survey_make(self):
+    
+    @cached_survey_property
+    def halos_in_survey_all(self):
         '''
-        Filters the halo catalog and only takes those that have observed
+        Filters all the halo catalog and only takes those that have observed
         frequencies within the experimental frequency bandwitdh and lie in the
         observed RA - DEC ranges
         '''
         #empty catalog
+        halos_survey = {}
+
+        #halos within footprint
+        if self.do_angular:
+            #Enhance the survey selection a bit to prevent healpy masking from giving limited objects at edges
+            #Computes the mid-point of the boundaries and then expands them by 1%
+            #May fail at low nside or weird survey masks
+            delta_ra = 1.01*0.5*(self.RAObs_max.value - self.RAObs_min.value)
+            mid_ra = 0.5*(self.RAObs_max.value + self.RAObs_min.value)
+
+            delta_dec = 1.01*0.5*(self.DECObs_max.value - self.DECObs_min.value)
+            mid_dec = 0.5*(self.DECObs_max.value + self.DECObs_min.value)
+
+            inds_RA = (self.halo_catalog_all['RA'] > mid_ra - delta_ra)&(self.halo_catalog_all['RA'] < delta_ra  +mid_ra)
+            inds_DEC = (self.halo_catalog_all['DEC'] > mid_dec - delta_dec)&(self.halo_catalog_all['DEC'] < mid_dec + delta_dec)
+        else:
+            #make sure Lbox is run
+            Lbox = self.Lbox
+            inds_RA = (self.halo_catalog_all['RA'] > self.RAObs_min.value)&(self.halo_catalog_all['RA'] < self.RAObs_max.value)
+            inds_DEC = (self.halo_catalog_all['DEC'] > self.DECObs_min.value)&(self.halo_catalog_all['DEC'] < self.DECObs_max.value)
+        inds_sky = inds_RA&inds_DEC
+        inds_mass = np.ones(len(inds_sky),dtype=bool)
+
+        if self.Mhalo_min != 0.:
+            inds_mass = inds_mass&(self.halo_catalog_all['M_HALO']>=self.Mhalo_min)
+        if self.Mstar_min != 0.:
+            inds_mass = inds_mass&(self.halo_catalog_all['SM_HALO']>=self.Mstar_min)
+            
+        #Get a lower nu_Obs_min to buffer high redshifts and fill corners if required
+        if (self.do_angular == False) and (self.do_z_buffering) and \
+           (self.cube_mode == 'inner_cube' or self.cube_mode == 'mid_redshift'):
+            cornerside = (self.raside_lim[1]**2+self.decside_lim[1]**2)**0.5
+            ang = np.arctan(cornerside/self.rside_obs_lim[1])
+            rbuffer = cornerside/np.sin(ang)
+            zbuffer = self.cosmo.redshift_at_comoving_radial_distance((rbuffer*self.Mpch).value)
+            nu_min = self.line_nu0[self.target_line]/(zbuffer+1)
+
+            print('The target line requires z_max = {:.3f} instead of the nominal {:.3f}'.format(zbuffer,(self.line_nu0[self.target_line]/self.nuObs_min).value-1))
+            if zbuffer > self.zmax:
+                warn('Filling the corners requires a buffering z_max = {:.3f}, but input z_max = {:.3f}. Corners will not be completely filled'.format(zbuffer,self.zmax))
+        else:
+            nu_min = self.nuObs_min
+
+        #Loop over lines to see what halos are within nuObs
+        for line in self.lines.keys():
+            if self.lines[line]:
+                halos_survey[line] = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),Ztrue=np.array([]),Lhalo=np.array([])*u.Lsun)
+                    
+                inds = (self.nuObs_line_halo_all[line] >= nu_min)&(self.nuObs_line_halo_all[line] <= self.nuObs_max)&inds_sky&inds_mass
+                halos_survey[line]['RA'] = np.append(halos_survey[line]['RA'],self.halo_catalog_all['RA'][inds])
+                halos_survey[line]['DEC'] = np.append(halos_survey[line]['DEC'],self.halo_catalog_all['DEC'][inds])
+                halos_survey[line]['Zobs'] = np.append(halos_survey[line]['Zobs'],(self.line_nu0[self.target_line]/self.nuObs_line_halo_all[line][inds]).decompose()-1)
+                #Not doing DZ correction
+                #halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog_all['Z'][inds]+self.halo_catalog_all['DZ'][inds])
+                halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog_all['Z'][inds])
+                halos_survey[line]['Lhalo'] = np.append(halos_survey[line]['Lhalo'],self.L_line_halo_all[line][inds])
+
+        return halos_survey
+
+    def halos_in_survey_slice(self,line):
+        '''
+        Filters the halo catalog and only takes those that have observed
+        frequencies within the experimental frequency bandwitdh and lie in the
+        observed RA - DEC ranges
         
+        for a single slice, not cached
+        '''
+        #empty catalog
         halos_survey = {}
         
         #halos within footprint
@@ -438,23 +506,21 @@ class Survey(Lightcone):
         else:
             nu_min = self.nuObs_min
 
-        #Loop over lines to see what halos are within nuObs
-        for line in self.lines.keys():
-            if self.lines[line]:
-                halos_survey[line] = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),Ztrue=np.array([]),Lhalo=np.array([])*u.Lsun)
-                self.nuObs_line_halo_make()    
-                self.L_line_halo_make()
-                #inds = (self.nuObs_line_halo[line] >= self.nuObs_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky
-                inds = (self.nuObs_line_halo[line] >= nu_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky&inds_mass
-                halos_survey[line]['RA'] = np.append(halos_survey[line]['RA'],self.halo_catalog['RA'][inds])
-                halos_survey[line]['DEC'] = np.append(halos_survey[line]['DEC'],self.halo_catalog['DEC'][inds])
-                halos_survey[line]['Zobs'] = np.append(halos_survey[line]['Zobs'],(self.line_nu0[self.target_line]/self.nuObs_line_halo[line][inds]).decompose()-1)
-                #Not doing DZ correction
-                #halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog['Z'][inds]+self.halo_catalog['DZ'][inds])
-                halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog['Z'][inds])
-                halos_survey[line]['Lhalo'] = np.append(halos_survey[line]['Lhalo'],self.L_line_halo[line][inds])
+        #There's only halos from one line stored
+        halos_survey[line] = dict(RA=np.array([]),DEC=np.array([]),Zobs=np.array([]),Ztrue=np.array([]),Lhalo=np.array([])*u.Lsun)
+        #get observed freqs and 
+        self.nuObs_line_halo_slice(line)
+        self.L_line_halo_slice(line)
+        inds = (self.nuObs_line_halo[line] >= nu_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky&inds_mass
+        halos_survey[line]['RA'] = np.append(halos_survey[line]['RA'],self.halo_catalog['RA'][inds])
+        halos_survey[line]['DEC'] = np.append(halos_survey[line]['DEC'],self.halo_catalog['DEC'][inds])
+        halos_survey[line]['Zobs'] = np.append(halos_survey[line]['Zobs'],(self.line_nu0[self.target_line]/self.nuObs_line_halo[line][inds]).decompose()-1)
+        #Not doing DZ correction
+        #halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog['Z'][inds]+self.halo_catalog['DZ'][inds])
+        halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog['Z'][inds])
+        halos_survey[line]['Lhalo'] = np.append(halos_survey[line]['Lhalo'],self.L_line_halo[line][inds])
 
-        return halos_survey
+        self.halos_in_survey = halos_survey
 
 
     @cached_survey_property
@@ -462,80 +528,35 @@ class Survey(Lightcone):
         '''
         Generates the mock intensity map observed in spherical shells. It does not include noise.
         '''
-        #Define the mesh divisions and the box size
-
         if not self.do_angular:
             warn('Mask edges will be funky in this case, might see some vignetting')
         npix = hp.nside2npix(self.nside)
-
-        #This is too much memory
-        # maps = np.zeros((self.Nchan, npix))
-
         hp_map = np.zeros(npix)
 
-
-        #>>>>>>>>>>>>>>>HERE
-        fnamelist, indlist = self.halo_slices()
-        #hcat = self.halo_catalog(self, 
-        print(fnamelist)
-        Ngal = 0 
-        ##NOTE THE -4 IN THIS FOR LOOP NOTE
-        for n, ind in enumerate(indlist):
-            self.halo_catalog = self.halo_catalog_read([fnamelist[n]]) 
-
         # First, compute the intensity/temperature of each halo in the catalog we will include
-            for line in self.lines.keys():
-                if self.lines[line]:
-                    hp_map_line = np.zeros(npix)
-                    self.halos_in_survey = self.halos_in_survey_make()
-                    Ngal += len(self.halos_in_survey[line]['RA'])
-                    #Get true cell volume
-                    #Get positions using the observed redshift
-                    ra,dec,redshift = da.broadcast_arrays(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'],
-                                                          self.halos_in_survey[line]['Zobs'])
+        for line in self.lines.keys():
+            if self.lines[line]:
+                if self.cache_catalog
+                    #get zmin zmax for the line and the files
+                    zmin_line = ((self.line_nu0[line]/self.nuObs_max).decompose()).value-1
+                    zmax_line = ((self.line_nu0[line]/self.nuObs_min).decompose()).value-1
+                    fnames = self.halo_slices(zmin_line,zmax_line)
+                    nfiles = len(fnames)
+                                    
+                    for ifile in range(nfiles):
+                        #Get the halos and which of those fall in the survey
+                        self.halo_catalog_slice(fnames[ifile])
+                        self.halos_in_survey_slice(line)
+                        #add the contribution from these halos
+                        hp_map = paint_2d(self.halos_in_survey[line],line,hp_map)
+                        
+                else:
+                    hp_map = paint_2d(self.halos_in_survey_all[line],line,hp_map)
 
-                    Zhalo = self.halos_in_survey[line]['Ztrue']
-                    Hubble = self.cosmo.hubble_parameter(Zhalo)*(u.km/u.Mpc/u.s)
-
-                    #Figure out what channel the halos will be in to figure out the voxel volume, for the signal.
-                    #This is what will be added to the healpy map.
-                    nu_bins = self.nuObs_min.to('GHz').value + np.arange(self.Nchan)*self.dnu.to('GHz').value
-                    zmid_channel = self.line_nu0[line].to('GHz').value/(nu_bins + 0.5*self.dnu.to('GHz').value) - 1
-
-                    #Channel of each halo, can now compute voxel volumes where each of them are seamlessly
-                    bin_idxs = np.digitize(self.line_nu0[line].to('GHz').value/(1+Zhalo), nu_bins)-1
-                    zmids = zmid_channel[bin_idxs]
-
-                    #Vcell = Omega_pix * D_A (z)^2 * (1+z) * dnu/nu_obs * c/H is the volume of the voxel for a given channel
-                                        #D_A here is comoving angular diameter distance = comoving_radial_distance in flat space
-                    Vcell_true = hp.nside2pixarea(self.nside)*(self.cosmo.comoving_radial_distance(zmids)*u.Mpc )**2 * (self.dnu.value/nu_bins[bin_idxs]) * (1+zmids) * (cu.c.to('km/s')/self.cosmo.hubble_parameter(zmids)/(u.km/u.Mpc/u.s))
-
-                    if not self.mass:
-                        if self.do_intensity:
-                            #intensity[Jy/sr]
-                            signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
-                        else:
-                            #Temperature[uK]
-                            signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
-                    else:
-                        #number counts [empty unit]
-                        signal = np.ones(len(Zhalo))*(1*self.unit/self.unit)
-
-                    #Paste the signals to the map
-                    theta, phi = rd2tp(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'])
-                    pixel_idxs = hp.ang2pix(self.nside, theta, phi)
-
-                    if self.average_angular_proj:
-                        #averaging over the number of channels
-                        np.add.at(hp_map_line, pixel_idxs, signal.value/self.Nchan)
-                    else:
-                        np.add.at(hp_map_line, pixel_idxs, signal.value)
-                    #should smoothing be after masking?
-                    #could lead to bleeding of the zeros with the boundary
-                    if self.do_angular_smooth:
-                        theta_beam = self.beam_FWHM.to(u.rad)
-                        hp_map_line = hp.smoothing(hp_map_line, theta_beam.value)
-                    hp_map += hp_map_line
+        #smooth for angular resolution
+        if self.do_angular_smooth:
+            theta_beam = self.beam_FWHM.to(u.rad)
+            hp_map = hp.smoothing(hp_map, theta_beam.value)
 
         #get the proper nside for the observed map
         if self.do_downsample:
@@ -544,32 +565,81 @@ class Survey(Lightcone):
             if nside_min < self.nside:
                 hp_map = hp.ud_grade(hp_map,nside_min)
 
-        #Define the mask from the rectangular footprint
-#        phicorner_list = np.append(np.arange(self.RAObs_min.value,self.RAObs_max.value,1),self.RAObs_max.value)
-#        thetacorner = np.pi/2-np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value,self.DECObs_max.value,self.DECObs_min.value]))
-#        pix_within = np.array([])
-#        for iphiedge in range(len(phicorner_list)-1):
-#            phicorner = np.deg2rad(np.array([phicorner_list[iphiedge],phicorner_list[iphiedge],phicorner_list[iphiedge+1],phicorner_list[iphiedge+1]]))
-#            vecs = hp.dir2vec(thetacorner,phi=phicorner).T
-#            #catch repeat vecs
-#            vecs = np.unique(vecs, axis=0)
-#            try:
-#                pix_within = np.append(pix_within,hp.query_polygon(nside=LC_CO.nside,vertices=vecs,inclusive=False))
-#            except:
-#                pix_within = np.append(pix_within, [])
-#        self.pix_within = pix_within
-#        mask = np.ones(hp.nside2npix(self.nside),np.bool)
-#        mask[pix_within.astype(int)] = 0
-#        hp_map = hp.ma(hp_map)
-#        hp_map.mask = mask
+        #Define the mask from the rectangular footprint if not full sky!
+        if ((self.RAObs_min.value > -180 and self.RAObs_max.value < 180) and 
+            (self.DECObs_min.value > -90 and self.DECObs_max.value < 90)):
+            phicorner_list = np.append(np.arange(self.RAObs_min.value,self.RAObs_max.value,1),self.RAObs_max.value)
+            thetacorner = np.pi/2-np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value,self.DECObs_max.value,self.DECObs_min.value]))
+            pix_within = np.array([])
+            for iphiedge in range(len(phicorner_list)-1):
+                phicorner = np.deg2rad(np.array([phicorner_list[iphiedge],phicorner_list[iphiedge],phicorner_list[iphiedge+1],phicorner_list[iphiedge+1]]))
+                vecs = hp.dir2vec(thetacorner,phi=phicorner).T
+                #catch repeat vecs
+                vecs = np.unique(vecs, axis=0)
+                try:
+                    pix_within = np.append(pix_within,hp.query_polygon(nside=LC_CO.nside,vertices=vecs,inclusive=False))
+                except:
+                    pix_within = np.append(pix_within, [])
+            self.pix_within = pix_within
+            mask = np.ones(hp.nside2npix(self.nside),np.bool)
+            mask[pix_within.astype(int)] = 0
+            hp_map = hp.ma(hp_map)
+            hp_map.mask = mask
         
-        print(Ngal)
         #remove the monopole
         if self.do_remove_mean:
             hp_map = hp.pixelfunc.remove_monopole(hp_map,copy=False)
 
         return hp_map
+        
+    def paint_2d(self,halos,line,hp_map):
+        '''
+        Adds the contribution from a slice to the 2d healpy map
+        '''
+        #Get true cell volume
+        #Get positions using the observed redshift
+        ra,dec,redshift = da.broadcast_arrays(halos['RA'], halos['DEC'],
+                                              halos['Zobs'])
 
+        Zhalo = halos['Ztrue']
+        Hubble = self.cosmo.hubble_parameter(Zhalo)*(u.km/u.Mpc/u.s)
+
+        #Figure out what channel the halos will be in to figure out the voxel volume, for the signal.
+        #This is what will be added to the healpy map.
+        nu_bins = self.nuObs_min.to('GHz').value + np.arange(self.Nchan)*self.dnu.to('GHz').value
+        zmid_channel = self.line_nu0[line].to('GHz').value/(nu_bins + 0.5*self.dnu.to('GHz').value) - 1
+
+        #Channel of each halo, can now compute voxel volumes where each of them are seamlessly
+        bin_idxs = np.digitize(self.line_nu0[line].to('GHz').value/(1+Zhalo), nu_bins)-1
+        zmids = zmid_channel[bin_idxs]
+
+        #Vcell = Omega_pix * D_A (z)^2 * (1+z) * dnu/nu_obs * c/H is the volume of the voxel for a given channel
+                            #D_A here is comoving angular diameter distance = comoving_radial_distance in flat space
+        Vcell_true = hp.nside2pixarea(self.nside)*(self.cosmo.comoving_radial_distance(zmids)*u.Mpc )**2 * (self.dnu.value/nu_bins[bin_idxs]) * (1+zmids) * (cu.c.to('km/s')/self.cosmo.hubble_parameter(zmids)/(u.km/u.Mpc/u.s))
+
+        if not self.mass:
+            if self.do_intensity:
+                #intensity[Jy/sr]
+                signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*halos['Lhalo']/Vcell_true).to(self.unit)
+            else:
+                #Temperature[uK]
+                signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*halos['Lhalo']/Vcell_true).to(self.unit)
+        else:
+            #number counts [empty unit]
+            signal = np.ones(len(Zhalo))*(1*self.unit/self.unit)
+
+        #Paste the signals to the map
+        theta, phi = rd2tp(halos['RA'], halos['DEC'])
+        pixel_idxs = hp.ang2pix(self.nside, theta, phi)
+
+        if self.average_angular_proj:
+            #averaging over the number of channels
+            np.add.at(hp_map, pixel_idxs, signal.value/self.Nchan)
+        else:
+            np.add.at(hp_map, pixel_idxs, signal.value)
+            
+        return hp_map
+   
 
     @cached_survey_property
     def obs_3d_map(self):
@@ -611,6 +681,12 @@ class Survey(Lightcone):
         # First, compute the intensity/temperature of each halo in the catalog we will include
         for line in self.lines.keys():
             if self.lines[line]:
+                #Create the mesh
+                pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler=self.resampler)
+                #Make realfield object
+                field = pm.create(type='real')
+                field[:] = 0.
+                
                 #Get true cell volume
                 zlims = (self.line_nu0[line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
                 rlim = ((self.cosmo.comoving_radial_distance(zlims)*u.Mpc).to(self.Mpch)).value
@@ -628,11 +704,13 @@ class Survey(Lightcone):
                     raside = 2*rlim[0]*np.tan(0.5*(ralim[1]-ralim[0]))
                     decside = 2*rlim[0]*np.tan(0.5*(declim[1]-declim[0]))
                     zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
+                    rmid,zside = 0
 
                 elif self.cube_mode == 'outer_cube':
                     raside = 2*rlim[1]*np.sin(0.5*(ralim[1]-ralim[0]))
                     decside = 2*rlim[1]*np.sin(0.5*(declim[1]-declim[0]))
                     zside = rlim[1]-corners[0,0]
+                    rmid,zside = 0
 
                 elif self.cube_mode == 'flat_sky':
                     zmid = ((self.line_nu0[line]/self.nuObs_mean).decompose()).value-1
@@ -648,90 +726,25 @@ class Survey(Lightcone):
                     decside = 2*rmid*np.sin(0.5*(declim[1]-declim[0]))
                     #to avoid cut at high redshift end
                     zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
-
+                    
                 Lbox_true = np.array([zside,raside,decside])
                 Vcell_true = (Lbox_true/Nmesh).prod()*(self.Mpch**3).to(self.Mpch**3)
-                #Get positions using the observed redshift
-                #Convert the halo position in each volume to Cartesian coordinates (from Nbodykit)
-                ra,dec,redshift = da.broadcast_arrays(self.halos_in_survey[line]['RA'], self.halos_in_survey[line]['DEC'],
-                                                      self.halos_in_survey[line]['Zobs'])
                 
-                #radial distances in Mpch/h
-                r = redshift.map_blocks(lambda zz: (((self.cosmo.comoving_radial_distance(zz)*u.Mpc).to(self.Mpch)).value),
-                                        dtype=redshift.dtype)
-                                        
-                #Shift the ra and dec of the halo such that they are centered in (0,0)
-                ra -= ramid.value
-                dec -= decmid.value
-
-                ra,dec  = da.deg2rad(ra),da.deg2rad(dec)
-                if self.cube_mode == 'flat_sky':
-                    # cartesian coordinates in flat sky
-                    x = da.ones(ra.shape[0])
-                    y = ra/r*rmid 
-                    z = dec/r*rmid 
-                elif self.cube_mode == 'mid_redshift':
-                    # cartesian coordinates in unit sphere but preparing for only one distance for ra and dec
-                    x = da.cos(dec) * da.cos(ra)
-                    y = da.sin(ra)/r*rmid # only ra?
-                    z = da.sin(dec)/r*rmid # only dec?
+                if self.cache_catalog
+                    fnames = self.halo_slices(zlims[0],zlims[1])
+                    nfiles = len(fnames)
+                                    
+                    for ifile in range(nfiles):
+                        #Get the halos and which of those fall in the survey
+                        self.halo_catalog_slice(fnames[ifile])
+                        self.halos_in_survey_slice(line)
+                        #add the contribution from these halos
+                        field += paint_3d(self.halos_in_survey[line],line,rmid,mins_obs,pm)
+                        
                 else:
-                    # cartesian coordinates in unit sphere
-                    x = da.cos(dec) * da.cos(ra)
-                    y = da.cos(dec) * da.sin(ra)
-                    z = da.sin(dec)
-                    
-                pos = da.vstack([x,y,z]).T                    
-                cartesian_halopos = r[:,None] * pos
-                lategrid = np.array(cartesian_halopos.compute())
-                #Filter some halos out if outside of the cube mode
-                if self.cube_mode == 'inner_cube' or self.cube_mode == 'mid_redshift':
-                    filtering = (lategrid[:,0] >= rside_obs_lim[0]) & (lategrid[:,0] <= rside_obs_lim[1]) & \
-                                (lategrid[:,1] >= raside_lim[0]) & (lategrid[:,1] <= raside_lim[1]) & \
-                                (lategrid[:,2] >= decside_lim[0]) & (lategrid[:,2] <= decside_lim[1])
-                    lategrid = lategrid[filtering]
-                    #Compute the signal in each voxel (with Ztrue and Vcell_true)
-                    Zhalo = self.halos_in_survey[line]['Ztrue'][filtering]
-                    Hubble = self.cosmo.hubble_parameter(Zhalo)*(u.km/u.Mpc/u.s)
-                    
-                    warn("% of emitters of {} line left out filtering = {}".format(line, 1-len(Zhalo)/len(filtering)))
-
-                    if not self.mass:
-                        if self.do_intensity:
-                            #intensity[Jy/sr]
-                            signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*self.halos_in_survey[line]['Lhalo'][filtering]/Vcell_true).to(self.unit)
-                        else:
-                            #Temperature[uK]
-                            signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo'][filtering]/Vcell_true).to(self.unit)
-                else:
-                    Zhalo = self.halos_in_survey[line]['Ztrue']
-                    Hubble = self.cosmo.hubble_parameter(Zhalo)*(u.km/u.Mpc/u.s)
-                    if not self.mass:
-                        if self.do_intensity:
-                            #intensity[Jy/sr]
-                            signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
-                        else:
-                            #Temperature[uK]
-                            signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*self.halos_in_survey[line]['Lhalo']/Vcell_true).to(self.unit)
-                #Locate the grid such that bottom left corner of the box is [0,0,0] which is the nbodykit convention.
-                for n in range(3):
-                    lategrid[:,n] -= mins_obs[n]                
+                    field += paint_3d(self.halos_in_survey_all[line],line,rmid,mins_obs,pm)
                 
-                #Set the emitter in the grid and paint using pmesh directly instead of nbk
-                pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler=self.resampler)
-                #Make realfield object
-                field = pm.create(type='real')
-                field[:] = 0.
-                layout = pm.decompose(lategrid)
-                #Exchange positions between different MPI ranks
-                p = layout.exchange(lategrid)
-                #Assign weights following the layout of particles
-                if self.mass:
-                    pm.paint(p, out=field, mass=1, resampler=self.resampler)
-                else:
-                    m = layout.exchange(signal.value)
-                    pm.paint(p, out=field, mass=m, resampler=self.resampler)
-                #Fourier transform fields and apply the filter
+                #turn the field to complex
                 field = field.r2c()
                 #This smoothing comes from the resolution window function.
                 if self.do_spectral_smooth or self.do_angular_smooth:
@@ -745,8 +758,7 @@ class Survey(Lightcone):
 
         # add galactic foregrounds
         if self.do_gal_foregrounds:
-            field=self.create_foreground_map(mins_obs, Nmesh, Lbox, rside_obs_lim, raside_lim, decside_lim)
-            maps+=field
+            maps+=self.create_foreground_map(mins_obs, Nmesh, Lbox, rside_obs_lim, raside_lim, decside_lim)
 
         #get the proper shape for the observed map
         if (self.angular_supersample > 1 or self.spectral_supersample > 1) and self.do_downsample:
@@ -761,6 +773,95 @@ class Survey(Lightcone):
             maps = maps-maps.cmean()
 
         return maps
+        
+    def paint_3d(self,halos,line,rmid,mins_obs,pm,field):
+        '''
+        Adds the contribution from a slice to the 3d pmesh map
+        '''
+        #Get positions using the observed redshift
+        #Convert the halo position in each volume to Cartesian coordinates (from Nbodykit)
+        ra,dec,redshift = da.broadcast_arrays(halos['RA'], halos['DEC'],
+                                              halos['Zobs'])
+        
+        #radial distances in Mpch/h
+        r = redshift.map_blocks(lambda zz: (((self.cosmo.comoving_radial_distance(zz)*u.Mpc).to(self.Mpch)).value),
+                                dtype=redshift.dtype)
+                                
+        #Shift the ra and dec of the halo such that they are centered in (0,0)
+        ramid = 0.5*(self.RAObs_max + self.RAObs_min)
+        decmid = 0.5*(self.DECObs_max + self.DECObs_min)
+        ra -= ramid.value
+        dec -= decmid.value
+
+        ra,dec  = da.deg2rad(ra),da.deg2rad(dec)
+        if self.cube_mode == 'flat_sky':
+            # cartesian coordinates in flat sky
+            x = da.ones(ra.shape[0])
+            y = ra/r*rmid 
+            z = dec/r*rmid 
+        elif self.cube_mode == 'mid_redshift':
+            # cartesian coordinates in unit sphere but preparing for only one distance for ra and dec
+            x = da.cos(dec) * da.cos(ra)
+            y = da.sin(ra)/r*rmid # only ra?
+            z = da.sin(dec)/r*rmid # only dec?
+        else:
+            # cartesian coordinates in unit sphere
+            x = da.cos(dec) * da.cos(ra)
+            y = da.cos(dec) * da.sin(ra)
+            z = da.sin(dec)
+            
+        pos = da.vstack([x,y,z]).T                    
+        cartesian_halopos = r[:,None] * pos
+        lategrid = np.array(cartesian_halopos.compute())
+        #Filter some halos out if outside of the cube mode
+        if self.cube_mode == 'inner_cube' or self.cube_mode == 'mid_redshift':
+            filtering = (lategrid[:,0] >= self.rside_obs_lim[0]) & (lategrid[:,0] <= self.rside_obs_lim[1]) & \
+                        (lategrid[:,1] >= self.raside_lim[0]) & (lategrid[:,1] <= self.raside_lim[1]) & \
+                        (lategrid[:,2] >= self.decside_lim[0]) & (lategrid[:,2] <= self.decside_lim[1])
+            lategrid = lategrid[filtering]
+            #Compute the signal in each voxel (with Ztrue and Vcell_true)
+            Zhalo = halos['Ztrue'][filtering]
+            Hubble = self.cosmo.hubble_parameter(Zhalo)*(u.km/u.Mpc/u.s)
+            
+            warn("% of emitters of {} line left out filtering = {}".format(line, 1-len(Zhalo)/len(filtering)))
+
+            if not self.mass:
+                if self.do_intensity:
+                    #intensity[Jy/sr]
+                    signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*halos['Lhalo'][filtering]/Vcell_true).to(self.unit)
+                else:
+                    #Temperature[uK]
+                    signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*halos['Lhalo'][filtering]/Vcell_true).to(self.unit)
+        else:
+            Zhalo = halos['Ztrue']
+            Hubble = self.cosmo.hubble_parameter(Zhalo)*(u.km/u.Mpc/u.s)
+            if not self.mass:
+                if self.do_intensity:
+                    #intensity[Jy/sr]
+                    signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*halos['Lhalo']/Vcell_true).to(self.unit)
+                else:
+                    #Temperature[uK]
+                    signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*halos['Lhalo']/Vcell_true).to(self.unit)
+        #Locate the grid such that bottom left corner of the box is [0,0,0] which is the nbodykit convention.
+        for n in range(3):
+            lategrid[:,n] -= mins_obs[n] 
+            
+        #Make realfield temp object
+        tempfield = pm.create(type='real')
+        tempfield[:] = 0.
+                
+        #Set the emitter in the grid and paint using pmesh directly instead of nbk
+        layout = pm.decompose(lategrid)
+        #Exchange positions between different MPI ranks
+        p = layout.exchange(lategrid)
+        #Assign weights following the layout of particles
+        if self.mass:
+            pm.paint(p, out=tempfield, mass=1, resampler=self.resampler)
+        else:
+            m = layout.exchange(signal.value)
+            pm.paint(p, out=tempfield, mass=m, resampler=self.resampler)
+        
+        return tempfield
     
     @cached_survey_property
     def noise_3d_map(self):
