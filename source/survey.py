@@ -541,10 +541,11 @@ class Survey(Lightcone):
             else:
                 inds_gal = inds_gal&(sSFR < bins[indlim])
             #Get the N brightest (e.g., higher Mstar) up to matching number density
+            #**assuming that the number density of each file is equivalent...**
             if self.do_angular:
-                Ngal_tot = self.ngal*self.Omega_field
+                Ngal_tot = self.ngal*self.Omega_field/nfiles
             else:
-                Ngal_tot = self.ngal*((self.Lbox.value).prod()*(self.Mpch**3).to(self.Mpch**3))
+                Ngal_tot = self.ngal*((self.Lbox.value).prod()*(self.Mpch**3).to(self.Mpch**3))/nfiles
             argsort = np.argsort(self.halo_catalog['SM_HALO'])[::-1]
             indlim = np.where(np.cumsum(inds_gal[argsort])==Ngal_tot)[0][0]
             inds_gal[argsort[:indlim]] = False
@@ -604,7 +605,7 @@ class Survey(Lightcone):
                     for ifile in range(nfiles):
                         #Get the halos and which of those fall in the survey
                         self.halo_catalog_slice(fnames[ifile])
-                        self.halos_in_survey_slice(line)
+                        self.halos_in_survey_slice(line,nfiles)
                         #add the contribution from these halos
                         hp_map = paint_2d(self.halos_in_survey[line],line,hp_map)
                         
@@ -795,7 +796,7 @@ class Survey(Lightcone):
                     for ifile in range(nfiles):
                         #Get the halos and which of those fall in the survey
                         self.halo_catalog_slice(fnames[ifile])
-                        self.halos_in_survey_slice(line)
+                        self.halos_in_survey_slice(line,nfiles)
                         #add the contribution from these halos
                         field += paint_3d(self.halos_in_survey[line],line,rmid,mins_obs,Vcell_true,pm)
                         
