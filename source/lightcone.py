@@ -222,7 +222,7 @@ class Lightcone(object):
         bigcat = data[inds_sky]
         
         #return *one* slice does not enter in cache
-        self.halo_catalg = bigcat
+        self.halo_catalog = bigcat
 
     @cached_lightcone_property
     def L_line_halo_all(self):

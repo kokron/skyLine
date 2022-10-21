@@ -189,16 +189,17 @@ class Survey(Lightcone):
         if self.gal_type not in ['all','lrg','elg']:
             raise ValueError('gal_type input must be one of {}'.format(['all','lrg','elg']))
             
-        if self.do_angular:
-            try:
-                self.ngal = self.ngal.to(u.sr**-1)
-            except:
-                raise ValueError('Please use angular number density for ngal if do_angular = True')
-        else:
-            try:
-                self.ngal = self.ngal.to(self.Mpch**-3)
-            except:
-                raise ValueError('Please use 3D number density for ngal if do_angular = False')
+        if self.gal_type != 'all':
+            if self.do_angular:
+                try:
+                    self.ngal = self.ngal.to(u.sr**-1)
+                except:
+                    raise ValueError('Please use angular number density for ngal if do_angular = True')
+            else:
+                try:
+                    self.ngal = self.ngal.to(self.Mpch**-3)
+                except:
+                    raise ValueError('Please use 3D number density for ngal if do_angular = False')
 
         if NoPySM and self.do_gal_foregrounds==True:
             raise ValueError('PySM must be installed to model galactic foregrounds')
@@ -446,8 +447,8 @@ class Survey(Lightcone):
             #separate between ELGs and LRGs
             sSFR = self.halo_catalog_all['SFR_HALO']/self.halo_catalog_all['SM_HALO']
             hist,bins = np.histogram(sSFR,bins=101)
-            inds_hist = [np.argmax(hist[:50],np.argmax[50:]]
-            indlim = np.argmin(hist[inds_hist[0]:inds_hist[1])
+            inds_hist = [np.argmax(hist[:50]),np.argmax(hist[50:])]
+            indlim = np.argmin(hist[inds_hist[0]:inds_hist[1]])
             if selg.gal_type == 'elg':
                 inds_gal = inds_gal&(sSFR > bins[indlim])
             else:
@@ -492,7 +493,7 @@ class Survey(Lightcone):
 
         return halos_survey
 
-    def halos_in_survey_slice(self,line):
+    def halos_in_survey_slice(self,line,nfiles):
         '''
         Filters the halo catalog and only takes those that have observed
         frequencies within the experimental frequency bandwitdh and lie in the
@@ -534,8 +535,8 @@ class Survey(Lightcone):
             #separate between ELGs and LRGs
             sSFR = self.halo_catalog['SFR_HALO']/self.halo_catalog['SM_HALO']
             hist,bins = np.histogram(sSFR,bins=101)
-            inds_hist = [np.argmax(hist[:50],np.argmax[50:]]
-            indlim = np.argmin(hist[inds_hist[0]:inds_hist[1])
+            inds_hist = [np.argmax(hist[:50]),np.argmax(hist[50:])]
+            indlim = np.argmin(hist[inds_hist[0]:inds_hist[1]])
             if selg.gal_type == 'elg':
                 inds_gal = inds_gal&(sSFR > bins[indlim])
             else:
@@ -595,11 +596,12 @@ class Survey(Lightcone):
         # First, compute the intensity/temperature of each halo in the catalog we will include
         for line in self.lines.keys():
             if self.lines[line]:
-                if self.cache_catalog
+                if not self.cache_catalog:
                     #get zmin zmax for the line and the files
                     zmin_line = ((self.line_nu0[line]/self.nuObs_max).decompose()).value-1
                     zmax_line = ((self.line_nu0[line]/self.nuObs_min).decompose()).value-1
-                    fnames = self.halo_slices(zmin_line,zmax_line)
+                    #add some buffer to be sure
+                    fnames = self.halo_slices(zmin_line-0.03,zmax_line+0.03)
                     nfiles = len(fnames)
                                     
                     for ifile in range(nfiles):
@@ -607,10 +609,9 @@ class Survey(Lightcone):
                         self.halo_catalog_slice(fnames[ifile])
                         self.halos_in_survey_slice(line,nfiles)
                         #add the contribution from these halos
-                        hp_map = paint_2d(self.halos_in_survey[line],line,hp_map)
-                        
+                        hp_map = self.paint_2d(self.halos_in_survey[line],line,hp_map)
                 else:
-                    hp_map = paint_2d(self.halos_in_survey_all[line],line,hp_map)
+                    hp_map = self.paint_2d(self.halos_in_survey_all[line],line,hp_map)
 
         #smooth for angular resolution
         if self.do_angular_smooth:
@@ -625,25 +626,25 @@ class Survey(Lightcone):
                 hp_map = hp.ud_grade(hp_map,nside_min)
 
         #Define the mask from the rectangular footprint if not full sky!
-        if ((self.RAObs_min.value > -180 and self.RAObs_max.value < 180) and 
-            (self.DECObs_min.value > -90 and self.DECObs_max.value < 90)):
-            phicorner_list = np.append(np.arange(self.RAObs_min.value,self.RAObs_max.value,1),self.RAObs_max.value)
-            thetacorner = np.pi/2-np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value,self.DECObs_max.value,self.DECObs_min.value]))
-            pix_within = np.array([])
-            for iphiedge in range(len(phicorner_list)-1):
-                phicorner = np.deg2rad(np.array([phicorner_list[iphiedge],phicorner_list[iphiedge],phicorner_list[iphiedge+1],phicorner_list[iphiedge+1]]))
-                vecs = hp.dir2vec(thetacorner,phi=phicorner).T
+#        if ((self.RAObs_min.value > -180 and self.RAObs_max.value < 180) and 
+#            (self.DECObs_min.value > -90 and self.DECObs_max.value < 90)):
+#            phicorner_list = np.append(np.arange(self.RAObs_min.value,self.RAObs_max.value,1),self.RAObs_max.value)
+#            thetacorner = np.pi/2-np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value,self.DECObs_max.value,self.DECObs_min.value]))
+#            pix_within = np.array([])
+#            for iphiedge in range(len(phicorner_list)-1):
+#                phicorner = np.deg2rad(np.array([phicorner_list[iphiedge],phicorner_list[iphiedge],phicorner_list[iphiedge+1],phicorner_list[iphiedge+1]]))
+#                vecs = hp.dir2vec(thetacorner,phi=phicorner).T
                 #catch repeat vecs
-                vecs = np.unique(vecs, axis=0)
-                try:
-                    pix_within = np.append(pix_within,hp.query_polygon(nside=LC_CO.nside,vertices=vecs,inclusive=False))
-                except:
-                    pix_within = np.append(pix_within, [])
-            self.pix_within = pix_within
-            mask = np.ones(hp.nside2npix(self.nside),np.bool)
-            mask[pix_within.astype(int)] = 0
-            hp_map = hp.ma(hp_map)
-            hp_map.mask = mask
+#                vecs = np.unique(vecs, axis=0)
+#                try:
+#                    pix_within = np.append(pix_within,hp.query_polygon(nside=LC_CO.nside,vertices=vecs,inclusive=False))
+#                except:
+#                    pix_within = np.append(pix_within, [])
+#            self.pix_within = pix_within
+#            mask = np.ones(hp.nside2npix(self.nside),np.bool)
+#            mask[pix_within.astype(int)] = 0
+#            hp_map = hp.ma(hp_map)
+#            hp_map.mask = mask
         
         #remove the monopole
         if self.do_remove_mean:
@@ -686,17 +687,19 @@ class Survey(Lightcone):
         else:
             #number counts [empty unit]
             signal = np.ones(len(Zhalo))*(1*self.unit/self.unit)
+            
+        print(halos)
 
         #Paste the signals to the map
         theta, phi = rd2tp(halos['RA'], halos['DEC'])
         pixel_idxs = hp.ang2pix(self.nside, theta, phi)
 
+        hp_map[:]=0
         if self.average_angular_proj:
             #averaging over the number of channels
             np.add.at(hp_map, pixel_idxs, signal.value/self.Nchan)
         else:
             np.add.at(hp_map, pixel_idxs, signal.value)
-            
         return hp_map
    
 
@@ -763,13 +766,13 @@ class Survey(Lightcone):
                     raside = 2*rlim[0]*np.tan(0.5*(ralim[1]-ralim[0]))
                     decside = 2*rlim[0]*np.tan(0.5*(declim[1]-declim[0]))
                     zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
-                    rmid,zside = 0
+                    rmid,zside = 0,0
 
                 elif self.cube_mode == 'outer_cube':
                     raside = 2*rlim[1]*np.sin(0.5*(ralim[1]-ralim[0]))
                     decside = 2*rlim[1]*np.sin(0.5*(declim[1]-declim[0]))
                     zside = rlim[1]-corners[0,0]
-                    rmid,zside = 0
+                    rmid,zside = 0,0
 
                 elif self.cube_mode == 'flat_sky':
                     zmid = ((self.line_nu0[line]/self.nuObs_mean).decompose()).value-1
@@ -789,19 +792,18 @@ class Survey(Lightcone):
                 Lbox_true = np.array([zside,raside,decside])
                 Vcell_true = (Lbox_true/Nmesh).prod()*(self.Mpch**3).to(self.Mpch**3)
                 
-                if self.cache_catalog
-                    fnames = self.halo_slices(zlims[0],zlims[1])
+                if not self.cache_catalog:
+                    #add some buffer to be sure
+                    fnames = self.halo_slices(zlims[0]-0.03,zlims[1]+0.03)
                     nfiles = len(fnames)
-                                    
                     for ifile in range(nfiles):
                         #Get the halos and which of those fall in the survey
                         self.halo_catalog_slice(fnames[ifile])
                         self.halos_in_survey_slice(line,nfiles)
                         #add the contribution from these halos
-                        field += paint_3d(self.halos_in_survey[line],line,rmid,mins_obs,Vcell_true,pm)
-                        
+                        field += self.paint_3d(self.halos_in_survey[line],line,rmid,mins_obs,Vcell_true,pm)
                 else:
-                    field += paint_3d(self.halos_in_survey_all[line],line,rmid,mins_obs,Vcell_true,pm)
+                    field += self.paint_3d(self.halos_in_survey_all[line],line,rmid,mins_obs,Vcell_true,pm)
                 
                 #turn the field to complex
                 field = field.r2c()
@@ -919,6 +921,8 @@ class Survey(Lightcone):
         else:
             m = layout.exchange(signal.value)
             pm.paint(p, out=tempfield, mass=m, resampler=self.resampler)
+            
+        print(tempfield[0,0,0])
         
         return tempfield
     
