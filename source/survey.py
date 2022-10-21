@@ -58,10 +58,12 @@ class Survey(Lightcone):
     -target_line:           Target line of the survey (Default: CO)
 
     -angular_supersample:   Factor of supersample with respect to the survey angular resolution
-                            when making the grid. (Default: 5)
+                            when making the grid. Important to have good power spectrum multipole
+                            calculations (e.g., enough mu values as function of kmax). (Default: 5)
                             
     -spectral_supersample:  Factor of supersample with respect to the survey spectral resolution
-                            when making the grid. (Default: 1)
+                            when making the grid. Important to have good power spectrum multipole
+                            calculations (e.g., enough mu values as function of kmax). (Default: 1)
 
     -do_angular_smooth:     Boolean: apply smoothing filter to implement angular resolution
                             limitations. (Default: True)
@@ -95,7 +97,8 @@ class Survey(Lightcone):
 
     -nside                  NSIDE used by healpy to create angular maps. (Default: 2048)
 
-    -mass                   Boolean: Create a map with number density of ALL the haloes within the catalog (defaul: False)
+    -number_count           Boolean: Create a map with number density of haloes within the catalog.
+                            It allows to use all galaxies or select between lrgs and elgs (defaul: False)
 
     -Mhalo_min              Minimum halo mass (in Msun/h) to be included in the survey (filter for halos_in_survey). Default:0
 
@@ -133,7 +136,7 @@ class Survey(Lightcone):
                  foreground_model=dict(precomputed_file=None, dgrade_nside=2**10, survey_center=[0*u.deg, 90*u.deg], sky={'synchrotron' : True, 'dust' : True, 'freefree' : True,'ame' : True}),
                  average_angular_proj = True,
                  nside = 2048,
-                 mass=False,
+                 number_count=False,
                  Mhalo_min=0.,
                  Mstar_min=0.,
                  gal_type='all',
@@ -190,6 +193,8 @@ class Survey(Lightcone):
             raise ValueError('gal_type input must be one of {}'.format(['all','lrg','elg']))
             
         if self.gal_type != 'all':
+            if self.ngal.value == 0:
+                raise ValueError('Please input a number density for ngal')
             if self.do_angular:
                 try:
                     self.ngal = self.ngal.to(u.sr**-1)
@@ -386,6 +391,9 @@ class Survey(Lightcone):
                 warn("The corners of the last perpendicular slices of the box are going to be empty. Consider using 'inner_cube'=True or 'do_z_buffering'=True")
             
         Lbox = np.array([zside,raside,decside], dtype=np.float32)
+        
+        if np.any(Lbox) == 0:
+            raise ValueError("The imposed cuts leave you with no volume, please review the observed RA, DEC and nu")
 
         return (Lbox*self.Mpch).to(self.Mpch)
 
@@ -443,24 +451,36 @@ class Survey(Lightcone):
             inds_mass = inds_mass&(self.halo_catalog_all['SM_HALO']>=self.Mstar_min)
             
         inds_gal = np.ones(len(inds_sky),dtype=bool)
-        if self.gal_type != 'all':
+        if self.gal_type != 'all' and self.number_count:
             #separate between ELGs and LRGs
+            inds = np.where(np.log10(self.halo_catalog_all['SM_HALO'])>8)
+            sSFR = self.halo_catalog_all['SFR_HALO'][inds]/self.halo_catalog_all['SM_HALO'][inds]
+            hist,bins = np.histogram(np.log10(sSFR),bins=101)
+            hist[hist==0] = 1e-100
+            hist = np.log10(hist)
+            inds_hist = [np.argmax(hist[:50]),np.argmax(hist[50:])+50]
+            indlim = np.argmin(hist[inds_hist[0]:inds_hist[1]])+1+inds_hist[0]
             sSFR = self.halo_catalog_all['SFR_HALO']/self.halo_catalog_all['SM_HALO']
-            hist,bins = np.histogram(sSFR,bins=101)
-            inds_hist = [np.argmax(hist[:50]),np.argmax(hist[50:])]
-            indlim = np.argmin(hist[inds_hist[0]:inds_hist[1]])
-            if selg.gal_type == 'elg':
-                inds_gal = inds_gal&(sSFR > bins[indlim])
+            if self.gal_type == 'elg':
+                inds_gal = inds_gal&(sSFR > 10**bins[indlim])
             else:
-                inds_gal = inds_gal&(sSFR < bins[indlim])
+                inds_gal = inds_gal&(sSFR < 10**bins[indlim])
             #Get the N brightest (e.g., higher Mstar) up to matching number density
             if self.do_angular:
                 Ngal_tot = self.ngal*self.Omega_field
             else:
-                Ngal_tot = self.ngal*((self.Lbox.value).prod()*(self.Mpch**3).to(self.Mpch**3))
-            argsort = np.argsort(self.halo_catalog_all['SM_HALO'])[::-1]
-            indlim = np.where(np.cumsum(inds_gal[argsort])==Ngal_tot)[0][0]
-            inds_gal[argsort[:indlim]] = False
+                Ngal_tot = (self.ngal*((self.Lbox.value).prod()*(self.Mpch**3))).decompose()
+            Ngal_max = np.sum(inds_gal)
+            if Ngal_tot > Ngal_max:
+                if self.do_angular:
+                    ngal_max = np.sum(Ngal_max)/self.Omega_field
+                else:
+                    ngal_max = np.sum(Ngal_max)/((self.Lbox.value).prod()*(self.Mpch**3))
+                warn("Maximum n_gal with the total number of {:}s is {:.5f}, input was {:5f}, reduce it or work with all {:}".format(self.gal_type,ngal_max,self.ngal,self.gal_type))
+            else:
+                argsort = np.argsort(self.halo_catalog_all['SM_HALO'])[::-1]
+                indlim = np.where(np.cumsum(inds_gal[argsort])>Ngal_tot)[0][0]
+                inds_gal[argsort[indlim:]] = False
                             
         #Get a lower nu_Obs_min to buffer high redshifts and fill corners if required
         if (self.do_angular == False) and (self.do_z_buffering) and \
@@ -533,23 +553,35 @@ class Survey(Lightcone):
         inds_gal = np.ones(len(inds_sky),dtype=bool)
         if self.gal_type != 'all':
             #separate between ELGs and LRGs
+            inds = np.where(np.log10(self.halo_catalog['SM_HALO'])>8)
+            sSFR = self.halo_catalog['SFR_HALO'][inds]/self.halo_catalog['SM_HALO'][inds]
+            hist,bins = np.histogram(np.log10(sSFR),bins=101)
+            hist[hist==0] = 1e-100
+            hist = np.log10(hist)
+            inds_hist = [np.argmax(hist[:50]),np.argmax(hist[50:])+50]
+            indlim = np.argmin(hist[inds_hist[0]:inds_hist[1]])+1+inds_hist[0]
             sSFR = self.halo_catalog['SFR_HALO']/self.halo_catalog['SM_HALO']
-            hist,bins = np.histogram(sSFR,bins=101)
-            inds_hist = [np.argmax(hist[:50]),np.argmax(hist[50:])]
-            indlim = np.argmin(hist[inds_hist[0]:inds_hist[1]])
-            if selg.gal_type == 'elg':
-                inds_gal = inds_gal&(sSFR > bins[indlim])
+            if self.gal_type == 'elg':
+                inds_gal = inds_gal&(sSFR > 10**bins[indlim])
             else:
-                inds_gal = inds_gal&(sSFR < bins[indlim])
+                inds_gal = inds_gal&(sSFR < 10**bins[indlim])
             #Get the N brightest (e.g., higher Mstar) up to matching number density
             #**assuming that the number density of each file is equivalent...**
             if self.do_angular:
                 Ngal_tot = self.ngal*self.Omega_field/nfiles
             else:
-                Ngal_tot = self.ngal*((self.Lbox.value).prod()*(self.Mpch**3).to(self.Mpch**3))/nfiles
-            argsort = np.argsort(self.halo_catalog['SM_HALO'])[::-1]
-            indlim = np.where(np.cumsum(inds_gal[argsort])==Ngal_tot)[0][0]
-            inds_gal[argsort[:indlim]] = False
+                Ngal_tot = (self.ngal*((self.Lbox.value).prod()*(self.Mpch**3))).decompose()/nfiles
+            Ngal_max = np.sum(inds_gal)
+            if Ngal_tot > Ngal_max:
+                if self.do_angular:
+                    ngal_max = np.sum(Ngal_max)/self.Omega_field
+                else:
+                    ngal_max = np.sum(Ngal_max)/((self.Lbox.value).prod()*(self.Mpch**3))
+                warn("Maximum n_gal with the total number of {:}s in this slice is {:.5f}, input was {:5f}, reduce it or work with all {:}".format(self.gal_type,ngal_max,self.ngal,self.gal_type))
+            else:
+                argsort = np.argsort(self.halo_catalog['SM_HALO'])[::-1]
+                indlim = np.where(np.cumsum(inds_gal[argsort])>Ngal_tot)[0][0]
+                inds_gal[argsort[indlim:]] = False
             
         #Get a lower nu_Obs_min to buffer high redshifts and fill corners if required (for the last zbin)
         if ifile == nfiles-1:
@@ -678,7 +710,7 @@ class Survey(Lightcone):
                             #D_A here is comoving angular diameter distance = comoving_radial_distance in flat space
         Vcell_true = hp.nside2pixarea(self.nside)*(self.cosmo.comoving_radial_distance(zmids)*u.Mpc )**2 * (self.dnu.value/nu_bins[bin_idxs]) * (1+zmids) * (cu.c.to('km/s')/self.cosmo.hubble_parameter(zmids)/(u.km/u.Mpc/u.s))
 
-        if not self.mass:
+        if not self.number_count:
             if self.do_intensity:
                 #intensity[Jy/sr]
                 signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*halos['Lhalo']/Vcell_true).to(self.unit)
@@ -707,10 +739,6 @@ class Survey(Lightcone):
         Generates the mock intensity map observed in Fourier space,
         obtained from Cartesian coordinates. It does not include noise.
         '''
-
-        if self.do_angular:
-            warn('Mask edges might be problematic due to the expanded selection!')
-
         #Define the mesh divisions and the box size
         zmid = (self.line_nu0[self.target_line]/self.nuObs_mean).decompose().value-1
         sigma_par_target = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
@@ -884,7 +912,7 @@ class Survey(Lightcone):
             
             warn("% of emitters of {} line left out filtering = {}".format(line, 1-len(Zhalo)/len(filtering)))
 
-            if not self.mass:
+            if not self.number_count:
                 if self.do_intensity:
                     #intensity[Jy/sr]
                     signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*halos['Lhalo'][filtering]/Vcell_true).to(self.unit)
@@ -894,7 +922,7 @@ class Survey(Lightcone):
         else:
             Zhalo = halos['Ztrue']
             Hubble = self.cosmo.hubble_parameter(Zhalo)*(u.km/u.Mpc/u.s)
-            if not self.mass:
+            if not self.number_count:
                 if self.do_intensity:
                     #intensity[Jy/sr]
                     signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*halos['Lhalo']/Vcell_true).to(self.unit)
@@ -914,7 +942,7 @@ class Survey(Lightcone):
         #Exchange positions between different MPI ranks
         p = layout.exchange(lategrid)
         #Assign weights following the layout of particles
-        if self.mass:
+        if self.number_count:
             pm.paint(p, out=tempfield, mass=1, resampler=self.resampler)
         else:
             m = layout.exchange(signal.value)
