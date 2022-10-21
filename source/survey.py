@@ -453,7 +453,7 @@ class Survey(Lightcone):
         inds_gal = np.ones(len(inds_sky),dtype=bool)
         if self.gal_type != 'all' and self.number_count:
             #separate between ELGs and LRGs
-            inds = np.where(np.log10(self.halo_catalog_all['SM_HALO'])>8)
+            inds = np.where((np.log10(self.halo_catalog_all['SM_HALO'])>8)&(self.halo_catalog_all['SFR_HALO']>0))
             sSFR = self.halo_catalog_all['SFR_HALO'][inds]/self.halo_catalog_all['SM_HALO'][inds]
             hist,bins = np.histogram(np.log10(sSFR),bins=101)
             hist[hist==0] = 1e-100
@@ -491,7 +491,7 @@ class Survey(Lightcone):
             zbuffer = self.cosmo.redshift_at_comoving_radial_distance((rbuffer*self.Mpch).value)
             nu_min = self.line_nu0[self.target_line]/(zbuffer+1)
 
-            print('The target line requires z_max = {:.3f} instead of the nominal {:.3f}'.format(zbuffer,(self.line_nu0[self.target_line]/self.nuObs_min).value-1))
+            #print('The target line requires z_max = {:.3f} instead of the nominal {:.3f}'.format(zbuffer,(self.line_nu0[self.target_line]/self.nuObs_min).value-1))
             if zbuffer > self.zmax:
                 warn('Filling the corners requires a buffering z_max = {:.3f}, but input z_max = {:.3f}. Corners will not be completely filled'.format(zbuffer,self.zmax))
         else:
@@ -553,7 +553,7 @@ class Survey(Lightcone):
         inds_gal = np.ones(len(inds_sky),dtype=bool)
         if self.gal_type != 'all':
             #separate between ELGs and LRGs
-            inds = np.where(np.log10(self.halo_catalog['SM_HALO'])>8)
+            inds = np.where((np.log10(self.halo_catalog['SM_HALO'])>8)&(self.halo_catalog['SFR_HALO']>0))
             sSFR = self.halo_catalog['SFR_HALO'][inds]/self.halo_catalog['SM_HALO'][inds]
             hist,bins = np.histogram(np.log10(sSFR),bins=101)
             hist[hist==0] = 1e-100
@@ -593,11 +593,13 @@ class Survey(Lightcone):
                 zbuffer = self.cosmo.redshift_at_comoving_radial_distance((rbuffer*self.Mpch).value)
                 nu_min = self.line_nu0[self.target_line]/(zbuffer+1)
 
-                print('The target line requires z_max = {:.3f} instead of the nominal {:.3f}'.format(zbuffer,(self.line_nu0[self.target_line]/self.nuObs_min).value-1))
+                #print('The target line requires z_max = {:.3f} instead of the nominal {:.3f}'.format(zbuffer,(self.line_nu0[self.target_line]/self.nuObs_min).value-1))
                 if zbuffer > self.zmax:
                     warn('Filling the corners requires a buffering z_max = {:.3f}, but input z_max = {:.3f}. Corners will not be completely filled'.format(zbuffer,self.zmax))
             else:
                 nu_min = self.nuObs_min
+        else:
+            nu_min = self.nuObs_min
 
         #There's only halos from one line stored
         halos_survey[line] = dict(RA=np.array([]),DEC=np.array([]),Zobs=np.array([]),Ztrue=np.array([]),Lhalo=np.array([])*u.Lsun)
