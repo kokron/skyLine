@@ -493,7 +493,7 @@ class Survey(Lightcone):
 
         return halos_survey
 
-    def halos_in_survey_slice(self,line,nfiles):
+    def halos_in_survey_slice(self,line,nfiles,ifile):
         '''
         Filters the halo catalog and only takes those that have observed
         frequencies within the experimental frequency bandwitdh and lie in the
@@ -551,20 +551,21 @@ class Survey(Lightcone):
             indlim = np.where(np.cumsum(inds_gal[argsort])==Ngal_tot)[0][0]
             inds_gal[argsort[:indlim]] = False
             
-        #Get a lower nu_Obs_min to buffer high redshifts and fill corners if required
-        if (self.do_angular == False) and (self.do_z_buffering) and \
-           (self.cube_mode == 'inner_cube' or self.cube_mode == 'mid_redshift'):
-            cornerside = (self.raside_lim[1]**2+self.decside_lim[1]**2)**0.5
-            ang = np.arctan(cornerside/self.rside_obs_lim[1])
-            rbuffer = cornerside/np.sin(ang)
-            zbuffer = self.cosmo.redshift_at_comoving_radial_distance((rbuffer*self.Mpch).value)
-            nu_min = self.line_nu0[self.target_line]/(zbuffer+1)
+        #Get a lower nu_Obs_min to buffer high redshifts and fill corners if required (for the last zbin)
+        if ifile == nfiles-1:
+            if (self.do_angular == False) and (self.do_z_buffering) and \
+               (self.cube_mode == 'inner_cube' or self.cube_mode == 'mid_redshift'):
+                cornerside = (self.raside_lim[1]**2+self.decside_lim[1]**2)**0.5
+                ang = np.arctan(cornerside/self.rside_obs_lim[1])
+                rbuffer = cornerside/np.sin(ang)
+                zbuffer = self.cosmo.redshift_at_comoving_radial_distance((rbuffer*self.Mpch).value)
+                nu_min = self.line_nu0[self.target_line]/(zbuffer+1)
 
-            print('The target line requires z_max = {:.3f} instead of the nominal {:.3f}'.format(zbuffer,(self.line_nu0[self.target_line]/self.nuObs_min).value-1))
-            if zbuffer > self.zmax:
-                warn('Filling the corners requires a buffering z_max = {:.3f}, but input z_max = {:.3f}. Corners will not be completely filled'.format(zbuffer,self.zmax))
-        else:
-            nu_min = self.nuObs_min
+                print('The target line requires z_max = {:.3f} instead of the nominal {:.3f}'.format(zbuffer,(self.line_nu0[self.target_line]/self.nuObs_min).value-1))
+                if zbuffer > self.zmax:
+                    warn('Filling the corners requires a buffering z_max = {:.3f}, but input z_max = {:.3f}. Corners will not be completely filled'.format(zbuffer,self.zmax))
+            else:
+                nu_min = self.nuObs_min
 
         #There's only halos from one line stored
         halos_survey[line] = dict(RA=np.array([]),DEC=np.array([]),Zobs=np.array([]),Ztrue=np.array([]),Lhalo=np.array([])*u.Lsun)
@@ -688,13 +689,10 @@ class Survey(Lightcone):
             #number counts [empty unit]
             signal = np.ones(len(Zhalo))*(1*self.unit/self.unit)
             
-        print(halos)
-
         #Paste the signals to the map
         theta, phi = rd2tp(halos['RA'], halos['DEC'])
         pixel_idxs = hp.ang2pix(self.nside, theta, phi)
 
-        hp_map[:]=0
         if self.average_angular_proj:
             #averaging over the number of channels
             np.add.at(hp_map, pixel_idxs, signal.value/self.Nchan)
@@ -733,7 +731,7 @@ class Survey(Lightcone):
         rside_obs_lim = self.rside_obs_lim
 
         #Setting the box with the origin at 0 plus additional padding to get voxel coordinates at their center
-        mins_obs = np.array([rside_obs_lim[0],raside_lim[0],decside_lim[0]])+0.49999*Lbox/Nmesh
+        mins_obs = np.array([rside_obs_lim[0],raside_lim[0],decside_lim[0]])#+0.49999*Lbox/Nmesh #I think not needed in the end?
 
         global sigma_par
         global sigma_perp
@@ -766,13 +764,13 @@ class Survey(Lightcone):
                     raside = 2*rlim[0]*np.tan(0.5*(ralim[1]-ralim[0]))
                     decside = 2*rlim[0]*np.tan(0.5*(declim[1]-declim[0]))
                     zside = rlim[1]*np.cos(max(0.5*(ralim[1]-ralim[0]),0.5*(declim[1]-declim[0])))-rlim[0]
-                    rmid,zside = 0,0
+                    rmid = 0
 
                 elif self.cube_mode == 'outer_cube':
                     raside = 2*rlim[1]*np.sin(0.5*(ralim[1]-ralim[0]))
                     decside = 2*rlim[1]*np.sin(0.5*(declim[1]-declim[0]))
                     zside = rlim[1]-corners[0,0]
-                    rmid,zside = 0,0
+                    rmid = 0
 
                 elif self.cube_mode == 'flat_sky':
                     zmid = ((self.line_nu0[line]/self.nuObs_mean).decompose()).value-1
@@ -799,7 +797,7 @@ class Survey(Lightcone):
                     for ifile in range(nfiles):
                         #Get the halos and which of those fall in the survey
                         self.halo_catalog_slice(fnames[ifile])
-                        self.halos_in_survey_slice(line,nfiles)
+                        self.halos_in_survey_slice(line,nfiles,ifile)
                         #add the contribution from these halos
                         field += self.paint_3d(self.halos_in_survey[line],line,rmid,mins_obs,Vcell_true,pm)
                 else:
@@ -921,9 +919,7 @@ class Survey(Lightcone):
         else:
             m = layout.exchange(signal.value)
             pm.paint(p, out=tempfield, mass=m, resampler=self.resampler)
-            
-        print(tempfield[0,0,0])
-        
+                    
         return tempfield
     
     @cached_survey_property
