@@ -43,6 +43,7 @@ def Dongwoo_SFR(M,z,pars):
     ratio = M/M_h
 
     return C/(ratio**A + ratio**B)
+    
 ################################
 
 def SFR_Mz_2dinterp(M,z,SFR_file):

@@ -955,7 +955,7 @@ class Survey(Lightcone):
         else:
             dgrade_nside=self.nside
                           
-        #TO DO!! ADD case for z_buffering option!
+        #TO DO: ADD case for z_buffering option
         
         if (self.do_angular == False) and (self.do_z_buffering) and (self.cube_mode == 'inner_cube' or self.cube_mode == 'mid_redshift'):
             cornerside = (self.raside_lim[1]**2+self.decside_lim[1]**2)**0.5

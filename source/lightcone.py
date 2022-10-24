@@ -25,9 +25,6 @@ class Lightcone(object):
     painted LIM lightcone. It reads a lightcone catalog of halos with SFR
     quantities and paint it with as many lines as desired.
 
-    Allows to compute summary statistics as power spectrum and the VID for
-    the signal (i.e., without including observational effects).
-
     Lines included: CO
 
     INPUT PARAMETERS:

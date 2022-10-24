@@ -11,7 +11,7 @@ from scipy.interpolate import interp2d,interp1d
 from scipy.special import legendre
 from nbodykit.algorithms import FFTPower
 from nbodykit.source.mesh.array import ArrayMesh
-from nbodykit.source.mesh.catalog import CompensateCICShotnoise,get_compensation
+from nbodykit.source.mesh.catalog import get_compensation
 from source.survey import Survey
 from source.lightcone import Lightcone
 from source.utilities import cached_measure_property,get_default_params,check_params,CompensateNGPShotnoise
@@ -81,6 +81,7 @@ class Measure(Survey):
         self._input_params.update(self._measure_params)
         self._default_params.update(self._default_measure_params)
         # Load in compensation function from the inherited lightcone survey resampler
+        
     ##################
     ## Read the map ##
     ##################
