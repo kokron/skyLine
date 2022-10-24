@@ -45,9 +45,9 @@ class Survey(Lightcone):
 
     -nuObs_min,nuObs_max:   minimum and maximum ends of the frequency band (Default = 26-34 GHz)
 
-    -RAObs_min,RAObs_max:   minimum and maximum RA observed (Default = -65-60 deg)
+    -RAObs_width:           Total RA width observed. Assumed centered at 0 (Default = 2 deg)
 
-    -DECObs_min,DECObs_max: minimum and maximum DEC observed (Default = -1.25-1.25 deg)
+    -DECObs_width:          Total DEC width observed. Assumed centered at 0 (Default = 2 deg)
 
     -dnu:                   Width of a single frequency channel (Default = 15.6 MHz)
 
@@ -115,10 +115,8 @@ class Survey(Lightcone):
                  Nfeeds=19,
                  nuObs_min = 26.*u.GHz,
                  nuObs_max = 34.*u.GHz,
-                 RAObs_min = -65.*u.deg,
-                 RAObs_max = 60.*u.deg,
-                 DECObs_min = -1.25*u.deg,
-                 DECObs_max = 1.25*u.deg,
+                 RAObs_width = 2.*u.deg,
+                 DECObs_width = 2.*u.deg,
                  dnu=15.6*u.MHz,
                  beam_FWHM=4.1*u.arcmin,
                  tobs=6000*u.hr,
@@ -181,10 +179,7 @@ class Survey(Lightcone):
             min_nside = hp.pixelfunc.get_min_valid_nside(npix_fullsky)
             if (min_nside > self.nside):
                 warn("The minimum NSIDE to account for beam_FWHM*angular_supersample is {}, but NSIDE={} was input.".format(min_nside,self.nside))
-            # ~ #Avoid inner cut if do_angular:
-            # ~ if self.do_angular and self.do_inner_cut and not self.do_flat_sky:
-                # ~ warn('If you want to work with angular maps, you do not need the inner cut, hence please use do_inner_cut = False')
-        
+
         self.cube_mode_options = ['outer_cube','inner_cube','mid_redshift','flat_sky']
         if self.cube_mode not in self.cube_mode_options:
             raise ValueError('The cube_mode choice must be one of {}'.format(self.cube_mode_options))
@@ -208,6 +203,10 @@ class Survey(Lightcone):
 
         if NoPySM and self.do_gal_foregrounds==True:
             raise ValueError('PySM must be installed to model galactic foregrounds')
+            
+        #Limits for RA and DEC
+        self.RAObs_min,self.RAObs_max = -self.RAObs_width/2.,self.RAObs_width/2.
+        self.DECObs_min,self.DECObs_max = -self.DECObs_width/2.,self.DECObs_width/2.
 
         #Set units for observable depending on convention
         if self.do_intensity:
@@ -215,9 +214,9 @@ class Survey(Lightcone):
         else:
             self.unit = u.uK
 
+        #Set global variables for smoothing kernel
         sigma_perp = 0.
         sigma_par = 0.
-        self.keep_iterating = True
 
     @cached_survey_property
     def nuObs_mean(self):
@@ -267,8 +266,8 @@ class Survey(Lightcone):
         '''
         Number of pixels per side of the observed map. RA,DEC
         '''
-        return int(np.round(((self.RAObs_max-self.RAObs_min)/(self.beam_FWHM)).decompose())),\
-               int(np.round(((self.DECObs_max-self.DECObs_min)/(self.beam_FWHM)).decompose()))
+        return int(np.round(((self.RAObs_width)/(self.beam_FWHM)).decompose())),\
+               int(np.round(((self.DECObs_width)/(self.beam_FWHM)).decompose()))
 
     @cached_survey_property
     def Npix(self):
@@ -320,13 +319,9 @@ class Survey(Lightcone):
         Sides of the field observed (approximated to be a rectangular cube),
         for the assumed redshift (the one corresponding to the target line)
         '''
-        #box center
-        ramid = np.deg2rad(0.5*(self.RAObs_max + self.RAObs_min).value)
-        decmid = np.deg2rad(0.5*(self.DECObs_max + self.DECObs_min).value)
-        
         #box angular limits (centered)
-        ralim = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_max.value])) - ramid
-        declim = np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value])) - decmid
+        ralim = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_max.value]))
+        declim = np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value]))
 
         #transform Frequency band into redshift range for the target line
         zlims = (self.line_nu0[self.target_line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
@@ -397,19 +392,6 @@ class Survey(Lightcone):
 
         return (Lbox*self.Mpch).to(self.Mpch)
 
-    # ~ @cached_survey_property
-    # ~ def Vvox(self):
-        # ~ '''
-        # ~ Voxel volume (approximated as a rectangular cube) for the assumed redshift
-        # ~ (the one corresponding to the target line).
-
-        # ~ Voxel dimensions given by the resolution of the experiment. 
-        # ~ '''
-        # ~ Nmesh = np.array([self.Nchan,self.Npixside[0], self.Npixside[1]], dtype=int)
-        # ~ #return (self.Lbox.value/Nmesh).prod()*self.Lbox.unit**3
-        # ~ return (self.Lbox.value/Nmesh).prod()*self.Lbox.unit**3
-
-
     #########################
     ## Create the mock map ##
     #########################
@@ -429,14 +411,8 @@ class Survey(Lightcone):
             #Enhance the survey selection a bit to prevent healpy masking from giving limited objects at edges
             #Computes the mid-point of the boundaries and then expands them by 1%
             #May fail at low nside or weird survey masks
-            delta_ra = 1.01*0.5*(self.RAObs_max.value - self.RAObs_min.value)
-            mid_ra = 0.5*(self.RAObs_max.value + self.RAObs_min.value)
-
-            delta_dec = 1.01*0.5*(self.DECObs_max.value - self.DECObs_min.value)
-            mid_dec = 0.5*(self.DECObs_max.value + self.DECObs_min.value)
-
-            inds_RA = (self.halo_catalog_all['RA'] > mid_ra - delta_ra)&(self.halo_catalog_all['RA'] < delta_ra  +mid_ra)
-            inds_DEC = (self.halo_catalog_all['DEC'] > mid_dec - delta_dec)&(self.halo_catalog_all['DEC'] < mid_dec + delta_dec)
+            inds_RA = (self.halo_catalog_all['RA'] > 0.995 self.RAObs_min.value)&(self.halo_catalog_all['RA'] < 1.005*self.RAObs_max.value)
+            inds_DEC = (self.halo_catalog_all['DEC'] > 0.995 self.DECObs_min.value)&(self.halo_catalog_all['DEC'] < 1.005 self.DECObs_min.value)
         else:
             #make sure Lbox is run
             Lbox = self.Lbox
@@ -529,14 +505,8 @@ class Survey(Lightcone):
             #Enhance the survey selection a bit to prevent healpy masking from giving limited objects at edges
             #Computes the mid-point of the boundaries and then expands them by 1%
             #May fail at low nside or weird survey masks
-            delta_ra = 1.01*0.5*(self.RAObs_max.value - self.RAObs_min.value)
-            mid_ra = 0.5*(self.RAObs_max.value + self.RAObs_min.value)
-
-            delta_dec = 1.01*0.5*(self.DECObs_max.value - self.DECObs_min.value)
-            mid_dec = 0.5*(self.DECObs_max.value + self.DECObs_min.value)
-
-            inds_RA = (self.halo_catalog['RA'] > mid_ra - delta_ra)&(self.halo_catalog['RA'] < delta_ra  +mid_ra)
-            inds_DEC = (self.halo_catalog['DEC'] > mid_dec - delta_dec)&(self.halo_catalog['DEC'] < mid_dec + delta_dec)
+            inds_RA = (self.halo_catalog_all['RA'] > 0.995 self.RAObs_min.value)&(self.halo_catalog_all['RA'] < 1.005*self.RAObs_max.value)
+            inds_DEC = (self.halo_catalog_all['DEC'] > 0.995 self.DECObs_min.value)&(self.halo_catalog_all['DEC'] < 1.005 self.DECObs_min.value)
         else:
             #make sure Lbox is run
             Lbox = self.Lbox
@@ -750,12 +720,9 @@ class Survey(Lightcone):
         Nmesh = np.array([self.spectral_supersample*np.ceil(Lbox[0]/sigma_par_target),
                   self.angular_supersample*self.Npixside[0],
                   self.angular_supersample*self.Npixside[1]], dtype=int)
-
-        ramid = 0.5*(self.RAObs_max + self.RAObs_min)
-        decmid = 0.5*(self.DECObs_max + self.DECObs_min)
         
-        ralim = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_max.value]) - ramid.value) 
-        declim = np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value]) - decmid.value)
+        ralim = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_max.value])) 
+        declim = np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value]))
         raside_lim = self.raside_lim
         decside_lim = self.decside_lim
         rside_obs_lim = self.rside_obs_lim
@@ -875,12 +842,6 @@ class Survey(Lightcone):
         #radial distances in Mpch/h
         r = redshift.map_blocks(lambda zz: (((self.cosmo.comoving_radial_distance(zz)*u.Mpc).to(self.Mpch)).value),
                                 dtype=redshift.dtype)
-                                
-        #Shift the ra and dec of the halo such that they are centered in (0,0)
-        ramid = 0.5*(self.RAObs_max + self.RAObs_min)
-        decmid = 0.5*(self.DECObs_max + self.DECObs_min)
-        ra -= ramid.value
-        dec -= decmid.value
 
         ra,dec  = da.deg2rad(ra),da.deg2rad(dec)
         if self.cube_mode == 'flat_sky':
@@ -1020,12 +981,10 @@ class Survey(Lightcone):
                     theta_beam = self.beam_FWHM.to(u.rad)
                     galmap_rotated = hp.smoothing(galmap_rotated, theta_beam.value)
 
-                ramid = 0.5*(self.RAObs_max + self.RAObs_min)
-                decmid = 0.5*(self.DECObs_max + self.DECObs_min)  
-                ramin=(self.RAObs_min.value-ramid.value)
-                ramax=(self.RAObs_max.value-ramid.value)
-                decmin=(self.DECObs_min.value-decmid.value)
-                decmax=(self.DECObs_max.value-decmid.value)
+                ramin=(self.RAObs_min.value)
+                ramax=(self.RAObs_max.value)
+                decmin=(self.DECObs_min.value)
+                decmax=(self.DECObs_max.value)
 
                 cart_proj=hp.projector.CartesianProj(xsize=self.Npixside[0]*self.angular_supersample, ysize=self.Npixside[1]*self.angular_supersample, lonra =  [ramin,ramax], latra=[decmin,decmax])  
                 galmap_cart=cart_proj.projmap(galmap_rotated, self.vec2pix_func)
@@ -1072,13 +1031,11 @@ class Survey(Lightcone):
                     galmap_rotated=hp.pixelfunc.ud_grade(dgrade_galmap_rotated, self.nside)
                 else:
                     galmap_rotated=dgrade_galmap_rotated
-                    
-                ramid = 0.5*(self.RAObs_max + self.RAObs_min)
-                decmid = 0.5*(self.DECObs_max + self.DECObs_min)  
-                ramin=(self.RAObs_min.value-ramid.value)
-                ramax=(self.RAObs_max.value-ramid.value)
-                decmin=(self.DECObs_min.value-decmid.value)
-                decmax=(self.DECObs_max.value-decmid.value)
+                     
+                ramin=(self.RAObs_min.value)
+                ramax=(self.RAObs_max.value)
+                decmin=(self.DECObs_min.value)
+                decmax=(self.DECObs_max.value)
 
                 cart_proj=hp.projector.CartesianProj(xsize=self.Npixside[0]*self.angular_supersample, ysize=self.Npixside[1]*self.angular_supersample, lonra =  [ramin,ramax], latra=[decmin,decmax])  
                 galmap_cart=cart_proj.projmap(galmap_rotated, self.vec2pix_func)
@@ -1096,29 +1053,10 @@ class Survey(Lightcone):
                 dec_insurvey.append(Ypix)
                 z_insurvey.append((self.line_nu0[self.target_line]/obs_freqs[i] -1)*np.ones((len(Xpix))))
 
-            #norm=hp.nside2pixarea(self.nside, degrees=True)*(u.deg**2).to(self.Omega_field.unit)/(self.Omega_field/self.Npix)
-            #ra_fullsky, dec_fullsky, obs_mask= observed_mask_2d(self)
-            #ra_insurvey=[]; dec_insurvey=[]; z_insurvey=[]; foreground_signal=[]
-            #for i in range(len(obs_freqs)):
-            #    dgrade_galmap=sky.get_emission(obs_freqs[i])[0]#produce healpy maps, 0 index corresponds to intensity   
-            #    rot_center = hp.Rotator(rot=[self.foreground_model['survey_center'][0].to_value(u.deg), self.foreground_model['survey_center'][1].to_value(u.deg)], inv=True) #rotation to place the center of the survey at the origin
-            #    dgrade_galmap_rotated = pysm3.apply_smoothing_and_coord_transform(dgrade_galmap, rot=rot_center)
-            #    if self.foreground_model['dgrade_nside']!=self.nside:
-            #        galmap_rotated=hp.pixelfunc.ud_grade(dgrade_galmap_rotated, self.nside)
-            #    else:
-            #        galmap_rotated=dgrade_galmap_rotated
-            #    if self.do_angular_smooth:
-            #        theta_beam = self.beam_FWHM.to(u.rad)
-            #        galmap_rotated = hp.smoothing(galmap_rotated, theta_beam.value)
-
         ra,dec,redshift = da.broadcast_arrays(np.asarray(ra_insurvey).flatten(), np.asarray(dec_insurvey).flatten(), np.asarray(z_insurvey).flatten())
         #radial distances in Mpch/h
         r = redshift.map_blocks(lambda zz: (((self.cosmo.comoving_radial_distance(zz)*u.Mpc).to(self.Mpch)).value),
                                 dtype=redshift.dtype)
-                                
-        #Shift the ra and dec of the halo such that they are centered in (0,0)
-        #ra -= ramid.value
-        #dec -= decmid.value
 
         ra,dec  = da.deg2rad(ra),da.deg2rad(dec)
         if self.cube_mode == 'flat_sky':
@@ -1138,15 +1076,6 @@ class Survey(Lightcone):
             x = da.cos(dec) * da.cos(ra)
             y = da.cos(dec) * da.sin(ra)
             z = da.sin(dec)
-                    
-        # ~ ra,dec  = da.deg2rad(ra),da.deg2rad(dec)
-        # ~ # cartesian coordinates
-        # ~ x = da.cos(dec) * da.cos(ra)
-        # ~ y = da.cos(dec) * da.sin(ra)
-        # ~ z = da.sin(dec)
-        # ~ pos = da.vstack([x,y,z]).T
-        # ~ #radial distances in Mpch/h
-        # ~ r = redshift.map_blocks(lambda zz: (((self.cosmo.comoving_radial_distance(zz)*u.Mpc).to(self.Mpch)).value),dtype=redshift.dtype)
         
         pos = da.vstack([x,y,z]).T
         cartesian_pixelpos = r[:,None] * pos
@@ -1157,16 +1086,14 @@ class Survey(Lightcone):
                         (foreground_grid[:,1] >= raside_lim[0]) & (foreground_grid[:,1] <= raside_lim[1]) & \
                         (foreground_grid[:,2] >= decside_lim[0]) & (foreground_grid[:,2] <= decside_lim[1])
             foreground_grid = foreground_grid[filtering]
-            #print(np.asarray(filtering).shape, np.asarray(foreground_grid).shape, np.asarray(foreground_signal).shape)
             foreground_signal=np.asarray(foreground_signal).flatten()[filtering]
-        #print(np.min(foreground_grid[:,0]), np.max(foreground_grid[:,0]), np.min(foreground_grid[:,1]), np.max(foreground_grid[:,1]), np.min(foreground_grid[:,2]), np.max(foreground_grid[:,2]))
+
         for n in range(3):
             foreground_grid[:,n] -= mins[n]
                     
         #Set the emitter in the grid and paint using pmesh directly instead of nbk
         pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler=self.resampler)
         #Make realfield object
-
         field = pm.create(type='real')
         layout = pm.decompose(foreground_grid,smoothing=0.5*pm.resampler.support)
         #Exchange positions between different MPI ranks
