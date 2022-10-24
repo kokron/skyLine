@@ -38,8 +38,7 @@ class Measure(Survey):
     -lmax:                  Maximum multipole to compute the angular power spectrum. Default=1000
 
     -remove_noise:          Remove the expected instrumental noise power spectrum (sigma_N^2*Vvox)
-                            from the observed power spectrum (and adds it to the covariance).
-                            (default: False)
+                            from the observed power spectrum. (default: False)
                             
     -angular_map            Whether the map used is angular (healpy map). (Default: False)
     

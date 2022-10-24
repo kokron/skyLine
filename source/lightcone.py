@@ -39,30 +39,33 @@ class Lightcone(object):
     -zmin,zmax              Minimum and maximum redshifts to read from the lightcone
                             (default: 0,20 - limited by Universe Machine)
 
-    -RA_min,RA_max:         minimum and maximum RA to read from the lightcone
-                            (Default = -65-60 deg)
+    -RA_width:              Total RA width to read from the lightcone.
+                            Assumed to be centered in origin
+                            (Default = 2 deg)
 
-    -DEC_min,DEC_max:       minimum and maximum DEC to read from the lightcone
-                            (Default = -1.25-1.25 deg)
+    -DEC_width:             Total DEC to read from the lightcone.
+                            Assumed to be centered in origin
+                            (Default = 2 deg)
 
     -lines                  What lines are painted in the lightcone. Dictionary with
                             bool values (default: All false).
-                            Available lines: CO, CII, H-alpha, Lyman-alpha, HI
+                            Check available lines in source/line_models.py
 
     -models                 Models for each line. Dictionary of dictionaries (first layer,
                             same components of "lines", second layer, the following
                             components: model_name, model_pars (depends on the model))
+                            Check available lines in source/line_models.py
                             (default: empty dictionary)
                             
     -LIR_pars               Dictionary with the parameters required to compute infrared
                             luminosity, needed to compute certain lines luminosities.
-                            Check the LIR function in line_models for the required parameters 
+                            Check the LIR function in source/line_models.py for the required parameters 
                             and available models
 
     -do_external_SFR        Boolean, whether to use a SFR different than Universe Machine
                             (default:False)
 
-    -external_SFR           SFR interpolation
+    -external_SFR           SFR table to interpolate or fitting function
 
     -sig_extSFR             log-scatter for an external SFR
    
@@ -78,8 +81,7 @@ class Lightcone(object):
     def __init__(self,
                  halo_lightcone_dir = '',
                  zmin = 0., zmax = 20.,
-                 RA_min = -65.*u.deg,RA_max = 60.*u.deg,
-                 DEC_min = -1.25*u.deg,DEC_max = 1.25*u.deg,
+                 RA_width = 2.*u.deg, DEC_width = 2.*u.deg,
                  lines = dict(CO_J10 = False, CII = False, Halpha = False, Hbeta = False, Lyalpha = False, HI = False, 
                               CO_J21 = False, CO_J32 = False, CO_J43 = False, CO_J54 = False, CO_J65 = False, CO_J76 = False,
                               NIII = False, NII = False, OIII_88 = False, OI_63 = False, OI_145 = False, OII = False, OIII_0p5 = False),
@@ -133,6 +135,10 @@ class Lightcone(object):
 
         #Line frequencies:
         self.line_nu0 = getattr(LM,'lines_included')(self)
+        
+        #Limits for RA and DEC
+        self.RA_min,self.RA_max = -self.RA_width/2.,self.RA_width/2.
+        self.DEC_min,self.DEC_max = -self.DEC_width/2.,self.DEC_width/2.
         
         self.rng = np.random.default_rng(self.seed)
 
@@ -336,7 +342,7 @@ class Lightcone(object):
         survey_params = list(self._default_survey_params.keys())
         measure_params = list(self._default_measure_params.keys())
         read_params = ['halo_lightcone_dir', 'zmin', 'zmax',
-                       'RA_min', 'RA_max', 'DEC_min', 'DEC_max']
+                       'RA_width', 'DEC_width']
         for name in read_params:
             lightcone_params.remove(name)
             
