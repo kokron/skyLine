@@ -1260,7 +1260,7 @@ def aniso_filter(k, v):
     kk2_perp = newk[1]**2 + newk[2]**2
     
     if rpar > 0:
-        w = np.exp(-0.5*kk2_perp * rper**2)*rpar*np.sinc(newk[0]*rpar/2)
+        w = np.exp(-0.5*kk2_perp * rper**2)*np.sinc(newk[0]*rpar/2)
     else:
         w = np.exp(-0.5*kk2_perp * rper**2)
 
