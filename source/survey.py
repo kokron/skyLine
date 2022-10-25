@@ -814,7 +814,7 @@ class Survey(Lightcone):
 
         # add galactic foregrounds
         if self.do_gal_foregrounds:
-            maps+=self.create_foreground_map(mins_obs, Nmesh, Lbox, rside_obs_lim, raside_lim, decside_lim)
+            maps+=self.create_3d_foreground_map(mins_obs, Nmesh, Lbox, rside_obs_lim, raside_lim, decside_lim)
 
         #get the proper shape for the observed map
         if (self.angular_supersample > 1 or self.spectral_supersample > 1) and self.do_downsample:
@@ -946,16 +946,18 @@ class Survey(Lightcone):
         '''
         return hp.vec2pix(self.nside, x, y, z)
 
-    def create_foreground_map(self, mins, Nmesh, Lbox, rside_obs_lim, raside_lim, decside_lim):
+    def create_3d_foreground_map(self, mins, Nmesh, Lbox, rside_obs_lim, raside_lim, decside_lim):
         '''
-        Creates a map of galactic continuum foregrounds using pySM
+        Creates a 3D map of galactic continuum foregrounds using pySM
         '''
         if self.foreground_model['dgrade_nside']!=self.nside:
             dgrade_nside=self.foreground_model['dgrade_nside']
         else:
             dgrade_nside=self.nside
                           
-        #TO DO: ADD case for z_buffering option
+        #TO DO: ADD case for z_buffering option and check foreground for other projections
+        if self.do_angular == False and self.cube_mode != 'flat_sky':
+            warn('Careful! The implementation of the foregrounds has only been thoroughly tested for flat sky projections yet.')
         
         if (self.do_angular == False) and (self.do_z_buffering) and (self.cube_mode == 'inner_cube' or self.cube_mode == 'mid_redshift'):
             cornerside = (self.raside_lim[1]**2+self.decside_lim[1]**2)**0.5
@@ -1052,6 +1054,112 @@ class Survey(Lightcone):
                 ra_insurvey.append(Xpix)
                 dec_insurvey.append(Ypix)
                 z_insurvey.append((self.line_nu0[self.target_line]/obs_freqs[i] -1)*np.ones((len(Xpix))))
+
+        ra,dec,redshift = da.broadcast_arrays(np.asarray(ra_insurvey).flatten(), np.asarray(dec_insurvey).flatten(), np.asarray(z_insurvey).flatten())
+        #radial distances in Mpch/h
+        r = redshift.map_blocks(lambda zz: (((self.cosmo.comoving_radial_distance(zz)*u.Mpc).to(self.Mpch)).value),
+                                dtype=redshift.dtype)
+
+        ra,dec  = da.deg2rad(ra),da.deg2rad(dec)
+        if self.cube_mode == 'flat_sky':
+            rmid = ((self.cosmo.comoving_radial_distance(self.zmid)*u.Mpc).to(self.Mpch)).value
+            # cartesian coordinates in flat sky
+            x = da.ones(ra.shape[0])
+            y = ra/r*rmid 
+            z = dec/r*rmid 
+        elif self.cube_mode == 'mid_redshift':
+            rmid = ((self.cosmo.comoving_radial_distance(self.zmid)*u.Mpc).to(self.Mpch)).value
+            # cartesian coordinates in unit sphere but preparing for only one distance for ra and dec
+            x = da.cos(dec) * da.cos(ra)
+            y = da.sin(ra)/r*rmid # only ra?
+            z = da.sin(dec)/r*rmid # only dec?
+        else:
+            # cartesian coordinates in unit sphere
+            x = da.cos(dec) * da.cos(ra)
+            y = da.cos(dec) * da.sin(ra)
+            z = da.sin(dec)
+        
+        pos = da.vstack([x,y,z]).T
+        cartesian_pixelpos = r[:,None] * pos
+        foreground_grid = np.array(cartesian_pixelpos.compute())
+        
+        if self.cube_mode == 'inner_cube' or self.cube_mode == 'mid_redshift':
+            filtering = (foreground_grid[:,0] >= rside_obs_lim[0]) & (foreground_grid[:,0] <= rside_obs_lim[1]) & \
+                        (foreground_grid[:,1] >= raside_lim[0]) & (foreground_grid[:,1] <= raside_lim[1]) & \
+                        (foreground_grid[:,2] >= decside_lim[0]) & (foreground_grid[:,2] <= decside_lim[1])
+            foreground_grid = foreground_grid[filtering]
+            foreground_signal=np.asarray(foreground_signal).flatten()[filtering]
+
+        for n in range(3):
+            foreground_grid[:,n] -= mins[n]
+                    
+        #Set the emitter in the grid and paint using pmesh directly instead of nbk
+        pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler=self.resampler)
+        #Make realfield object
+        field = pm.create(type='real')
+        layout = pm.decompose(foreground_grid,smoothing=0.5*pm.resampler.support)
+        #Exchange positions between different MPI ranks
+        p = layout.exchange(foreground_grid)
+        #Assign weights following the layout of particles
+        m = layout.exchange(np.asarray(foreground_signal).flatten())
+        pm.paint(p, out=field, mass=m, resampler=self.resampler)
+        #Fourier transform fields and apply the filter
+        field = field.r2c()
+        return field
+        
+        
+    def create_2d_foreground_map(self):
+        '''
+        Creates a 2D map of galactic continuum foregrounds using pySM
+        '''
+        if self.foreground_model['dgrade_nside']!=self.nside:
+            dgrade_nside=self.foreground_model['dgrade_nside']
+        else:
+            dgrade_nside=self.nside
+            
+        hp_fg_map = np.zeros(hp.nside2npix(self.nside))
+
+        if self.foreground_model['precomputed_file']!=None:
+            for i in range(len(self.foreground_model['precomputed_file'])):
+                dgrade_galmap_rotated=hp.fitsfunc.read_map(self.foreground_model['precomputed_file'][i]) #read pre-computed healpy maps
+                if self.foreground_model['dgrade_nside']!=self.nside:
+                    galmap_rotated=hp.pixelfunc.ud_grade(dgrade_galmap_rotated, self.nside)
+                else:
+                    galmap_rotated=dgrade_galmap_rotated
+                    
+                hp_fg_map += galmap_rotated
+        else:
+            #build foreground component dictionary
+            components=[key for key,value in self.foreground_model['sky'].items() if value == True]
+            sky_config = []
+            for cmp in components:
+                if cmp=='synchrotron':
+                    sky_config.append("s1")
+                elif cmp=='dust':
+                    sky_config.append("d1")
+                elif cmp=='freefree':
+                    sky_config.append("f1")
+                elif cmp=='ame':
+                    sky_config.append("a1")
+                else:
+                    warn('Unknown galactic foreground component: {}'.format(cmp))
+                    
+            obs_freqs_edge=np.linspace(self.nuObs_min, self.nuObs_max, self.spectral_supersample*self.Nchan+1)
+            obs_freqs=(obs_freqs_edge[1:]+obs_freqs_edge[:-1])/2 #frequencies observed in survey
+
+            sky = pysm3.Sky(nside=dgrade_nside, preset_strings=sky_config)#create sky object using the specified model
+            #produce healpy maps, 0 index corresponds to intensity
+            dgrade_galmap=sky.get_emission(obs_freqs)[0]#produce healpy maps, 0 index corresponds to intensity
+            rot_center = hp.Rotator(rot=[self.foreground_model['survey_center'][0].to_value(u.deg), self.foreground_model['survey_center'][1].to_value(u.deg)], inv=True) #rotation to place the center of the survey at the origin              
+            dgrade_galmap_rotated = pysm3.apply_smoothing_and_coord_transform(dgrade_galmap, rot=rot_center, fwhm=0*u.arcmin)
+            if self.foreground_model['dgrade_nside']!=self.nside:
+                galmap_rotated=hp.pixelfunc.ud_grade(dgrade_galmap_rotated, self.nside)
+            else:
+                galmap_rotated=dgrade_galmap_rotated
+            #if self.do_intensity:
+                
+            hp_fg_map += galmap_rotated
+                
 
         ra,dec,redshift = da.broadcast_arrays(np.asarray(ra_insurvey).flatten(), np.asarray(dec_insurvey).flatten(), np.asarray(z_insurvey).flatten())
         #radial distances in Mpch/h
