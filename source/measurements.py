@@ -132,7 +132,7 @@ class Measure(Survey):
                 else:
                     map_to_use = self.obs_3d_map
                     
-                #Compensate the field for the CIC window function we apply
+                #Compensate the field for the mass asignment window function we apply
                 map_to_use = (map_to_use.r2c().apply(self.compensation[0][1], kind=self.compensation[0][2])).c2r()
                 #Add noise
                 if self.Tsys.value > 0.:
