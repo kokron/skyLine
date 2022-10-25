@@ -160,6 +160,10 @@ class Survey(Lightcone):
         # Combine lightcone_params with survey_params
         self._input_params.update(self._survey_params)
         self._default_params.update(self._default_survey_params)
+        
+        #Limits for RA and DEC
+        self.RAObs_min,self.RAObs_max = -self.RAObs_width/2.,self.RAObs_width/2.
+        self.DECObs_min,self.DECObs_max = -self.DECObs_width/2.,self.DECObs_width/2.
 
         # Check that the observed footprint is contained in the lightcone
         if self.RAObs_min < self.RA_min or self.RAObs_max > self.RA_max or \
@@ -203,10 +207,6 @@ class Survey(Lightcone):
 
         if NoPySM and self.do_gal_foregrounds==True:
             raise ValueError('PySM must be installed to model galactic foregrounds')
-            
-        #Limits for RA and DEC
-        self.RAObs_min,self.RAObs_max = -self.RAObs_width/2.,self.RAObs_width/2.
-        self.DECObs_min,self.DECObs_max = -self.DECObs_width/2.,self.DECObs_width/2.
 
         #Set units for observable depending on convention
         if self.do_intensity:
@@ -411,8 +411,8 @@ class Survey(Lightcone):
             #Enhance the survey selection a bit to prevent healpy masking from giving limited objects at edges
             #Computes the mid-point of the boundaries and then expands them by 1%
             #May fail at low nside or weird survey masks
-            inds_RA = (self.halo_catalog_all['RA'] > 0.995 self.RAObs_min.value)&(self.halo_catalog_all['RA'] < 1.005*self.RAObs_max.value)
-            inds_DEC = (self.halo_catalog_all['DEC'] > 0.995 self.DECObs_min.value)&(self.halo_catalog_all['DEC'] < 1.005 self.DECObs_min.value)
+            inds_RA = (self.halo_catalog_all['RA'] > 0.995*self.RAObs_min.value)&(self.halo_catalog_all['RA'] < 1.005*self.RAObs_max.value)
+            inds_DEC = (self.halo_catalog_all['DEC'] > 0.995*self.DECObs_min.value)&(self.halo_catalog_all['DEC'] < 1.005*self.DECObs_min.value)
         else:
             #make sure Lbox is run
             Lbox = self.Lbox
@@ -505,8 +505,8 @@ class Survey(Lightcone):
             #Enhance the survey selection a bit to prevent healpy masking from giving limited objects at edges
             #Computes the mid-point of the boundaries and then expands them by 1%
             #May fail at low nside or weird survey masks
-            inds_RA = (self.halo_catalog_all['RA'] > 0.995 self.RAObs_min.value)&(self.halo_catalog_all['RA'] < 1.005*self.RAObs_max.value)
-            inds_DEC = (self.halo_catalog_all['DEC'] > 0.995 self.DECObs_min.value)&(self.halo_catalog_all['DEC'] < 1.005 self.DECObs_min.value)
+            inds_RA = (self.halo_catalog_all['RA'] > 0.995*self.RAObs_min.value)&(self.halo_catalog_all['RA'] < 1.005*self.RAObs_max.value)
+            inds_DEC = (self.halo_catalog_all['DEC'] > 0.995*self.DECObs_min.value)&(self.halo_catalog_all['DEC'] < 1.005*self.DECObs_min.value)
         else:
             #make sure Lbox is run
             Lbox = self.Lbox
@@ -1256,7 +1256,6 @@ def aniso_filter(k, v):
     rpar = sigma_par
     newk = copy.deepcopy(k)
     
-    kk = sum(ki ** 2 for ki in newk) ** 0.5
     kk2_perp = newk[1]**2 + newk[2]**2
     
     if rpar > 0:
