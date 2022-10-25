@@ -617,6 +617,10 @@ class Survey(Lightcone):
                         hp_map = self.paint_2d(self.halos_in_survey[line],line,hp_map)
                 else:
                     hp_map = self.paint_2d(self.halos_in_survey_all[line],line,hp_map)
+                    
+        # add galactic foregrounds
+        if self.do_gal_foregrounds:
+            hp_map+=self.create_2d_foreground_map()
 
         #smooth for angular resolution
         if self.do_angular_smooth:
@@ -1041,7 +1045,7 @@ class Survey(Lightcone):
 
                 cart_proj=hp.projector.CartesianProj(xsize=self.Npixside[0]*self.angular_supersample, ysize=self.Npixside[1]*self.angular_supersample, lonra =  [ramin,ramax], latra=[decmin,decmax])  
                 galmap_cart=cart_proj.projmap(galmap_rotated, self.vec2pix_func)
-                foreground_signal.append((galmap_cart.flatten())*u.uK)
+                foreground_signal.append((galmap_cart.flatten()))
                
                 Xedge=np.linspace(ramin,ramax, (self.Npixside[0]*self.angular_supersample)+1)
                 Yedge=np.linspace(decmin,decmax, (self.Npixside[1]*self.angular_supersample)+1)
@@ -1144,7 +1148,7 @@ class Survey(Lightcone):
                 else:
                     warn('Unknown galactic foreground component: {}'.format(cmp))
                     
-            obs_freqs_edge=np.linspace(self.nuObs_min, self.nuObs_max, self.spectral_supersample*self.Nchan+1)
+            obs_freqs_edge=np.linspace(self.nuObs_min, self.nuObs_max, self.Nchan+1)
             obs_freqs=(obs_freqs_edge[1:]+obs_freqs_edge[:-1])/2 #frequencies observed in survey
 
             sky = pysm3.Sky(nside=dgrade_nside, preset_strings=sky_config)#create sky object using the specified model
@@ -1156,62 +1160,18 @@ class Survey(Lightcone):
                 galmap_rotated=hp.pixelfunc.ud_grade(dgrade_galmap_rotated, self.nside)
             else:
                 galmap_rotated=dgrade_galmap_rotated
-            #if self.do_intensity:
+            if self.do_intensity and sky.output_unit != self.unit:
+                galmap_rotated *= pysm3.bandpass_unit_conversion(obs_freqs, input_unit = sky.output_unit,output_unit=self.unit)
+            elif self.do_intensity == False and sky.output_unit != pysm3.units.uK_RJ:
+                galmap_rotated *= pysm3.bandpass_unit_conversion(obs_freqs, input_unit = sky.output_unit,output_unit=self.unit)
                 
             hp_fg_map += galmap_rotated
-                
-
-        ra,dec,redshift = da.broadcast_arrays(np.asarray(ra_insurvey).flatten(), np.asarray(dec_insurvey).flatten(), np.asarray(z_insurvey).flatten())
-        #radial distances in Mpch/h
-        r = redshift.map_blocks(lambda zz: (((self.cosmo.comoving_radial_distance(zz)*u.Mpc).to(self.Mpch)).value),
-                                dtype=redshift.dtype)
-
-        ra,dec  = da.deg2rad(ra),da.deg2rad(dec)
-        if self.cube_mode == 'flat_sky':
-            rmid = ((self.cosmo.comoving_radial_distance(self.zmid)*u.Mpc).to(self.Mpch)).value
-            # cartesian coordinates in flat sky
-            x = da.ones(ra.shape[0])
-            y = ra/r*rmid 
-            z = dec/r*rmid 
-        elif self.cube_mode == 'mid_redshift':
-            rmid = ((self.cosmo.comoving_radial_distance(self.zmid)*u.Mpc).to(self.Mpch)).value
-            # cartesian coordinates in unit sphere but preparing for only one distance for ra and dec
-            x = da.cos(dec) * da.cos(ra)
-            y = da.sin(ra)/r*rmid # only ra?
-            z = da.sin(dec)/r*rmid # only dec?
-        else:
-            # cartesian coordinates in unit sphere
-            x = da.cos(dec) * da.cos(ra)
-            y = da.cos(dec) * da.sin(ra)
-            z = da.sin(dec)
-        
-        pos = da.vstack([x,y,z]).T
-        cartesian_pixelpos = r[:,None] * pos
-        foreground_grid = np.array(cartesian_pixelpos.compute())
-        
-        if self.cube_mode == 'inner_cube' or self.cube_mode == 'mid_redshift':
-            filtering = (foreground_grid[:,0] >= rside_obs_lim[0]) & (foreground_grid[:,0] <= rside_obs_lim[1]) & \
-                        (foreground_grid[:,1] >= raside_lim[0]) & (foreground_grid[:,1] <= raside_lim[1]) & \
-                        (foreground_grid[:,2] >= decside_lim[0]) & (foreground_grid[:,2] <= decside_lim[1])
-            foreground_grid = foreground_grid[filtering]
-            foreground_signal=np.asarray(foreground_signal).flatten()[filtering]
-
-        for n in range(3):
-            foreground_grid[:,n] -= mins[n]
-                    
-        #Set the emitter in the grid and paint using pmesh directly instead of nbk
-        pm = pmesh.pm.ParticleMesh(Nmesh, BoxSize=Lbox, dtype='float32', resampler=self.resampler)
-        #Make realfield object
-        field = pm.create(type='real')
-        layout = pm.decompose(foreground_grid,smoothing=0.5*pm.resampler.support)
-        #Exchange positions between different MPI ranks
-        p = layout.exchange(foreground_grid)
-        #Assign weights following the layout of particles
-        m = layout.exchange(np.asarray(foreground_signal).flatten())
-        pm.paint(p, out=field, mass=m, resampler=self.resampler)
-        #Fourier transform fields and apply the filter
-        field = field.r2c()
-        return field
+            
+            if self.average_angular_proj:
+                #averaging over the number of channels
+                return hp_fg_map/self.Nchan
+            else:
+                return hp_fg_map
 
 
     def save_map(self,name,other_map=None):
