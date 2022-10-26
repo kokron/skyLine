@@ -10,7 +10,6 @@ import healpy as hp
 from scipy.interpolate import interp2d,interp1d
 from scipy.special import legendre
 from nbodykit.algorithms import FFTPower
-from nbodykit.source.mesh.array import ArrayMesh
 from nbodykit.source.mesh.catalog import get_compensation
 from source.survey import Survey
 from source.lightcone import Lightcone
@@ -87,7 +86,7 @@ class Measure(Survey):
     ##################
     
     @cached_measure_property
-    def read_map(self):
+    def read_map(self,Lbox=None):
         '''
         Reads a previously saved map to avoid rerun survey everytime
         '''
@@ -99,9 +98,13 @@ class Measure(Survey):
             fitsmap = hdul[0].data
             hdul.close()
             #Transform it to a mesh field
-            mesh = ArrayMesh(fitsmap.byteswap().newbyteorder(),BoxSize=self.Lbox.value)
-            mapread = mesh.to_field()
-            
+            if Lbox == None:
+                Lbox = self.Lbox.value
+            pm = pmesh.pm.ParticleMesh(fitsmap.shape, BoxSize=Lbox, dtype='float32', resampler=self.resampler)
+            #Make realfield object
+            mapread = pm.create(type='real')
+            mapread[...] = fitsmap
+
         return mapread
     
     ##########################################
