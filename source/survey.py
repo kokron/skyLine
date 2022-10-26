@@ -635,25 +635,28 @@ class Survey(Lightcone):
                 hp_map = hp.ud_grade(hp_map,nside_min)
 
         #Define the mask from the rectangular footprint if not full sky!
-#        if ((self.RAObs_min.value > -180 and self.RAObs_max.value < 180) and 
-#            (self.DECObs_min.value > -90 and self.DECObs_max.value < 90)):
-#            phicorner_list = np.append(np.arange(self.RAObs_min.value,self.RAObs_max.value,1),self.RAObs_max.value)
-#            thetacorner = np.pi/2-np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value,self.DECObs_max.value,self.DECObs_min.value]))
-#            pix_within = np.array([])
-#            for iphiedge in range(len(phicorner_list)-1):
-#                phicorner = np.deg2rad(np.array([phicorner_list[iphiedge],phicorner_list[iphiedge],phicorner_list[iphiedge+1],phicorner_list[iphiedge+1]]))
-#                vecs = hp.dir2vec(thetacorner,phi=phicorner).T
-                #catch repeat vecs
-#                vecs = np.unique(vecs, axis=0)
-#                try:
-#                    pix_within = np.append(pix_within,hp.query_polygon(nside=LC_CO.nside,vertices=vecs,inclusive=False))
-#                except:
-#                    pix_within = np.append(pix_within, [])
-#            self.pix_within = pix_within
-#            mask = np.ones(hp.nside2npix(self.nside),np.bool)
-#            mask[pix_within.astype(int)] = 0
-#            hp_map = hp.ma(hp_map)
-#            hp_map.mask = mask
+        if ((self.RAObs_width < 180 and self.DECObs_width.value < 90)):
+            #padding to avoid errors
+            pad_ra,pad_dec = 0,0
+            if self.RAObs_width == 180:
+                pad_ra = 1e-5
+            if self.DECObs_width == 90:
+                pad_dec = 1e-5
+            phicorner_list = np.linspace(self.RAObs_min.value+pad_ra,self.RAObs_max.value-pad_ra,10)
+            thetacorner = np.pi/2-np.deg2rad(np.array([self.DECObs_min.value+pad_dec,self.DECObs_max.value-pad_dec,self.DECObs_max.value-pad_dec,self.DECObs_min.value+pad_dec]))
+            pix_within = np.array([])
+            for iphiedge in range(len(phicorner_list)-1):
+                phicorner = np.deg2rad(np.array([phicorner_list[iphiedge],phicorner_list[iphiedge],phicorner_list[iphiedge+1],phicorner_list[iphiedge+1]]))
+                vecs = hp.dir2vec(thetacorner,phi=phicorner).T
+                try:
+                    pix_within = np.append(pix_within,hp.query_polygon(nside=self.nside,vertices=vecs,inclusive=False))
+                except:
+                    pix_within = np.append(pix_within, [])
+            self.pix_within = pix_within
+            mask = np.ones(hp.nside2npix(self.nside),np.bool)
+            mask[pix_within.astype(int)] = 0
+            hp_map = hp.ma(hp_map)
+            hp_map.mask = mask
         
         #remove the monopole
         if self.do_remove_mean:
@@ -1172,6 +1175,23 @@ class Survey(Lightcone):
                 return hp_fg_map/self.Nchan
             else:
                 return hp_fg_map
+                
+                
+    def save_map(self,name,other_map=None):
+        '''
+        Saves a map (either pmesh or healpy depending on do_angular).
+        If other_map != None, the map saved would be self.obs_map
+        '''
+        if not other_map:
+            map_to_save = self.obs_map
+        else:
+            map_to_save = other_map
+        if self.do_angular:
+            hp.fitsfunc.write_map(name,map_to_save)
+        else:
+            hdu = fits.PrimaryHDU(map_to_save)
+            hdu.writeto(name)
+        return
 
 
 #########################
