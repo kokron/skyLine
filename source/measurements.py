@@ -100,7 +100,7 @@ class Measure(Survey):
             hdul.close()
             #Transform it to a mesh field
             mesh = ArrayMesh(fitsmap.byteswap().newbyteorder(),BoxSize=self.Lbox.value)
-            mapread = mesh.field
+            mapread = mesh.to_field()
             
         return mapread
     
