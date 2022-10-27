@@ -425,38 +425,6 @@ class Survey(Lightcone):
             inds_mass = inds_mass&(self.halo_catalog_all['M_HALO']>=self.Mhalo_min)
         if self.Mstar_min != 0.:
             inds_mass = inds_mass&(self.halo_catalog_all['SM_HALO']>=self.Mstar_min)
-            
-        inds_gal = np.ones(len(inds_sky),dtype=bool)
-        if self.gal_type != 'all' and self.number_count:
-            #separate between ELGs and LRGs
-            inds = np.where((np.log10(self.halo_catalog_all['SM_HALO'])>8)&(self.halo_catalog_all['SFR_HALO']>0))
-            sSFR = self.halo_catalog_all['SFR_HALO'][inds]/self.halo_catalog_all['SM_HALO'][inds]
-            hist,bins = np.histogram(np.log10(sSFR),bins=101)
-            hist[hist==0] = 1e-100
-            hist = np.log10(hist)
-            inds_hist = [np.argmax(hist[:50]),np.argmax(hist[50:])+50]
-            indlim = np.argmin(hist[inds_hist[0]:inds_hist[1]])+1+inds_hist[0]
-            sSFR = self.halo_catalog_all['SFR_HALO']/self.halo_catalog_all['SM_HALO']
-            if self.gal_type == 'elg':
-                inds_gal = inds_gal&(sSFR > 10**bins[indlim])
-            else:
-                inds_gal = inds_gal&(sSFR < 10**bins[indlim])
-            #Get the N brightest (e.g., higher Mstar) up to matching number density
-            if self.do_angular:
-                Ngal_tot = self.ngal*self.Omega_field
-            else:
-                Ngal_tot = (self.ngal*((self.Lbox.value).prod()*(self.Mpch**3))).decompose()
-            Ngal_max = np.sum(inds_gal)
-            if Ngal_tot > Ngal_max:
-                if self.do_angular:
-                    ngal_max = np.sum(Ngal_max)/self.Omega_field
-                else:
-                    ngal_max = np.sum(Ngal_max)/((self.Lbox.value).prod()*(self.Mpch**3))
-                warn("Maximum n_gal with the total number of {:}s is {:.5f}, input was {:5f}, reduce it or work with all {:}".format(self.gal_type,ngal_max,self.ngal,self.gal_type))
-            else:
-                argsort = np.argsort(self.halo_catalog_all['SM_HALO'])[::-1]
-                indlim = np.where(np.cumsum(inds_gal[argsort])>Ngal_tot)[0][0]
-                inds_gal[argsort[indlim:]] = False
                             
         #Get a lower nu_Obs_min to buffer high redshifts and fill corners if required
         if (self.do_angular == False) and (self.do_z_buffering) and \
@@ -478,7 +446,39 @@ class Survey(Lightcone):
             if self.lines[line]:
                 halos_survey[line] = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),Ztrue=np.array([]),Lhalo=np.array([])*u.Lsun)
                     
-                inds = (self.nuObs_line_halo_all[line] >= nu_min)&(self.nuObs_line_halo_all[line] <= self.nuObs_max)&inds_sky&inds_mass&inds_gal
+                inds = (self.nuObs_line_halo_all[line] >= nu_min)&(self.nuObs_line_halo_all[line] <= self.nuObs_max)&inds_sky&inds_mass
+                
+                if self.gal_type != 'all' and self.number_count:
+                    #separate between ELGs and LRGs
+                    inds_gal = np.where((np.log10(self.halo_catalog_all['SM_HALO'])>8)&(self.halo_catalog_all['SFR_HALO']>0))
+                    sSFR = self.halo_catalog_all['SFR_HALO'][inds_gal]/self.halo_catalog_all['SM_HALO'][inds_gal]
+                    hist,bins = np.histogram(np.log10(sSFR),bins=101)
+                    hist[hist==0] = 1e-100
+                    hist = np.log10(hist)
+                    inds_hist = [np.argmax(hist[:50]),np.argmax(hist[50:])+50]
+                    indlim = np.argmin(hist[inds_hist[0]:inds_hist[1]])+1+inds_hist[0]
+                    sSFR = self.halo_catalog_all['SFR_HALO']/self.halo_catalog_all['SM_HALO']
+                    if self.gal_type == 'elg':
+                        inds = inds&(sSFR > 10**bins[indlim])
+                    else:
+                        inds = inds&(sSFR < 10**bins[indlim])
+                    #Get the N brightest (e.g., higher Mstar) up to matching number density
+                    if self.do_angular:
+                        Ngal_tot = self.ngal*self.Omega_field
+                    else:
+                        Ngal_tot = (self.ngal*((self.Lbox.value).prod()*(self.Mpch**3))).decompose()
+                    Ngal_max = np.sum(inds)
+                    if Ngal_tot > Ngal_max:
+                        if self.do_angular:
+                            ngal_max = np.sum(Ngal_max)/self.Omega_field
+                        else:
+                            ngal_max = np.sum(Ngal_max)/((self.Lbox.value).prod()*(self.Mpch**3))
+                        warn("Maximum n_gal with the total number of {:}s is {:.5f}, input was {:5f}, reduce it or work with all {:}".format(self.gal_type,ngal_max,self.ngal,self.gal_type))
+                    else:
+                        argsort = np.argsort(self.halo_catalog_all['SM_HALO'])[::-1]
+                        indlim = np.where(np.cumsum(inds[argsort])>Ngal_tot)[0][0]
+                        inds[argsort[indlim:]] = False
+                
                 halos_survey[line]['RA'] = np.append(halos_survey[line]['RA'],self.halo_catalog_all['RA'][inds])
                 halos_survey[line]['DEC'] = np.append(halos_survey[line]['DEC'],self.halo_catalog_all['DEC'][inds])
                 halos_survey[line]['Zobs'] = np.append(halos_survey[line]['Zobs'],(self.line_nu0[self.target_line]/self.nuObs_line_halo_all[line][inds]).decompose()-1)
@@ -520,39 +520,6 @@ class Survey(Lightcone):
         if self.Mstar_min != 0.:
             inds_mass = inds_mass&(self.halo_catalog['SM_HALO']>=self.Mstar_min)
             
-        inds_gal = np.ones(len(inds_sky),dtype=bool)
-        if self.gal_type != 'all':
-            #separate between ELGs and LRGs
-            inds = np.where((np.log10(self.halo_catalog['SM_HALO'])>8)&(self.halo_catalog['SFR_HALO']>0))
-            sSFR = self.halo_catalog['SFR_HALO'][inds]/self.halo_catalog['SM_HALO'][inds]
-            hist,bins = np.histogram(np.log10(sSFR),bins=101)
-            hist[hist==0] = 1e-100
-            hist = np.log10(hist)
-            inds_hist = [np.argmax(hist[:50]),np.argmax(hist[50:])+50]
-            indlim = np.argmin(hist[inds_hist[0]:inds_hist[1]])+1+inds_hist[0]
-            sSFR = self.halo_catalog['SFR_HALO']/self.halo_catalog['SM_HALO']
-            if self.gal_type == 'elg':
-                inds_gal = inds_gal&(sSFR > 10**bins[indlim])
-            else:
-                inds_gal = inds_gal&(sSFR < 10**bins[indlim])
-            #Get the N brightest (e.g., higher Mstar) up to matching number density
-            #**assuming that the number density of each file is equivalent...**
-            if self.do_angular:
-                Ngal_tot = self.ngal*self.Omega_field/nfiles
-            else:
-                Ngal_tot = (self.ngal*((self.Lbox.value).prod()*(self.Mpch**3))).decompose()/nfiles
-            Ngal_max = np.sum(inds_gal)
-            if Ngal_tot > Ngal_max:
-                if self.do_angular:
-                    ngal_max = np.sum(Ngal_max)/self.Omega_field
-                else:
-                    ngal_max = np.sum(Ngal_max)/((self.Lbox.value).prod()*(self.Mpch**3))
-                warn("Maximum n_gal with the total number of {:}s in this slice is {:.5f}, input was {:5f}, reduce it or work with all {:}".format(self.gal_type,ngal_max,self.ngal,self.gal_type))
-            else:
-                argsort = np.argsort(self.halo_catalog['SM_HALO'])[::-1]
-                indlim = np.where(np.cumsum(inds_gal[argsort])>Ngal_tot)[0][0]
-                inds_gal[argsort[indlim:]] = False
-            
         #Get a lower nu_Obs_min to buffer high redshifts and fill corners if required (for the last zbin)
         if ifile == nfiles-1:
             if (self.do_angular == False) and (self.do_z_buffering) and \
@@ -576,7 +543,40 @@ class Survey(Lightcone):
         #get observed freqs and 
         self.nuObs_line_halo_slice(line)
         self.L_line_halo_slice(line)
-        inds = (self.nuObs_line_halo[line] >= nu_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky&inds_mass&inds_gal
+        inds = (self.nuObs_line_halo[line] >= nu_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky&inds_mass
+        
+        if self.gal_type != 'all':
+            #separate between ELGs and LRGs
+            inds_gal = np.where((np.log10(self.halo_catalog['SM_HALO'])>8)&(self.halo_catalog['SFR_HALO']>0))
+            sSFR = self.halo_catalog['SFR_HALO'][inds_gal]/self.halo_catalog['SM_HALO'][inds_gal]
+            hist,bins = np.histogram(np.log10(sSFR),bins=101)
+            hist[hist==0] = 1e-100
+            hist = np.log10(hist)
+            inds_hist = [np.argmax(hist[:50]),np.argmax(hist[50:])+50]
+            indlim = np.argmin(hist[inds_hist[0]:inds_hist[1]])+1+inds_hist[0]
+            sSFR = self.halo_catalog['SFR_HALO']/self.halo_catalog['SM_HALO']
+            if self.gal_type == 'elg':
+                inds = inds&(sSFR > 10**bins[indlim])
+            else:
+                inds = inds&(sSFR < 10**bins[indlim])
+            #Get the N brightest (e.g., higher Mstar) up to matching number density
+            #**assuming that the number density of each file is equivalent...**
+            if self.do_angular:
+                Ngal_tot = self.ngal*self.Omega_field/nfiles
+            else:
+                Ngal_tot = (self.ngal*((self.Lbox.value).prod()*(self.Mpch**3))).decompose()/nfiles
+            Ngal_max = np.sum(inds)
+            if Ngal_tot > Ngal_max:
+                if self.do_angular:
+                    ngal_max = np.sum(Ngal_max)/self.Omega_field
+                else:
+                    ngal_max = np.sum(Ngal_max)/((self.Lbox.value).prod()*(self.Mpch**3))
+                warn("Maximum n_gal with the total number of {:}s in this slice is {:.5f}, input was {:5f}, reduce it or work with all {:}".format(self.gal_type,ngal_max,self.ngal,self.gal_type))
+            else:
+                argsort = np.argsort(self.halo_catalog['SM_HALO'])[::-1]
+                indlim = np.where(np.cumsum(inds[argsort])>Ngal_tot)[0][0]
+                inds[argsort[indlim:]] = False
+                
         halos_survey[line]['RA'] = np.append(halos_survey[line]['RA'],self.halo_catalog['RA'][inds])
         halos_survey[line]['DEC'] = np.append(halos_survey[line]['DEC'],self.halo_catalog['DEC'][inds])
         halos_survey[line]['Zobs'] = np.append(halos_survey[line]['Zobs'],(self.line_nu0[self.target_line]/self.nuObs_line_halo[line][inds]).decompose()-1)
