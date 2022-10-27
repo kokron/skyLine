@@ -913,7 +913,8 @@ class Survey(Lightcone):
         p = layout.exchange(lategrid)
         #Assign weights following the layout of particles
         if self.number_count:
-            pm.paint(p, out=tempfield, mass=1, resampler=self.resampler)
+            nbar = len(p)/np.prod(pm.Nmesh)
+            pm.paint(p, out=tempfield, mass=1/nbar, resampler=self.resampler)
         else:
             m = layout.exchange(signal.value)
             pm.paint(p, out=tempfield, mass=m, resampler=self.resampler)
