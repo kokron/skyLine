@@ -112,6 +112,24 @@ class Measure(Survey):
     ##########################################
     
     @cached_measure_property
+    def sigmaN(self):
+        '''
+        Instrumental voxel/pixel (depending on do_angular) noise standard deviation
+        '''
+        tpix = self.tobs/self.Npix
+        if self.do_intensity:
+            #intensity[Jy/sr]
+            sig2 = self.Tsys**2/(self.Nfeeds*tpix)
+        else:
+            #Temperature[uK]
+            sig2 = self.Tsys**2/(self.Nfeeds*self.dnu*tpix)
+
+        if self.do_angular and self.average_angular_proj:
+            sig2 /= self.Nchan
+
+        return (sig2**0.5).to(self.unit)
+    
+    @cached_measure_property
     def Pk_2d(self):
         '''
         Computes the 2d power spectrum P(k,mu) of the map
@@ -167,10 +185,7 @@ class Measure(Survey):
         '''
         Monopole of the power spectrum
         '''
-        if self.remove_noise:
-            return (self.Pk_2d.poles['power_0'].real*self.Mpch**3).to(self.Mpch**3)*self.unit**2 - self.sigmaN**2*self.Vvox
-        else:
-            return (self.Pk_2d.poles['power_0'].real*self.Mpch**3).to(self.Mpch**3)*self.unit**2
+        return (self.Pk_2d.poles['power_0'].real*self.Mpch**3).to(self.Mpch**3)*self.unit**2 
 
     @cached_measure_property
     def Pk_2(self):
