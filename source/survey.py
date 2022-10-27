@@ -282,24 +282,6 @@ class Survey(Lightcone):
         Number of frequency channels in the observed map
         '''
         return int(np.round((self.delta_nuObs/(self.dnu)).decompose()))
-
-    @cached_survey_property
-    def sigmaN(self):
-        '''
-        Instrumental voxel/pixel (depending on do_angular) noise standard deviation
-        '''
-        tpix = self.tobs/self.Npix
-        if self.do_intensity:
-            #intensity[Jy/sr]
-            sig2 = self.Tsys**2/(self.Nfeeds*tpix)
-        else:
-            #Temperature[uK]
-            sig2 = self.Tsys**2/(self.Nfeeds*self.dnu*tpix)
-
-        if self.do_angular and self.average_angular_proj:
-            sig2 /= self.Nchan
-
-        return (sig2**0.5).to(self.unit)
         
     @cached_survey_property
     def Vsurvey(self):
