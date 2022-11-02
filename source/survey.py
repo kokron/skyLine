@@ -164,6 +164,11 @@ class Survey(Lightcone):
         #Limits for RA and DEC
         self.RAObs_min,self.RAObs_max = -self.RAObs_width/2.,self.RAObs_width/2.
         self.DECObs_min,self.DECObs_max = -self.DECObs_width/2.,self.DECObs_width/2.
+        
+        if self.RAObs_width.value == 360 and self.DECObs_width.value == 180:
+            self.full_sky = True
+        else:
+            self.full_sky = False
 
         # Check that the observed footprint is contained in the lightcone
         if self.RAObs_min < self.RA_min or self.RAObs_max > self.RA_max or \
@@ -389,18 +394,22 @@ class Survey(Lightcone):
         halos_survey = {}
 
         #halos within footprint
-        if self.do_angular:
-            #Enhance the survey selection a bit to prevent healpy masking from giving limited objects at edges
-            #Computes the mid-point of the boundaries and then expands them by 1%
-            #May fail at low nside or weird survey masks
-            inds_RA = (self.halo_catalog_all['RA'] > 0.995*self.RAObs_min.value)&(self.halo_catalog_all['RA'] < 1.005*self.RAObs_max.value)
-            inds_DEC = (self.halo_catalog_all['DEC'] > 0.995*self.DECObs_min.value)&(self.halo_catalog_all['DEC'] < 1.005*self.DECObs_min.value)
+        if self.full_sky:
+            inds_sky = np.ones(len(self.halo_catalog_all['RA']),dtype=bool)
         else:
-            #make sure Lbox is run
-            Lbox = self.Lbox
-            inds_RA = (self.halo_catalog_all['RA'] > self.RAObs_min.value)&(self.halo_catalog_all['RA'] < self.RAObs_max.value)
-            inds_DEC = (self.halo_catalog_all['DEC'] > self.DECObs_min.value)&(self.halo_catalog_all['DEC'] < self.DECObs_max.value)
-        inds_sky = inds_RA&inds_DEC
+            if self.do_angular:
+                #Enhance the survey selection a bit to prevent healpy masking from giving limited objects at edges
+                #Computes the mid-point of the boundaries and then expands them by 1%
+                #May fail at low nside or weird survey masks
+                inds_RA = (self.halo_catalog_all['RA'] > 0.995*self.RAObs_min.value)&(self.halo_catalog_all['RA'] < 1.005*self.RAObs_max.value)
+                inds_DEC = (self.halo_catalog_all['DEC'] > 0.995*self.DECObs_min.value)&(self.halo_catalog_all['DEC'] < 1.005*self.DECObs_min.value)
+            else:
+                #make sure Lbox is run
+                Lbox = self.Lbox
+                inds_RA = (self.halo_catalog_all['RA'] > self.RAObs_min.value)&(self.halo_catalog_all['RA'] < self.RAObs_max.value)
+                inds_DEC = (self.halo_catalog_all['DEC'] > self.DECObs_min.value)&(self.halo_catalog_all['DEC'] < self.DECObs_max.value)
+            inds_sky = inds_RA&inds_DEC
+            
         inds_mass = np.ones(len(inds_sky),dtype=bool)
 
         if self.Mhalo_min != 0.:
@@ -483,18 +492,23 @@ class Survey(Lightcone):
         halos_survey = {}
         
         #halos within footprint
-        if self.do_angular:
-            #Enhance the survey selection a bit to prevent healpy masking from giving limited objects at edges
-            #Computes the mid-point of the boundaries and then expands them by 1%
-            #May fail at low nside or weird survey masks
-            inds_RA = (self.halo_catalog_all['RA'] > 0.995*self.RAObs_min.value)&(self.halo_catalog_all['RA'] < 1.005*self.RAObs_max.value)
-            inds_DEC = (self.halo_catalog_all['DEC'] > 0.995*self.DECObs_min.value)&(self.halo_catalog_all['DEC'] < 1.005*self.DECObs_min.value)
+        if self.full_sky:
+            inds_sky = np.ones(len(self.halo_catalog['RA']),dtype=bool)
         else:
-            #make sure Lbox is run
-            Lbox = self.Lbox
-            inds_RA = (self.halo_catalog['RA'] > self.RAObs_min.value)&(self.halo_catalog['RA'] < self.RAObs_max.value)
-            inds_DEC = (self.halo_catalog['DEC'] > self.DECObs_min.value)&(self.halo_catalog['DEC'] < self.DECObs_max.value)
-        inds_sky = inds_RA&inds_DEC
+            if self.do_angular:
+                #Enhance the survey selection a bit to prevent healpy masking from giving limited objects at edges
+                #Computes the mid-point of the boundaries and then expands them by 1%
+                #May fail at low nside or weird survey masks
+                inds_RA = (self.halo_catalog['RA'] > 0.995*self.RAObs_min.value)&(self.halo_catalog['RA'] < 1.005*self.RAObs_max.value)
+                inds_DEC = (self.halo_catalog['DEC'] > 0.995*self.DECObs_min.value)&(self.halo_catalog['DEC'] < 1.005*self.DECObs_min.value)
+            else:
+                #make sure Lbox is run
+                Lbox = self.Lbox
+                inds_RA = (self.halo_catalog['RA'] > self.RAObs_min.value)&(self.halo_catalog['RA'] < self.RAObs_max.value)
+                inds_DEC = (self.halo_catalog['DEC'] > self.DECObs_min.value)&(self.halo_catalog['DEC'] < self.DECObs_max.value)
+            inds_sky = inds_RA&inds_DEC
+            
+            
         inds_mass = np.ones(len(inds_sky),dtype=bool)
 
         if self.Mhalo_min != 0.:
@@ -617,12 +631,12 @@ class Survey(Lightcone):
                 hp_map = hp.ud_grade(hp_map,nside_min)
 
         #Define the mask from the rectangular footprint if not full sky!
-        if ((self.RAObs_width < 180 and self.DECObs_width.value < 90)):
+        if not self.full_sky:
             #padding to avoid errors
             pad_ra,pad_dec = 0,0
-            if self.RAObs_width == 180:
+            if self.RAObs_width == 360:
                 pad_ra = 1e-5
-            if self.DECObs_width == 90:
+            if self.DECObs_width == 180:
                 pad_dec = 1e-5
             phicorner_list = np.linspace(self.RAObs_min.value+pad_ra,self.RAObs_max.value-pad_ra,10)
             thetacorner = np.pi/2-np.deg2rad(np.array([self.DECObs_min.value+pad_dec,self.DECObs_max.value-pad_dec,self.DECObs_max.value-pad_dec,self.DECObs_min.value+pad_dec]))
