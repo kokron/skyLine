@@ -594,7 +594,7 @@ class Survey(Lightcone):
                     for ifile in range(nfiles):
                         #Get the halos and which of those fall in the survey
                         self.halo_catalog_slice(fnames[ifile])
-                        self.halos_in_survey_slice(line,nfiles)
+                        self.halos_in_survey_slice(line,nfiles,ifile)
                         #add the contribution from these halos
                         hp_map = self.paint_2d(self.halos_in_survey[line],line,hp_map)
                 else:
