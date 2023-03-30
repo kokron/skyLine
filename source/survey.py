@@ -92,9 +92,6 @@ class Survey(Lightcone):
     -do_angular             Create an angular survey (healpy map)
                             (Default: False)
 
-    -average_angular_proj   Average total integrated intensity per the number of channels for
-                            angular projections (Default: True)
-
     -nside                  NSIDE used by healpy to create angular maps. (Default: 2048)
 
     -number_count           Boolean: Create a map with number density of haloes within the catalog.
@@ -132,7 +129,6 @@ class Survey(Lightcone):
                  do_angular = False,
                  do_gal_foregrounds = False,
                  foreground_model=dict(precomputed_file=None, dgrade_nside=2**10, survey_center=[0*u.deg, 90*u.deg], sky={'synchrotron' : True, 'dust' : True, 'freefree' : True,'ame' : True}),
-                 average_angular_proj = True,
                  nside = 2048,
                  number_count=False,
                  Mhalo_min=0.,
@@ -700,11 +696,8 @@ class Survey(Lightcone):
         theta, phi = rd2tp(halos['RA'], halos['DEC'])
         pixel_idxs = hp.ang2pix(self.nside, theta, phi)
 
-        if self.average_angular_proj:
-            #averaging over the number of channels
-            np.add.at(hp_map, pixel_idxs, signal.value/self.Nchan)
-        else:
-            np.add.at(hp_map, pixel_idxs, signal.value)
+        np.add.at(hp_map, pixel_idxs, signal.value)
+        
         return hp_map
    
 
@@ -803,17 +796,17 @@ class Survey(Lightcone):
                 else:
                     field += self.paint_3d(self.halos_in_survey_all[line],line,rmid,mins_obs,Vcell_true,pm)
                 
-                #turn the field to complex
-                field = field.r2c()
-                #This smoothing comes from the resolution window function.
-                if self.do_spectral_smooth or self.do_angular_smooth:
-                    #compute scales for the anisotropic filter (in Ztrue -> zmid)
-                    zmid = (self.line_nu0[line]/self.nuObs_mean).decompose().value-1
-                    sigma_par = self.do_spectral_smooth*(cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
-                    sigma_perp = self.do_angular_smooth*(self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
-                    field = field.apply(aniso_filter, kind='wavenumber')
-                #Add this contribution to the total maps
-                maps+=field
+        #turn the field to complex
+        field = field.r2c()
+        #This smoothing comes from the resolution window function.
+        if self.do_spectral_smooth or self.do_angular_smooth:
+            #compute scales for the anisotropic filter (in Ztrue -> zmid)
+            zmid = (self.line_nu0[self.target_line]/self.nuObs_mean).decompose().value-1
+            sigma_par = self.do_spectral_smooth*(cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
+            sigma_perp = self.do_angular_smooth*(self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
+            field = field.apply(aniso_filter, kind='wavenumber')
+        #Add this contribution to the total maps
+        maps+=field
 
         # add galactic foregrounds
         if self.do_gal_foregrounds:
@@ -1167,11 +1160,7 @@ class Survey(Lightcone):
                 
             hp_fg_map += galmap_rotated
             
-            if self.average_angular_proj:
-                #averaging over the number of channels
-                return hp_fg_map/self.Nchan
-            else:
-                return hp_fg_map
+            return hp_fg_map
                 
                 
     def save_map(self,name,other_map=None):
@@ -1217,11 +1206,10 @@ def aniso_filter(k, v):
     rpar = sigma_par
     newk = copy.deepcopy(k)
     
-    kk = sum(ki ** 2 for ki in newk) ** 0.5
     kk2_perp = newk[1]**2 + newk[2]**2
     
-    #sinc(x) = sin(x*pi)/(x*pi)
-    w = np.exp(-0.5*kk2_perp * rper**2)*rpar*np.sinc(newk[0]*rpar/2/np.pi)
+    #np.sinc(x) = sin(x*pi)/(x*pi); np.sinc(0) = 1
+    w = np.exp(-0.5*kk2_perp * rper**2)*np.sinc(newk[0]*rpar/2/np.pi)
 
     #w[newk[0] == 0] = 1.0
     return w*v
