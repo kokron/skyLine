@@ -169,7 +169,6 @@ class Lightcone(object):
     def halo_slices(self,zmin,zmax):  
         '''
         Gets the names and slices of each halo catalog
-        Hard coded for the 25 Mpc/h slices deep slices.
         '''
         fnames = glob(self.halo_lightcone_dir+'/*')
         Nfiles = len(fnames)
