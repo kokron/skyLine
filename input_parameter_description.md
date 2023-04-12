@@ -6,6 +6,8 @@ Here we briefly describe all the input parameters that can be set for SkyLine, s
 
 - **halo_lightcone_dir**: Path to the directory containing all files related to the halo lightcone catalog
 
+- **lightcone_slice_width**: Width (in Mpc/h) of each of the lightcone slice files in halo_lightcone_dir. Input the value without astropy units (conversion from Mpc/h to Mpc done internally). (Default: 25)
+
 - **zmin,zmax**: Minimum and maximum redshifts to read from the lightcone (default: 0,20 - limited by Universe Machine)
 
 - **RA_width**: Total RA width to read from the lightcone. Assumed to be centered in origin (Default = 2 deg)
