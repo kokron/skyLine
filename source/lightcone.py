@@ -32,6 +32,10 @@ class Lightcone(object):
 
     -halo_lightcone_dir     Path to the directory containing all files related to
                             the halo lightcone catalog
+                            
+    -lightcone_slice_width  Width (in Mpc/h) of each of the lightcone slice files in 
+                            halo_lightcone_dir. Input the value without astropy units
+                            (conversion from Mpc/h to Mpc done internally). (Default: 25)
 
     -zmin,zmax              Minimum and maximum redshifts to read from the lightcone
                             (default: 0,20 - limited by Universe Machine)
@@ -77,6 +81,7 @@ class Lightcone(object):
     '''
     def __init__(self,
                  halo_lightcone_dir = '',
+                 lightcone_slice_width = 25,
                  zmin = 0., zmax = 20.,
                  RA_width = 2.*u.deg, DEC_width = 2.*u.deg,
                  lines = dict(CO_J10 = False, CII = False, Halpha = False, Hbeta = False, Lyalpha = False, HI = False, 
@@ -173,8 +178,8 @@ class Lightcone(object):
         for ifile in range(Nfiles):
             ind[ifile] =  int(fnames[ifile].split('_')[-1].split('.')[0])
         sort_ind = np.argsort(ind)
-        #get the edge distances for each slice in Mpc (25 Mpc/h width each slice)
-        dist_edges = (np.arange(Nfiles+1)+ind[[sort_ind[0]]])*25*self.Mpch.value
+        #get the edge distances for each slice in Mpc (self.lightcone_slice_width in Mpc/h width each slice)
+        dist_edges = (np.arange(Nfiles+1)+ind[[sort_ind[0]]])*self.lightcone_slice_width*self.Mpch.value
         min_dist = self.cosmo.comoving_radial_distance(zmin)
         max_dist = self.cosmo.comoving_radial_distance(zmax)
         inds_in = np.where(np.logical_and(dist_edges[:-1] >= min_dist, dist_edges[1:] <= max_dist))[0]
