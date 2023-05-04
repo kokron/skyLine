@@ -71,6 +71,9 @@ class Survey(Lightcone):
     -do_spectral_smooth:    Boolean: apply smoothing filter to implement spectral resolution
                             limitations. (Default: False)
                             
+    -kind_spectral_smooth:  Whether the spectral smoothing is done using a top-hat filter or a 
+                            Gaussian filter ('tophat' or 'gaussian', respectively. Default: 'tophat')
+                            
     -cube_mode:             Mode to create the data rectangular cube for 3d maps (irrelevant if 
                             do_angular == True). Options are:
                                 - 'outer_cube': The lightcone is inscribed in the cube
@@ -122,6 +125,7 @@ class Survey(Lightcone):
                  spectral_supersample = 5,
                  do_angular_smooth = True,
                  do_spectral_smooth = False,
+                 kind_spectral_smooth = 'tophat',
                  cube_mode = 'inner_cube',
                  do_z_buffering = True,
                  do_downsample = True,
@@ -804,7 +808,10 @@ class Survey(Lightcone):
             zmid = (self.line_nu0[self.target_line]/self.nuObs_mean).decompose().value-1
             sigma_par = self.do_spectral_smooth*(cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
             sigma_perp = self.do_angular_smooth*(self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
-            field = field.apply(aniso_filter, kind='wavenumber')
+            if self.kind_spectral_smooth == 'tophat':
+                field = field.apply(aniso_filter_tophat_los, kind='wavenumber')
+            elif self.kind_spectral_smooth == 'gaussian':
+                field = field.apply(aniso_filter_gaussian_los, kind='wavenumber')
         #Add this contribution to the total maps
         maps+=field
 
@@ -1184,9 +1191,10 @@ class Survey(Lightcone):
 ## Auxiliary functions ##
 #########################
 
-def aniso_filter(k, v):
+def aniso_filter_tophat_los(k, v):
     '''
     Filter for k_perp and k_par modes separately.
+    Uses a top-hat filter (sinc in Fourier space) for the k_par modes
     Applies to an nbodykit mesh object as a regular filter.
 
     Uses globally defined variables:
@@ -1199,7 +1207,7 @@ def aniso_filter(k, v):
     NOTES:
     k[0] *= modifies the next iteration in the loop.
     Coordinates are fixed except for the k[1] which are
-    the coordinate that sets what slab is being altered?
+    the coordinate that sets what slab is being altered
 
     '''
     rper = sigma_perp
@@ -1215,9 +1223,10 @@ def aniso_filter(k, v):
     return w*v
 
 
-def old_aniso_filter(k, v):
+def aniso_filter_gaussian_los(k, v):
     '''
     Filter for k_perp and k_par modes separately.
+    Uses a gaussian filter for the k_par modes
     Applies to an nbodykit mesh object as a regular filter.
 
     Uses globally defined variables:
