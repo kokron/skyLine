@@ -146,8 +146,13 @@ def check_params(self,input_params, default_params):
 
         elif key == 'target_line':
             if input_value not in line_dict:
-                    raise ValueError('The line {} is currently not included in the code. Please correct or modify "lines_included" in line_models.py'.format(line))
-
+                    raise ValueError('The line {} is currently not included in the code. Please correct or modify "lines_included" in line_models.py'.format(input_value))
+                    
+        elif key == 'kind_spectral_smooth':
+            options = ['tophat','gaussian']
+            if input_value not in options:
+                raise ValueError('The kind_spectral_smooth input {} is not implemented. Please choose among {} or implement the filter in survey.py'.format(input_value,options))
+                
     return
     
 def check_updated_params(self):
