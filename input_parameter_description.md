@@ -60,6 +60,8 @@ Here we briefly describe all the input parameters that can be set for SkyLine, s
 - **do_angular_smooth**: Boolean: apply smoothing filter to implement angular resolution limitations. (Default: True)
 
 - **do_spectral_smooth**: Boolean: apply smoothing filter to implement spectral resolution limitations. (Default: False)
+
+- **kind_spectral_smooth**: Whether the spectral smoothing is done using a top-hat filter or a Gaussian filter ('tophat' or 'gaussian', respectively. Default: 'tophat')
                         
 - **cube_mode**: Mode to create the data rectangular cube for 3d maps (irrelevant if do_angular == True). Options are:
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; - 'outer_cube': The lightcone is inscribed in the cube
