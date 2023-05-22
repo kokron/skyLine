@@ -6,7 +6,7 @@ SkyLine has been presented in [arXiv:2212.08056](https://arxiv.org/abs/2212.0805
 
 SkyLine can include any spectral line sourced within collapsed dark matter halos (hence excluding pre-reionization 21cm from the IGM). Thanks to its modular structure, it is very easy to implement spectral lines and astrophysical models relating their luminosity to the astrophysical properties sof the halo.
 
-The default halo catalog used is obtained from the best fit of [UniverseMachine](https://bitbucket.org/pbehroozi/universemachine/src/main/) for the [MultiDark Planck 2](https://www.cosmosim.org/cms/simulations/mdpl2/)  simulations, although any other catalog with similar structure (see below) can be used. The default catalog corresponds to a lightcone generated with the same rotation matrices as the [MDPL2 Synthetic Sky](https://yomori.github.io/mdpl2synsky/index.html). Therefore, one of the main benefits of using the default catalog involves the possibility of cross correlating the SkyLine LIM mocks with CMB secondary anisotropies and radio galaxies.
+The default halo catalog used is obtained from the best fit of [UniverseMachine](https://bitbucket.org/pbehroozi/universemachine/src/main/) for the [MultiDark Planck 2](https://www.cosmosim.org/cms/simulations/mdpl2/)  simulations, although any other catalog with similar structure (see below) can be used. The default catalog corresponds to a lightcone generated with the same rotation matrices as the [Agora Project](https://yomori.github.io/agora/index.html). Therefore, one of the main benefits of using the default catalog involves the possibility of cross correlating the SkyLine LIM mocks with CMB secondary anisotropies and radio galaxies.
 
 ## Installation
 
