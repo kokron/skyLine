@@ -2,7 +2,7 @@
 
 SkyLine is a python code that generates mock line-intensity maps (both in 3D and 2D) in a lightcone from a halo catalog, accounting for the evolution of clustering and astrophysical properties, and observational effects such as spectral and angular resolutions, line-interlopers, galactic foregrounds, etc. Using a given astrophysical model for the luminosity of each line, SkyLine paints the signal for each emitter and generates the map, adding coherently all contributions of interest. In addition, SkyLine can generate maps with the distribution of Luminous Red Galaxies and Emitting Line Galaxies.
 
-SkyLine has been presented in [arXiv:xxxx.xxxx]() and provides a flexible playground to investigate the potential of LIM techniques and to test and improve methods to maximize the return of LIM surveys. A list including some of the works employing SkyLine can be found [here]().
+SkyLine has been presented in [arXiv:2212.08056](https://arxiv.org/abs/2212.08056) and provides a flexible playground to investigate the potential of LIM techniques and to test and improve methods to maximize the return of LIM surveys. A list including some of the works employing SkyLine can be found [here]().
 
 SkyLine can include any spectral line sourced within collapsed dark matter halos (hence excluding pre-reionization 21cm from the IGM). Thanks to its modular structure, it is very easy to implement spectral lines and astrophysical models relating their luminosity to the astrophysical properties sof the halo.
 
@@ -80,7 +80,7 @@ You can input any halo catalog of your choice, always that, to the very least, f
 
 ## Usage
 
-When used, please refer to this github page and cite [arXiv:xxxx.xxxx]()
+When used, please refer to this github page and cite [arXiv:2212.08056](https://arxiv.org/abs/2212.08056)
 
 ## Authors
 
