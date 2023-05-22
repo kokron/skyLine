@@ -10,8 +10,7 @@ import healpy as hp
 from scipy.interpolate import interp2d,interp1d
 from scipy.special import legendre
 from nbodykit.algorithms import FFTPower
-from nbodykit.source.mesh.array import ArrayMesh
-from nbodykit.source.mesh.catalog import CompensateCICShotnoise,get_compensation
+from nbodykit.source.mesh.catalog import get_compensation
 from source.survey import Survey
 from source.lightcone import Lightcone
 from source.utilities import cached_measure_property,get_default_params,check_params,CompensateNGPShotnoise
@@ -38,8 +37,7 @@ class Measure(Survey):
     -lmax:                  Maximum multipole to compute the angular power spectrum. Default=1000
 
     -remove_noise:          Remove the expected instrumental noise power spectrum (sigma_N^2*Vvox)
-                            from the observed power spectrum (and adds it to the covariance).
-                            (default: False)
+                            from the observed power spectrum. (default: False)
                             
     -angular_map            Whether the map used is angular (healpy map). (Default: False)
     
@@ -82,12 +80,13 @@ class Measure(Survey):
         self._input_params.update(self._measure_params)
         self._default_params.update(self._default_measure_params)
         # Load in compensation function from the inherited lightcone survey resampler
+        
     ##################
     ## Read the map ##
     ##################
     
     @cached_measure_property
-    def read_map(self):
+    def read_map(self,Lbox=None):
         '''
         Reads a previously saved map to avoid rerun survey everytime
         '''
@@ -99,14 +98,36 @@ class Measure(Survey):
             fitsmap = hdul[0].data
             hdul.close()
             #Transform it to a mesh field
-            mesh = ArrayMesh(fitsmap.byteswap().newbyteorder(),BoxSize=self.Lbox.value)
-            mapread = mesh.field
-            
+            if Lbox == None:
+                Lbox = self.Lbox.value
+            pm = pmesh.pm.ParticleMesh(fitsmap.shape, BoxSize=Lbox, dtype='float32', resampler=self.resampler)
+            #Make realfield object
+            mapread = pm.create(type='real')
+            mapread[...] = fitsmap
+
         return mapread
     
     ##########################################
     ## Fourier 3d power spectrum multipoles ##
     ##########################################
+    
+    @cached_measure_property
+    def sigmaN(self):
+        '''
+        Instrumental voxel/pixel (depending on do_angular) noise standard deviation
+        '''
+        tpix = self.tobs/self.Npix
+        if self.do_intensity:
+            #intensity[Jy/sr]
+            sig2 = self.Tsys**2/(self.Nfeeds*tpix)
+        else:
+            #Temperature[uK]
+            sig2 = self.Tsys**2/(self.Nfeeds*self.dnu*tpix)
+
+        if self.do_angular and self.average_angular_proj:
+            sig2 /= self.Nchan
+
+        return (sig2**0.5).to(self.unit)
     
     @cached_measure_property
     def Pk_2d(self):
@@ -132,7 +153,7 @@ class Measure(Survey):
                 else:
                     map_to_use = self.obs_3d_map
                     
-                #Compensate the field for the CIC window function we apply
+                #Compensate the field for the mass asignment window function we apply
                 map_to_use = (map_to_use.r2c().apply(self.compensation[0][1], kind=self.compensation[0][2])).c2r()
                 #Add noise
                 if self.Tsys.value > 0.:
@@ -164,10 +185,7 @@ class Measure(Survey):
         '''
         Monopole of the power spectrum
         '''
-        if self.remove_noise:
-            return (self.Pk_2d.poles['power_0'].real*self.Mpch**3).to(self.Mpch**3)*self.unit**2 - self.sigmaN**2*self.Vvox
-        else:
-            return (self.Pk_2d.poles['power_0'].real*self.Mpch**3).to(self.Mpch**3)*self.unit**2
+        return (self.Pk_2d.poles['power_0'].real*self.Mpch**3).to(self.Mpch**3)*self.unit**2 
 
     @cached_measure_property
     def Pk_2(self):

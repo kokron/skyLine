@@ -6,6 +6,7 @@ import numpy as np
 from glob import glob
 from astropy.io import fits
 from scipy.interpolate import interp2d
+from warnings import warn
 
 import os
 import camb
@@ -24,9 +25,6 @@ class Lightcone(object):
     painted LIM lightcone. It reads a lightcone catalog of halos with SFR
     quantities and paint it with as many lines as desired.
 
-    Allows to compute summary statistics as power spectrum and the VID for
-    the signal (i.e., without including observational effects).
-
     Lines included: CO
 
     INPUT PARAMETERS:
@@ -34,44 +32,58 @@ class Lightcone(object):
 
     -halo_lightcone_dir     Path to the directory containing all files related to
                             the halo lightcone catalog
+                            
+    -lightcone_slice_width  Width (in Mpc/h) of each of the lightcone slice files in 
+                            halo_lightcone_dir. Input the value without astropy units
+                            (conversion from Mpc/h to Mpc done internally). (Default: 25)
 
     -zmin,zmax              Minimum and maximum redshifts to read from the lightcone
                             (default: 0,20 - limited by Universe Machine)
 
-    -RA_min,RA_max:         minimum and maximum RA to read from the lightcone
-                            (Default = -65-60 deg)
+    -RA_width:              Total RA width to read from the lightcone.
+                            Assumed to be centered in origin
+                            (Default = 2 deg)
 
-    -DEC_min,DEC_max:       minimum and maximum DEC to read from the lightcone
-                            (Default = -1.25-1.25 deg)
+    -DEC_width:             Total DEC to read from the lightcone.
+                            Assumed to be centered in origin
+                            (Default = 2 deg)
 
     -lines                  What lines are painted in the lightcone. Dictionary with
                             bool values (default: All false).
-                            Available lines: CO, CII, H-alpha, Lyman-alpha, HI
+                            Check available lines in source/line_models.py
 
     -models                 Models for each line. Dictionary of dictionaries (first layer,
                             same components of "lines", second layer, the following
                             components: model_name, model_pars (depends on the model))
+                            Check available lines in source/line_models.py
                             (default: empty dictionary)
                             
     -LIR_pars               Dictionary with the parameters required to compute infrared
                             luminosity, needed to compute certain lines luminosities.
-                            Check the LIR function in line_models for the required parameters 
+                            Check the LIR function in source/line_models.py for the required parameters 
                             and available models
 
     -do_external_SFR        Boolean, whether to use a SFR different than Universe Machine
                             (default:False)
 
-    -external_SFR           SFR interpolation
+    -external_SFR           SFR table to interpolate or fitting function
 
     -sig_extSFR             log-scatter for an external SFR
    
     -seed                   seed for the RNG object
+    
+    -cache_catalog          Boolean, whether to read all halo files at one and keep the whole
+                            catalog in cache or read iteratively each time. (default: True).
+                            Useful when the footprint and redshift range is small, for large
+                            sky areas, this **must** be False for memory usage reasons. Can also
+                            be a good idea for interlopers to reduce memory usage, 
+                            but losing the cache functionality
     '''
     def __init__(self,
                  halo_lightcone_dir = '',
+                 lightcone_slice_width = 25,
                  zmin = 0., zmax = 20.,
-                 RA_min = -65.*u.deg,RA_max = 60.*u.deg,
-                 DEC_min = -1.25*u.deg,DEC_max = 1.25*u.deg,
+                 RA_width = 2.*u.deg, DEC_width = 2.*u.deg,
                  lines = dict(CO_J10 = False, CII = False, Halpha = False, Hbeta = False, Lyalpha = False, HI = False, 
                               CO_J21 = False, CO_J32 = False, CO_J43 = False, CO_J54 = False, CO_J65 = False, CO_J76 = False,
                               NIII = False, NII = False, OIII_88 = False, OI_63 = False, OI_145 = False, OII = False, OIII_0p5 = False),
@@ -86,7 +98,8 @@ class Lightcone(object):
                                OI_145 = dict(model_name = '', model_pars = {}), OII = dict(model_name = '', model_pars = {}), OIII_0p5 = dict(model_name = '', model_pars = {})),
                  LIR_pars = {},
                  do_external_SFR = False, external_SFR = '',sig_extSFR = 0.3, SFR_pars=dict(M0=1e-6, Ma=10**8, Mb=10**12.3, a=1.9, b=3.0, c=-1.4), 
-                 seed=None):
+                 seed=None,
+                 cache_catalog = True):
 
         # Get list of input values to check type and units
         self._lightcone_params = locals()
@@ -125,6 +138,10 @@ class Lightcone(object):
         #Line frequencies:
         self.line_nu0 = getattr(LM,'lines_included')(self)
         
+        #Limits for RA and DEC
+        self.RA_min,self.RA_max = -self.RA_width/2.,self.RA_width/2.
+        self.DEC_min,self.DEC_max = -self.DEC_width/2.,self.DEC_width/2.
+        
         self.rng = np.random.default_rng(self.seed)
 
     #########
@@ -148,11 +165,10 @@ class Lightcone(object):
     ######################
     # Catalog Management #
     ######################
-
-    @cached_read_property
-    def halo_catalog(self):
+    
+    def halo_slices(self,zmin,zmax):  
         '''
-        Reads all the files from the halo catalog and appends the slices
+        Gets the names and slices of each halo catalog
         '''
         fnames = glob(self.halo_lightcone_dir+'/*')
         Nfiles = len(fnames)
@@ -161,41 +177,103 @@ class Lightcone(object):
         for ifile in range(Nfiles):
             ind[ifile] =  int(fnames[ifile].split('_')[-1].split('.')[0])
         sort_ind = np.argsort(ind)
-        #get the edge distances for each slice in Mpc (25 Mpc/h width each slice)
-        dist_edges = (np.arange(Nfiles+1)+ind[[sort_ind[0]]])*25*self.Mpch.value
-        min_dist = self.cosmo.comoving_radial_distance(self.zmin)
-        max_dist = self.cosmo.comoving_radial_distance(self.zmax)
+        #get the edge distances for each slice in Mpc (self.lightcone_slice_width in Mpc/h width each slice)
+        dist_edges = (np.arange(Nfiles+1)+ind[[sort_ind[0]]])*self.lightcone_slice_width*self.Mpch.value
+        min_dist = self.cosmo.comoving_radial_distance(zmin)
+        max_dist = self.cosmo.comoving_radial_distance(zmax)
         inds_in = np.where(np.logical_and(dist_edges[:-1] >= min_dist, dist_edges[1:] <= max_dist))[0]
         N_in = len(inds_in)
-        #open the first one
-        fil = fits.open(fnames[sort_ind[inds_in[0]]])
-        print(fnames[sort_ind[inds_in[0]]])
+        fnames = np.array(fnames)
 
+        fnamelist = fnames[sort_ind[inds_in]]
+        
+        indlist = ind[sort_ind[inds_in]]
+        
+        return fnamelist
+    
+    @cached_read_property
+    def halo_catalog_all(self):
+        '''
+        Reads all the files from the halo catalog and appends the slices. 
+        '''
+        fnames = self.halo_slices(self.zmin,self.zmax)
+        nfiles = len(fnames)
         #Start the catalog appending everything
-        #Also add the angular cut
+        fil = fits.open(fnames[0])
         data = np.array(fil[1].data)
         inds_RA = (data['RA'] > self.RA_min.value)&(data['RA'] < self.RA_max.value)
         inds_DEC = (data['DEC'] > self.DEC_min.value)&(data['DEC'] < self.DEC_max.value)
-        bigcat = data[inds_RA&inds_DEC]
-        #Open the rest and append
-        Ngals = len(bigcat)
-        for ifile in range(1,N_in):
-            print(fnames[sort_ind[inds_in[ifile]]])
-            fil = fits.open(fnames[sort_ind[inds_in[ifile]]])
+        inds_sky = inds_RA&inds_DEC
+        bigcat = data[inds_sky]
+        #append the rest:
+        for ifile in range(1,nfiles):
+            fil = fits.open(fnames[ifile])
             data = np.array(fil[1].data)
             inds_RA = (data['RA'] > self.RA_min.value)&(data['RA'] < self.RA_max.value)
             inds_DEC = (data['DEC'] > self.DEC_min.value)&(data['DEC'] < self.DEC_max.value)
             inds_sky = inds_RA&inds_DEC
-            Ngals += len(data[inds_sky])
             bigcat = np.append(bigcat, data[inds_sky])
-            #print(bigcat.shape)
-        print("Number of gals is %d"%Ngals)
+            
+        #Return and cache the whole catalog:
         return bigcat
 
+    def halo_catalog_slice(self,fname):
+        '''
+        Reads a file from the halo catalog and return it (not cached)
+        '''
+        fil = fits.open(fname)
+        data = np.array(fil[1].data)
+        inds_RA = (data['RA'] > self.RA_min.value)&(data['RA'] < self.RA_max.value)
+        inds_DEC = (data['DEC'] > self.DEC_min.value)&(data['DEC'] < self.DEC_max.value)
+        inds_sky = inds_RA&inds_DEC
+        bigcat = data[inds_sky]
+        
+        #return *one* slice does not enter in cache
+        self.halo_catalog = bigcat
+
     @cached_lightcone_property
-    def L_line_halo(self):
+    def L_line_halo_all(self):
         '''
         Computes the halo luminosity for each of the lines of interest
+        for all halos
+        '''
+        L_line_halo = {}
+        #Get the SFR
+        if self.do_external_SFR:
+            if self.external_SFR == 'Custom_SFR' or self.external_SFR == 'Dongwoo_SFR':
+                #convert halo mass to Msun
+                Mhalo_Msun = (self.halo_catalog_all['M_HALO']*self.Msunh).to(u.Msun)
+                SFR = getattr(extSFRs,self.external_SFR)(Mhalo_Msun.value,self.halo_catalog_all['Z'], self.SFR_pars)
+                #Add scatter to the relation
+                sigma_base_e = self.sig_extSFR*2.302585
+                SFR = SFR*self.rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, SFR.shape)
+            else:
+                #convert halo mass to Msun/h
+                if self.external_SFR == 'Behroozi_SFR':
+                    Mhalo_Msun = (self.halo_catalog_all['M_HALO']*self.Msunh)
+                else:
+                    Mhalo_Msun = (self.halo_catalog_all['M_HALO']*self.Msunh).to(u.Msun)
+                SFR = getattr(extSFRs,self.external_SFR)(Mhalo_Msun.value,self.halo_catalog_all['Z'])
+                sigma_base_e = self.sig_extSFR*2.302585
+                SFR = SFR*self.rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, SFR.shape)
+        else:
+            SFR = self.halo_catalog_all['SFR_HALO']
+            
+        if len(self.LIR_pars.keys())>0:
+            LIR = getattr(LM,'LIR')(self,self.halo_catalog_all,SFR,self.LIR_pars,self.rng)
+        else:
+            LIR = 0*u.Lsun
+
+        for line in self.lines.keys():
+            if self.lines[line]:
+                L_line_halo[line] = getattr(LM,self.models[line]['model_name'])(self,self.halo_catalog_all,SFR,LIR,self.models[line]['model_pars'],self.line_nu0[line],self.rng)
+
+        return L_line_halo
+        
+    def L_line_halo_slice(self,line):
+        '''
+        Computes the halo luminosity for each of the lines of interest
+        for the halos in a slice (not cached)
         '''
         L_line_halo = {}
         nuObs_line_halo = {}
@@ -208,32 +286,6 @@ class Lightcone(object):
                 #Add scatter to the relation
                 sigma_base_e = self.sig_extSFR*2.302585
                 SFR = SFR*self.rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, SFR.shape)
-#            elif self.external_SFR == 'Behroozi_SFR':
-#                #Build interpolating table at this step.
-#                SFR_folder = os.path.dirname(os.path.realpath(__file__)).split("source")[0]+'SFR_tables/'
-#                SFR_file = 'sfr_table_Behroozi.dat'
-#
-#                try:
-#                    x = np.loadtxt(SFR_folder+SFR_file)
-#                except:
-#                    x = np.loadtxt(SFR_file)
-#                zb = np.unique(x[:,0])-1.
-#                logMb = np.unique(x[:,1])
-#                logSFRb = x[:,2].reshape(len(zb),len(logMb),order='F')
-#
-#                logSFR_interp = interp2d(logMb,zb,logSFRb,bounds_error=False,fill_value=-40.)
-#                logM = np.log10((self.halo_catalog['M_HALO']))
-#                z = self.halo_catalog['Z']
-#                if np.array(z).size>1:
-#                    SFR = np.zeros(logM.size)
-#                    for ii in range(0,logM.size):
-#                        SFR[ii] = 10.**logSFR_interp(logM[ii],z[ii])
-#                else:
-#                    SFR = 10.**logSFR_interp(logM,z)
-#
-#                sigma_base_e = self.sig_extSFR*2.302585
-#                SFR = SFR*self.rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, SFR.shape)
-
             else:
                 #convert halo mass to Msun/h
                 if self.external_SFR == 'Behroozi_SFR':
@@ -247,29 +299,38 @@ class Lightcone(object):
             SFR = self.halo_catalog['SFR_HALO']
             
         if len(self.LIR_pars.keys())>0:
-            LIR = getattr(LM,'LIR')(self,SFR,self.LIR_pars,self.rng)
+            LIR = getattr(LM,'LIR')(self,self.halo_catalog,SFR,self.LIR_pars,self.rng)
         else:
             LIR = 0*u.Lsun
 
+        #there's only one line loaded
+        L_line_halo[line] = getattr(LM,self.models[line]['model_name'])(self,self.halo_catalog,SFR,LIR,self.models[line]['model_pars'],self.line_nu0[line],self.rng)
 
-        for line in self.lines.keys():
-            if self.lines[line]:
-                L_line_halo[line] = getattr(LM,self.models[line]['model_name'])(self,SFR,LIR,self.models[line]['model_pars'],self.line_nu0[line],self.rng)
-
-        return L_line_halo
+        self.L_line_halo = L_line_halo
 
     @cached_lightcone_property
-    def nuObs_line_halo(self):
+    def nuObs_line_halo_all(self):
         '''
-        Computes the observed frequency for each halo and line
+        Computes the observed frequency for each halo and line for all the halos
         '''
         nuObs_line_halo = {}
 
         for line in self.lines.keys():
             if self.lines[line]:
-                nuObs_line_halo[line] = self.line_nu0[line]/(1+self.halo_catalog['Z']+self.halo_catalog['DZ'])
-
+                nuObs_line_halo[line] = self.line_nu0[line]/(1+self.halo_catalog_all['Z']+self.halo_catalog_all['DZ'])
+        
         return nuObs_line_halo
+        
+    def nuObs_line_halo_slice(self,line):
+        '''
+        Computes the observed frequency for each halo and line for all the halos
+        '''
+        nuObs_line_halo = {}
+
+        #there is only one line loaded
+        nuObs_line_halo[line] = self.line_nu0[line]/(1+self.halo_catalog['Z']+self.halo_catalog['DZ'])
+        
+        self.nuObs_line_halo = nuObs_line_halo
 
     ########################################################################
     # Method for updating input parameters and resetting cached properties #
@@ -282,7 +343,7 @@ class Lightcone(object):
         survey_params = list(self._default_survey_params.keys())
         measure_params = list(self._default_measure_params.keys())
         read_params = ['halo_lightcone_dir', 'zmin', 'zmax',
-                       'RA_min', 'RA_max', 'DEC_min', 'DEC_max']
+                       'RA_width', 'DEC_width']
         for name in read_params:
             lightcone_params.remove(name)
             

@@ -12,7 +12,7 @@ except:
     print('Warning, you will only be able to input parameters with a dictionary')
 
 
-def paint_lightcone(input_pars=None):
+def make_lightcone(input_pars=None):
     '''
     Base function to initiate Lightcone objects. 
     
