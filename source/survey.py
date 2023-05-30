@@ -435,7 +435,7 @@ class Survey(Lightcone):
         #Loop over lines to see what halos are within nuObs
         for line in self.lines.keys():
             if self.lines[line]:
-                halos_survey[line] = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),Ztrue=np.array([]),Lhalo=np.array([])*u.Lsun)
+                halos_survey[line] = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),Ztrue=np.array([]),Lhalo=np.array([])*u.Lsun,Mhalo=np.array([])*self.Msunh)
                     
                 inds = (self.nuObs_line_halo_all[line] >= nu_min)&(self.nuObs_line_halo_all[line] <= self.nuObs_max)&inds_sky&inds_mass
                 
@@ -477,6 +477,7 @@ class Survey(Lightcone):
                 halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog_all['Z'][inds]+self.halo_catalog_all['DZ'][inds])
                 #halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog_all['Z'][inds])
                 halos_survey[line]['Lhalo'] = np.append(halos_survey[line]['Lhalo'],self.L_line_halo_all[line][inds])
+                halos_survey[line]['Mhalo'] = np.append(halos_survey[line]['Mhalo'],self.halo_catalog_all['Mhalo'][inds]*self.Msunh)
 
         return halos_survey
 
@@ -535,7 +536,7 @@ class Survey(Lightcone):
             nu_min = self.nuObs_min
 
         #There's only halos from one line stored
-        halos_survey[line] = dict(RA=np.array([]),DEC=np.array([]),Zobs=np.array([]),Ztrue=np.array([]),Lhalo=np.array([])*u.Lsun)
+        halos_survey[line] = dict(RA=np.array([]),DEC=np.array([]),Zobs=np.array([]),Ztrue=np.array([]),Lhalo=np.array([])*u.Lsun,Mhalo=np.array([])*self.Msunh)
         #get observed freqs and 
         self.nuObs_line_halo_slice(line)
         self.L_line_halo_slice(line)
@@ -580,6 +581,7 @@ class Survey(Lightcone):
         halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog['Z'][inds]+self.halo_catalog['DZ'][inds])
         #halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog['Z'][inds])
         halos_survey[line]['Lhalo'] = np.append(halos_survey[line]['Lhalo'],self.L_line_halo[line][inds])
+        halos_survey[line]['Mhalo'] = np.append(halos_survey[line]['Mhalo'],self.halo_catalog['Mhalo'][inds]*self.Msunh)
 
         self.halos_in_survey = halos_survey
 
