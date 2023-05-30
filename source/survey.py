@@ -477,7 +477,7 @@ class Survey(Lightcone):
                 halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog_all['Z'][inds]+self.halo_catalog_all['DZ'][inds])
                 #halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog_all['Z'][inds])
                 halos_survey[line]['Lhalo'] = np.append(halos_survey[line]['Lhalo'],self.L_line_halo_all[line][inds])
-                halos_survey[line]['Mhalo'] = np.append(halos_survey[line]['Mhalo'],self.halo_catalog_all['Mhalo'][inds]*self.Msunh)
+                halos_survey[line]['Mhalo'] = np.append(halos_survey[line]['Mhalo'],self.halo_catalog_all['M_HALO'][inds]*self.Msunh)
 
         return halos_survey
 
@@ -581,7 +581,7 @@ class Survey(Lightcone):
         halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog['Z'][inds]+self.halo_catalog['DZ'][inds])
         #halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog['Z'][inds])
         halos_survey[line]['Lhalo'] = np.append(halos_survey[line]['Lhalo'],self.L_line_halo[line][inds])
-        halos_survey[line]['Mhalo'] = np.append(halos_survey[line]['Mhalo'],self.halo_catalog['Mhalo'][inds]*self.Msunh)
+        halos_survey[line]['Mhalo'] = np.append(halos_survey[line]['Mhalo'],self.halo_catalog['M_HALO'][inds]*self.Msunh)
 
         self.halos_in_survey = halos_survey
 
