@@ -119,6 +119,9 @@ def check_params(self,input_params, default_params):
             if key == 'seed':
                 if type(input_value) == int:
                     continue
+            elif key=='v_of_M':
+                if callable(input_value):
+                    pass
             elif key == 'kmax' or key == 'dk':
                 if type(input_value) == u.quantity.Quantity:
                     continue
