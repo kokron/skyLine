@@ -56,6 +56,18 @@ class Survey(Lightcone):
     -tobs:                  Observing time on a single field (Default = 6000 hr)
 
     -target_line:           Target line of the survey (Default: CO)
+    
+    -v_of_M:                Function returning the unitful FWHM of the line profile of
+                            emission given halo mass.
+                            Line widths are not applied if v_of_M is None.
+                            (default = None)
+                            (example: lambda M:50*u.km/u.s*(M/1e10/u.Msun)**(1/3.) )
+                    
+    -line_incli:            Bool, if accounting for randomly inclined line profiles.
+                            (default = True; does not matter if v_of_M = None)
+                           
+    -Nsigma_v_of_M          Number of bins in sigma_v_of_M for a coarse smoothing to model the 
+                            line broadening (default = 10; only relevalant if v_of_M != None)
 
     -angular_supersample:   Factor of supersample with respect to the survey angular resolution
                             when making the grid. Important to have good power spectrum multipole
@@ -121,6 +133,9 @@ class Survey(Lightcone):
                  beam_FWHM=4.1*u.arcmin,
                  tobs=6000*u.hr,
                  target_line = 'CO',
+                 v_of_M=None,
+                 line_incli=True,
+                 Nsigma_v_of_M=10,
                  angular_supersample = 5,
                  spectral_supersample = 5,
                  do_angular_smooth = True,
@@ -876,6 +891,7 @@ class Survey(Lightcone):
             lategrid = lategrid[filtering]
             #Compute the signal in each voxel (with Ztrue and Vcell_true)
             Zhalo = halos['Ztrue'][filtering]
+            Mhalo = halos['Mhalo'][filtering]
             Hubble = self.cosmo.hubble_parameter(Zhalo)*(u.km/u.Mpc/u.s)
             
             warn("% of emitters of {} line left out filtering = {}".format(line, 1-len(Zhalo)/len(filtering)))
@@ -889,6 +905,7 @@ class Survey(Lightcone):
                     signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*halos['Lhalo'][filtering]/Vcell_true).to(self.unit)
         else:
             Zhalo = halos['Ztrue']
+            Mhalo = halos['Mhalo']
             Hubble = self.cosmo.hubble_parameter(Zhalo)*(u.km/u.Mpc/u.s)
             if not self.number_count:
                 if self.do_intensity:
@@ -901,23 +918,92 @@ class Survey(Lightcone):
         for n in range(3):
             lategrid[:,n] -= mins_obs[n] 
             
-        #Make realfield temp object
-        tempfield = pm.create(type='real')
-        tempfield[:] = 0.
-                
-        #Set the emitter in the grid and paint using pmesh directly instead of nbk
-        layout = pm.decompose(lategrid)
-        #Exchange positions between different MPI ranks
-        p = layout.exchange(lategrid)
-        #Assign weights following the layout of particles
-        if self.number_count:
-            nbar = len(p)/np.prod(pm.Nmesh)
-            pm.paint(p, out=tempfield, mass=1/nbar, resampler=self.resampler)
-        else:
-            m = layout.exchange(signal.value)
+        #compute line width and iterate to apply different smoothings if wanted
+        if self.v_of_M is not None and self.number_count == False:
+            vvec = self.v_of_M(Mhalo.to(u.Msun)).to(u.km/u.s)
+            sigma_v_of_M = ((1+Zhalo)/Hubble*vvec/2.35482).to(u.Mpc)
+            #add the random inclination if wanted (assuming sigma_v_of_M above is for the median)
+            # the correction is *sin(i)/sin(pi/3) = sin(i)/(3**0.5/2)
+            # uniform probability on cos(i), going from [0,1]
+            if self.line_incli:
+                sigma_v_of_M *= np.sqrt(1-np.random.rand(len(vvec))**2)/(3**0.5/2) 
+            #now bin and smooth one by one. Create two tempfields and sum in one
+            store_tempfield = pm.create(type='real')
+            store_tempfield[:] = 0.
+            tempfield = pm.create(type='real')
+            #get first all the halos for which the line width is not resolved
+            #  (criterion: sigma_v_of_M < sigma_par / 2)
+            Nsigma_par = 2
+            spar = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(u.Mpc)
+            filter_sigma = sigma_v_of_M <= spar/Nsigma_par
+            
+            #Set the emitter in the grid and paint using pmesh directly instead of nbk
+            layout = pm.decompose(lategrid[filter_sigma,:])
+            #Exchange positions between different MPI ranks
+            p = layout.exchange(lategrid[filter_sigma,:])
+            #Assign weights following the layout of particles
+            m = layout.exchange(signal[filter_sigma].value)
+            pm.paint(p, out=store_tempfield, mass=m, resampler=self.resampler)
+            store_tempfield = store_tempfield.r2c()
+            
+            #now bin in sigma_v, paint and smooth for each
+            sigma_perp = 0
+            sigma_v_bin_edge = np.linspace(spar/Nsigma_par,np.max(sigma_v_of_M),self.Nsigma_v_of_M)
+            for isigma in range(self.Nsigma_v_of_M-2):
+                filter_sigma = (sigma_v_of_M > sigma_v_bin_edge[isigma]) & (sigma_v_of_M <= sigma_v_bin_edge[isigma+1])
+                tempfield[:] = 0.
+                #Set the emitter in the grid and paint using pmesh directly instead of nbk
+                layout = pm.decompose(lategrid[filter_sigma,:])
+                #Exchange positions between different MPI ranks
+                p = layout.exchange(lategrid[filter_sigma,:])
+                #Assign weights following the layout of particles
+                m = layout.exchange(signal[filter_sigma].value)
+                pm.paint(p, out=tempfield, mass=m, resampler=self.resampler)
+                #find the appropriate sigma_v_of_M for the filter
+                sigma_par = (np.average(sigma_v_of_M[filtersigma],weights=signal[filter_sigma].value).to(self.Mpch)).value
+                #apply filter
+                tempfield = tempfield.r2c()
+                tempfield = tempfield.apply(aniso_filter_gaussian_los, kind='wavenumber')
+                #add to the store_field
+                store_tempfield += tempfield
+            #apply the same for the last bin
+            filter_sigma = sigma_v_of_M > sigma_v_bin_edge[-2]
+            tempfield[:] = 0.
+            #Set the emitter in the grid and paint using pmesh directly instead of nbk
+            layout = pm.decompose(lategrid[filter_sigma,:])
+            #Exchange positions between different MPI ranks
+            p = layout.exchange(lategrid[filter_sigma,:])
+            #Assign weights following the layout of particles
+            m = layout.exchange(signal[filter_sigma].value)
             pm.paint(p, out=tempfield, mass=m, resampler=self.resampler)
+            #find the appropriate sigma_v_of_M for the filter
+            sigma_par = (np.average(sigma_v_of_M[filtersigma],weights=signal[filter_sigma].value).to(self.Mpch)).value
+            #apply filter
+            tempfield = tempfield.r2c()
+            tempfield = tempfield.apply(aniso_filter_gaussian_los, kind='wavenumber')
+            #add to the store_field
+            store_tempfield += tempfield
+            
+            return store_tempfield.c2r()
+            
+        else:
+            #Make realfield temp object
+            tempfield = pm.create(type='real')
+            tempfield[:] = 0.
                     
-        return tempfield
+            #Set the emitter in the grid and paint using pmesh directly instead of nbk
+            layout = pm.decompose(lategrid)
+            #Exchange positions between different MPI ranks
+            p = layout.exchange(lategrid)
+            #Assign weights following the layout of particles
+            if self.number_count:
+                nbar = len(p)/np.prod(pm.Nmesh)
+                pm.paint(p, out=tempfield, mass=1/nbar, resampler=self.resampler)
+            else:
+                m = layout.exchange(signal.value)
+                pm.paint(p, out=tempfield, mass=m, resampler=self.resampler)
+                    
+            return tempfield
     
     @cached_survey_property
     def noise_3d_map(self):
