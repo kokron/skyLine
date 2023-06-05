@@ -858,7 +858,7 @@ class Survey(Lightcone):
         #Convert the halo position in each volume to Cartesian coordinates (from Nbodykit)
         ra,dec,redshift = da.broadcast_arrays(halos['RA'], halos['DEC'],
                                               halos['Zobs'])
-        
+        zmid = (self.line_nu0[line]/self.nuObs_mean).decompose().value-1
         #radial distances in Mpch/h
         r = redshift.map_blocks(lambda zz: (((self.cosmo.comoving_radial_distance(zz)*u.Mpc).to(self.Mpch)).value),
                                 dtype=redshift.dtype)
@@ -920,6 +920,9 @@ class Survey(Lightcone):
             
         #compute line width and iterate to apply different smoothings if wanted
         if self.v_of_M is not None and self.number_count == False:
+            global sigma_par
+            global sigma_perp
+        
             vvec = self.v_of_M(Mhalo.to(u.Msun)).to(u.km/u.s)
             sigma_v_of_M = ((1+Zhalo)/Hubble*vvec/2.35482).to(u.Mpc)
             #add the random inclination if wanted (assuming sigma_v_of_M above is for the median)
@@ -930,7 +933,6 @@ class Survey(Lightcone):
             #now bin and smooth one by one. Create two tempfields and sum in one
             store_tempfield = pm.create(type='real')
             store_tempfield[:] = 0.
-            tempfield = pm.create(type='real')
             #get first all the halos for which the line width is not resolved
             #  (criterion: sigma_v_of_M < sigma_par / 2)
             Nsigma_par = 2
@@ -951,23 +953,26 @@ class Survey(Lightcone):
             sigma_v_bin_edge = np.linspace(spar/Nsigma_par,np.max(sigma_v_of_M),self.Nsigma_v_of_M)
             for isigma in range(self.Nsigma_v_of_M-2):
                 filter_sigma = (sigma_v_of_M > sigma_v_bin_edge[isigma]) & (sigma_v_of_M <= sigma_v_bin_edge[isigma+1])
-                tempfield[:] = 0.
-                #Set the emitter in the grid and paint using pmesh directly instead of nbk
-                layout = pm.decompose(lategrid[filter_sigma,:])
-                #Exchange positions between different MPI ranks
-                p = layout.exchange(lategrid[filter_sigma,:])
-                #Assign weights following the layout of particles
-                m = layout.exchange(signal[filter_sigma].value)
-                pm.paint(p, out=tempfield, mass=m, resampler=self.resampler)
-                #find the appropriate sigma_v_of_M for the filter
-                sigma_par = (np.average(sigma_v_of_M[filtersigma],weights=signal[filter_sigma].value).to(self.Mpch)).value
-                #apply filter
-                tempfield = tempfield.r2c()
-                tempfield = tempfield.apply(aniso_filter_gaussian_los, kind='wavenumber')
-                #add to the store_field
-                store_tempfield += tempfield
+                if np.any(filter_sigma):
+                    tempfield = pm.create(type='real')
+                    tempfield[:] = 0.
+                    #Set the emitter in the grid and paint using pmesh directly instead of nbk
+                    layout = pm.decompose(lategrid[filter_sigma,:])
+                    #Exchange positions between different MPI ranks
+                    p = layout.exchange(lategrid[filter_sigma,:])
+                    #Assign weights following the layout of particles
+                    m = layout.exchange(signal[filter_sigma].value)
+                    pm.paint(p, out=tempfield, mass=m, resampler=self.resampler)
+                    #find the appropriate sigma_v_of_M for the filter
+                    sigma_par = (np.average(sigma_v_of_M[filter_sigma],weights=signal[filter_sigma].value).to(self.Mpch)).value
+                    #apply filter
+                    tempfield = tempfield.r2c()
+                    tempfield = tempfield.apply(aniso_filter_gaussian_los, kind='wavenumber')
+                    #add to the store_field
+                    store_tempfield += tempfield
             #apply the same for the last bin
             filter_sigma = sigma_v_of_M > sigma_v_bin_edge[-2]
+            tempfield = pm.create(type='real')
             tempfield[:] = 0.
             #Set the emitter in the grid and paint using pmesh directly instead of nbk
             layout = pm.decompose(lategrid[filter_sigma,:])
@@ -977,7 +982,7 @@ class Survey(Lightcone):
             m = layout.exchange(signal[filter_sigma].value)
             pm.paint(p, out=tempfield, mass=m, resampler=self.resampler)
             #find the appropriate sigma_v_of_M for the filter
-            sigma_par = (np.average(sigma_v_of_M[filtersigma],weights=signal[filter_sigma].value).to(self.Mpch)).value
+            sigma_par = (np.average(sigma_v_of_M[filter_sigma],weights=signal[filter_sigma].value).to(self.Mpch)).value
             #apply filter
             tempfield = tempfield.r2c()
             tempfield = tempfield.apply(aniso_filter_gaussian_los, kind='wavenumber')
