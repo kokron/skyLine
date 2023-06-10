@@ -924,7 +924,7 @@ class Survey(Lightcone):
             global sigma_perp
         
             vvec = self.v_of_M(Mhalo.to(u.Msun)).to(u.km/u.s)
-            sigma_v_of_M = ((1+Zhalo)/Hubble*vvec/2.35482).to(u.Mpc)
+            sigma_v_of_M = ((1+Zhalo)/Hubble*vvec/2.35482).to(self.Mpch)
             #add the random inclination if wanted (assuming sigma_v_of_M above is for the median)
             # the correction is *sin(i)/sin(pi/3) = sin(i)/(3**0.5/2)
             # uniform probability on cos(i), going from [0,1]
@@ -935,8 +935,8 @@ class Survey(Lightcone):
             store_tempfield[:] = 0.
             #get first all the halos for which the line width is not resolved
             #  (criterion: sigma_v_of_M < sigma_par / 2)
-            Nsigma_par = 2
-            spar = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(u.Mpc)
+            Nsigma_par = 4
+            spar = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch)
             filter_sigma = sigma_v_of_M <= spar/Nsigma_par
             
             #Set the emitter in the grid and paint using pmesh directly instead of nbk
@@ -949,7 +949,7 @@ class Survey(Lightcone):
             store_tempfield = store_tempfield.r2c()
             
             #now bin in sigma_v, paint and smooth for each
-            sigma_perp = 0
+            sigma_perp = 0.
             sigma_v_bin_edge = np.linspace(spar/Nsigma_par,np.max(sigma_v_of_M),self.Nsigma_v_of_M)
             for isigma in range(self.Nsigma_v_of_M-2):
                 filter_sigma = (sigma_v_of_M > sigma_v_bin_edge[isigma]) & (sigma_v_of_M <= sigma_v_bin_edge[isigma+1])
@@ -964,7 +964,7 @@ class Survey(Lightcone):
                     m = layout.exchange(signal[filter_sigma].value)
                     pm.paint(p, out=tempfield, mass=m, resampler=self.resampler)
                     #find the appropriate sigma_v_of_M for the filter
-                    sigma_par = (np.average(sigma_v_of_M[filter_sigma],weights=signal[filter_sigma].value).to(self.Mpch)).value
+                    sigma_par = (np.average(sigma_v_of_M[filter_sigma],weights=signal[filter_sigma].value)).value
                     #apply filter
                     tempfield = tempfield.r2c()
                     tempfield = tempfield.apply(aniso_filter_gaussian_los, kind='wavenumber')
@@ -982,7 +982,7 @@ class Survey(Lightcone):
             m = layout.exchange(signal[filter_sigma].value)
             pm.paint(p, out=tempfield, mass=m, resampler=self.resampler)
             #find the appropriate sigma_v_of_M for the filter
-            sigma_par = (np.average(sigma_v_of_M[filter_sigma],weights=signal[filter_sigma].value).to(self.Mpch)).value
+            sigma_par = (np.average(sigma_v_of_M[filter_sigma],weights=signal[filter_sigma].value)).value
             #apply filter
             tempfield = tempfield.r2c()
             tempfield = tempfield.apply(aniso_filter_gaussian_los, kind='wavenumber')
