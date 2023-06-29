@@ -935,7 +935,7 @@ class Survey(Lightcone):
             store_tempfield[:] = 0.
             #get first all the halos for which the line width is not resolved
             #  (criterion: sigma_v_of_M < sigma_par / 2)
-            Nsigma_par = 4
+            Nsigma_par = 3
             spar = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch)
             filter_sigma = sigma_v_of_M <= spar/Nsigma_par
             
