@@ -301,7 +301,9 @@ class Survey(Lightcone):
         '''
         Number of frequency channels in the observed map
         '''
-        return int(np.round((self.delta_nuObs/(self.dnu)).decompose()))
+        dnu_FWHM = self.dnu/0.4247
+        #return int(np.round((self.delta_nuObs/(self.dnu)).decompose()))
+        return int(np.round((self.delta_nuObs/(dnu_FWHM)).decompose()))
         
     @cached_survey_property
     def Vsurvey(self):
@@ -730,7 +732,8 @@ class Survey(Lightcone):
         '''
         #Define the mesh divisions and the box size
         zmid = (self.line_nu0[self.target_line]/self.nuObs_mean).decompose().value-1
-        sigma_par_target = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
+        dnu_FWHM = self.dnu/0.4247
+        sigma_par_target = (cu.c*dnu_FWHM*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
         
         Lbox = self.Lbox.value
         
