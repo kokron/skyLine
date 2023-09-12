@@ -78,6 +78,14 @@ You can input any halo catalog of your choice, always that, to the very least, f
 - Each file of the catalog must correspond to slices in redshift corresponding to 25 Mpc/h in comoving distance, and have the same name with the exception of the last number, ordered in ascending order as the slice corresponds to higher redshift. 
 - If using different cosmological parameters than MDPL2, please make sure to modify them in `lightcone.py`.
 
+### Fiducial halo catalogs
+
+We make public two fiducial halo light cones that were used in [arXiv:2212.08056](https://arxiv.org/abs/2212.08056). They contain UniverseMachine outputs as a function of radial distance from the center of the light cone. SkyLine can automatically read these in sequentially in order to construct 2D and 3D maps of different line intensities (or number counts maps, as a consistency check). These halo catalogs are derived from the light cones of the Agora simulations [arXiv:2212.07420](https://arxiv.org/abs/2212.07420) and thus are fully consistent with the simulation outputs of Agora. 
+
+The first catalog may be found [here](https://app.globus.org/file-manager?origin_id=37653861-6130-4f67-85c2-fd208003820f&origin_path=%2F). It contains a 20 deg x 20 deg selection around RA x DEC, resulting in a 400 deg^2 catalog, among the largest publicly available for LIM studies. Halos can be selected out to $z\sim10$ but we caution that the SFR estimates become increasingly inaccurate at higher redshifts (as pointed out in Appendix A of the skyLine paper). 
+
+The second halo catalog is a full sky realization of the above, found [here](https://app.globus.org/file-manager?origin_id=17dae81e-dae6-43da-ba18-260952692993&origin_path=%2F).
+
 ## Usage
 
 When used, please refer to this github page and cite [arXiv:2212.08056](https://arxiv.org/abs/2212.08056)
