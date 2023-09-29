@@ -399,3 +399,28 @@ def FIR_scaling_relation(self,halos,SFR,LIR,pars,nu0,rng):
     L[inds] = Lmean*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, Lmean.shape)
 
     return L
+
+###################################
+## General double power-law L(M) ##
+###################################
+
+def LofM_DoublePower(self,halos,SFR,LIR,pars,nu0,rng):
+    '''
+    Returns the luminosity for any line according to a double power law following the parametrization
+    L/Lsun (M) = C/((M/M_\star)^A + (M/M_\star)^B) adding a scatter of sigma_L dex.
+    From e.g., Chung et al 2022 (2111.05931)
+    '''
+    try:
+        A, B, C, Mstar,sigma_L = pars['A'],pars['B'],pars['C'],pars['Mstar'],pars['sigma_L']
+    except:
+        raise ValueError('The model_pars for LofM_DoublePower are A, B, C, Mstar but {} were provided'.format(pars.keys()))
+        
+    #Get the halo masses in Msun
+    Mhalo_Msun = (halos['M_HALO']*self.Msunh).to(u.Msun)
+    ratio = Mhalo_Msun/Mstar
+
+    Lmean = C/(ratio**A + ratio**B)
+    #Add scatter to the relation
+    sigma_base_e = sigma_L*2.302585
+    L = Lmean*rng.lognormal(-0.5*sigma_base_e**2, sigma_base_e, Lmean.shape)
+    return L

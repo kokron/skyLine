@@ -122,7 +122,8 @@ class Measure(Survey):
             sig2 = self.Tsys**2/(self.Nfeeds*tpix)
         else:
             #Temperature[uK]
-            sig2 = self.Tsys**2/(self.Nfeeds*self.dnu*tpix)
+            dnu_FWHM = self.dnu/0.4247
+            sig2 = self.Tsys**2/(self.Nfeeds*dnu_FWHM*tpix)
 
         if self.do_angular and self.average_angular_proj:
             sig2 /= self.Nchan
