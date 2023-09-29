@@ -119,7 +119,14 @@ class Survey(Lightcone):
 
     -Mstar_min              Minimum stellar mass in a halo (in Msun) to be ncluded in the survey (filter for halos_in_survey). Default:0
     
-    -gal_type               Whether to select only LRGs or ELGs, or all galaxies. Options: 'all', 'lrg', 'elg'.
+    -gal_type               Whether to select only LRGs or ELGs, or all galaxies. Options: 'all', 'lrg', 'elg'. Irrelevant if number_count = False
+
+    -ngal                   Total/average number density of galaxies (in Mpc**-3 or sr**-1 depending if do_angular=False or True). 
+                            Irrelevant if number_count = False (Default: 0*u.Mpc**-3)
+
+    -dNgaldz                Redshift distribution of galaxies if number_count = True. Irrelevant otherwise. 
+                            Input a file in table to interpolate and normalize. 
+                            (Default: None)   
     
     -resampler              Set the resampling window for the 3d maps (Irrelevant if do_angular=True). (Default: 'cic')
 
@@ -157,6 +164,7 @@ class Survey(Lightcone):
                  Mstar_min=0.,
                  gal_type='all',
                  ngal=0.*u.Mpc**-3,
+                 dNgaldz = None,
                  resampler='cic', 
                  **lightcone_kwargs):
 
