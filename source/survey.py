@@ -940,23 +940,23 @@ class Survey(Lightcone):
             #  (criterion: sigma_v_of_M < sigma_par / 2)
             Nsigma_par = 2
             spar = (cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch)
-            # ~ filter_sigma = sigma_v_of_M <= spar/Nsigma_par
+            filter_sigma = sigma_v_of_M <= spar/Nsigma_par
             
-            # ~ #Set the emitter in the grid and paint using pmesh directly instead of nbk
-            # ~ layout = pm.decompose(lategrid[filter_sigma,:])
-            # ~ #Exchange positions between different MPI ranks
-            # ~ p = layout.exchange(lategrid[filter_sigma,:])
-            # ~ #Assign weights following the layout of particles
-            # ~ m = layout.exchange(signal[filter_sigma].value)
-            # ~ pm.paint(p, out=store_tempfield, mass=m, resampler=self.resampler)
-            # ~ store_tempfield = store_tempfield.r2c()
+            #Set the emitter in the grid and paint using pmesh directly instead of nbk
+            layout = pm.decompose(lategrid[filter_sigma,:])
+            #Exchange positions between different MPI ranks
+            p = layout.exchange(lategrid[filter_sigma,:])
+            #Assign weights following the layout of particles
+            m = layout.exchange(signal[filter_sigma].value)
+            pm.paint(p, out=store_tempfield, mass=m, resampler=self.resampler)
+            store_tempfield = store_tempfield.r2c()
             
             #now bin in sigma_v, paint and smooth for each
             sigma_perp = 0.
-            sigma_v_bin_edge = np.concatenate((0,np.linspace(spar/Nsigma_par,np.max(sigma_v_of_M),self.Nsigma_v_of_M-1))
+            sigma_v_bin_edge = np.linspace(spar/Nsigma_par,np.max(sigma_v_of_M),self.Nsigma_v_of_M)
             for isigma in range(self.Nsigma_v_of_M-2):
                 filter_sigma = (sigma_v_of_M > sigma_v_bin_edge[isigma]) & (sigma_v_of_M <= sigma_v_bin_edge[isigma+1])
-                if np.any(filter_sigma):
+                if filter_sigma.any() == True:
                     tempfield = pm.create(type='real')
                     tempfield[:] = 0.
                     #Set the emitter in the grid and paint using pmesh directly instead of nbk
