@@ -53,11 +53,11 @@ Here we briefly describe all the input parameters that can be set for SkyLine, s
 
 - **target_line**: Target line of the survey (Default: CO)
 
-- **v_of_M**: Function returning the unitful FWHM of the line profile of emission given halo mass. Line widths are not applied if v_of_M is None. (default = None) (example: `lambda M:50*u.km/u.s*(M/1e10/u.Msun)**(1/3.)`)
+- **v_of_M**: Function returning the unitful FWHM of the line profile of emission given halo mass. Line widths are not applied if v_of_M is None. Only relevant if do_angular = False and number_count = False. (default = None) (example: `lambda M:50*u.km/u.s*(M/1e10/u.Msun)**(1/3.)`)
                     
-- **line_incli**: Bool, if accounting for randomly inclined line profiles. (default = True; does not matter if v_of_M = None)
+- **line_incli**: Bool, if accounting for randomly inclined line profiles. (default = True; does not matter if v_of_M = None or do_angular = True or number_count = True)
 
-- **Nsigma_v_of_M**: Number of bins in sigma_v_of_M for a coarse smoothing to model the line broadening (default = 10; only relevalant if v_of_M != None)
+- **Nsigma_v_of_M**: Number of bins in sigma_v_of_M for a coarse smoothing to model the line broadening (default = 10; only relevalant if v_of_M != None and do_angular = False and number_count = False)
 
 - **angular_supersample**: Factor of supersample with respect to the survey angular resolution when making the grid. Important to have good power spectrum multipole calculations (e.g., enough mu values as function of kmax). (Default: 5)
                         
