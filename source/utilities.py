@@ -125,6 +125,9 @@ def check_params(self,input_params, default_params):
             elif key == 'kmax' or key == 'dk':
                 if type(input_value) == u.quantity.Quantity:
                     continue
+            elif key == 'dNgaldz_file':
+                if type(input_value) == str:
+                    continue
             else:
                 raise TypeError("Parameter "+key+" must be a "+
                                 str(type(default_value)))
