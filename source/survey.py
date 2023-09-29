@@ -3,6 +3,7 @@ Base module to make a LIM survey from painted lightcone
 '''
 
 import numpy as np
+from scipy.interpolate import interp1d
 import dask.array as da
 import astropy.units as u
 import astropy.constants as cu
@@ -124,9 +125,10 @@ class Survey(Lightcone):
     -ngal                   Total/average number density of galaxies (in Mpc**-3 or sr**-1 depending if do_angular=False or True). 
                             Irrelevant if number_count = False (Default: 0*u.Mpc**-3)
 
-    -dNgaldz                Redshift distribution of galaxies if number_count = True. Irrelevant otherwise. 
-                            Input a file in table to interpolate and normalize. 
-                            (Default: None)   
+    -dNgaldz_file           File containing a table with the redshift distribution of galaxies if number_count = True. Irrelevant otherwise. 
+                            Input a file in table to interpolate and normalize. Format: 2 columns with z, dNdz
+                            Applies to the all z-range given by zmin and zmax 
+                            (Default: None -> uniform distribution)   
     
     -resampler              Set the resampling window for the 3d maps (Irrelevant if do_angular=True). (Default: 'cic')
 
@@ -164,7 +166,7 @@ class Survey(Lightcone):
                  Mstar_min=0.,
                  gal_type='all',
                  ngal=0.*u.Mpc**-3,
-                 dNgaldz = None,
+                 dNgaldz_file = None,
                  resampler='cic', 
                  **lightcone_kwargs):
 
@@ -279,7 +281,7 @@ class Survey(Lightcone):
         '''
         phimax = self.RAObs_max.to(u.radian).value
         phimin = self.RAObs_min.to(u.radian).value
-        thetamax = np.pi/2 - self.DECObs_max.to(u.radian).value
+        thetamax = np.pi/2 - self.DECObs_max.to(u.radian).dNdz_tablevalue
         thetamin = np.pi/2 - self.DECObs_min.to(u.radian).value
         
         omega = (phimax - phimin) * (np.cos(thetamax) - np.cos(thetamin))*u.sr
@@ -410,6 +412,49 @@ class Survey(Lightcone):
     #########################
     ## Create the mock map ##
     #########################
+
+    @cached_survey_property
+    def gal_n_of_z(self):
+        '''
+        Reads the input dNdz table file, normalize it, interpolates it and returns 
+        a normalized n(z) spline
+        '''
+        #first consider the case in which all halos are loaded at once
+        if self.cache_catalog:
+            #grid in redshift
+            dz = 0.01
+            zarr = np.arange(self.zmin,self.zmax,dz)
+            if zarr[-1] < self.zmax:
+                np.concatenate((zarr,np.array([self.zmax])))
+            self.zarr_dndzgal = zarr
+            #dndz
+            if self.dNgaldz_file == None:
+                dndz = self.ngal/(self.zmax-self.zmin)*np.diff(zarr)
+            else:
+                #load, interpolate and normalize the dNdz
+                data = np.loadtxt(self.dNgaldz_file)
+                z_file, dndz_file = data[:,0],data[:,1]
+                dndz_spline = interp1d(z_file,dndz_file,bounds_error=False,fill_value=0.)(zarr)
+                dndz_spline *= 1/np.trapz(dndz_spline,zarr)
+                dndz = self.ngal*0.5(dndz_spline[1:]+dndz_spline[:-1])*np.diff(zarr)
+        #what if iterative loading
+        else:
+            #get the number of files loaded for the zrange
+            fnames = self.halo_slices(self.zmin,self.zmax)
+            nfiles = len(fnames)
+            dndz = 1./nfiles
+            if self.dNgaldz_file == None:
+                dndz = self.ngal/nfiles
+            else:
+                #Get the z grid from the slices
+                min_dist = self.cosmo.comoving_radial_distance(zmin)
+                dist_array = min_dist+np.arange(nfiles+1)*self.lightcone_slice_width*self.Mpch.value
+                zedge = self.cosmo.redshift_at_comoving_radial_distance(dist_array)
+                dndz_spline = interp1d(z_file,dndz_file,bounds_error=False,fill_value=0.)(zedge)
+                dndz_spline *= 1/np.trapz(dndz_spline,zedge)
+                dndz = self.ngal*0.5(dndz_spline[1:]+dndz_spline[:-1])*np.diff(zedge)
+        return dndz
+            
     
     @cached_survey_property
     def halos_in_survey_all(self):
