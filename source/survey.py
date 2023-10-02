@@ -442,14 +442,14 @@ class Survey(Lightcone):
             #get the number of files loaded for the zrange
             fnames = self.halo_slices(self.zmin,self.zmax)
             nfiles = len(fnames)
-            dndz = 1./nfiles
+            #Get the z grid from the slices
+            min_dist = self.cosmo.comoving_radial_distance(zmin)
+            dist_array = min_dist+np.arange(nfiles+1)*self.lightcone_slice_width*self.Mpch.value
+            zedge = self.cosmo.redshift_at_comoving_radial_distance(dist_array)
             if self.dNgaldz_file == None:
-                dndz = self.ngal/nfiles
+                zrange = zedge[-1]-zedge[0]
+                dndz = self.ngal/zrange*np.diff(zedge)
             else:
-                #Get the z grid from the slices
-                min_dist = self.cosmo.comoving_radial_distance(zmin)
-                dist_array = min_dist+np.arange(nfiles+1)*self.lightcone_slice_width*self.Mpch.value
-                zedge = self.cosmo.redshift_at_comoving_radial_distance(dist_array)
                 dndz_spline = interp1d(z_file,dndz_file,bounds_error=False,fill_value=0.)(zedge)
                 dndz_spline *= 1/np.trapz(dndz_spline,zedge)
                 dndz = self.ngal*0.5(dndz_spline[1:]+dndz_spline[:-1])*np.diff(zedge)
@@ -526,22 +526,27 @@ class Survey(Lightcone):
                         inds = inds&(sSFR > 10**bins[indlim])
                     else:
                         inds = inds&(sSFR < 10**bins[indlim])
-                    #Get the N brightest (e.g., higher Mstar) up to matching number density
-                    if self.do_angular:
-                        Ngal_tot = self.ngal*self.Omega_field
-                    else:
-                        Ngal_tot = (self.ngal*((self.Lbox.value).prod()*(self.Mpch**3))).decompose()
-                    Ngal_max = np.sum(inds)
-                    if Ngal_tot > Ngal_max:
+                    #Get the N brightest (e.g., higher Mstar) up to matching number density as function of redshift
+                    ngal_z = self.gal_n_of_z
+                    zarr_z = self.zarr_dndzgal
+                    for iz in range(len(zarr_z)-1):
                         if self.do_angular:
-                            ngal_max = np.sum(Ngal_max)/self.Omega_field
+                            Ngal_tot = ngal_z[iz]*self.Omega_field
                         else:
-                            ngal_max = np.sum(Ngal_max)/((self.Lbox.value).prod()*(self.Mpch**3))
-                        warn("Maximum n_gal with the total number of {:}s is {:.5f}, input was {:5f}, reduce it or work with all {:}".format(self.gal_type,ngal_max,self.ngal,self.gal_type))
-                    else:
-                        argsort = np.argsort(self.halo_catalog_all['SM_HALO'])[::-1]
-                        indlim = np.where(np.cumsum(inds[argsort])>Ngal_tot)[0][0]
-                        inds[argsort[indlim:]] = False
+                            Ngal_tot = (ngal_z[iz]*((self.Lbox.value).prod()*(self.Mpch**3))).decompose()
+                        #filter the halos in the redshift bin of interest
+                        inds_z = inds&(self.halo_catalog_all['Z'][inds]+self.halo_catalog_all['DZ'][inds]>=zarr_z[iz])&(self.halo_catalog_all['Z'][inds]+self.halo_catalog_all['DZ'][inds]<zarr_z[iz+1])
+                        Ngal_max = np.sum(inds_z)
+                        if Ngal_tot > Ngal_max:
+                            if self.do_angular:
+                                ngal_max = np.sum(Ngal_max)/self.Omega_field
+                            else:
+                                ngal_max = np.sum(Ngal_max)/((self.Lbox.value).prod()*(self.Mpch**3))
+                            warn("Maximum n_gal with the total number of {:}s is {:.5f}, input was {:5f}, reduce it or work with all {:}".format(self.gal_type,ngal_max,self.ngal,self.gal_type))
+                        else:
+                            argsort = np.argsort(self.halo_catalog_all['SM_HALO'])[::-1]
+                            indlim = np.where(np.cumsum(inds_z[argsort])>Ngal_tot)[0][0]
+                            inds[argsort[indlim:]] = False
                 
                 halos_survey[line]['RA'] = np.append(halos_survey[line]['RA'],self.halo_catalog_all['RA'][inds])
                 halos_survey[line]['DEC'] = np.append(halos_survey[line]['DEC'],self.halo_catalog_all['DEC'][inds])
@@ -615,7 +620,7 @@ class Survey(Lightcone):
         self.L_line_halo_slice(line)
         inds = (self.nuObs_line_halo[line] >= nu_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky&inds_mass
         
-        if self.gal_type != 'all':
+        if self.gal_type != 'all' and self.number_count:
             #separate between ELGs and LRGs
             inds_gal = np.where((np.log10(self.halo_catalog['SM_HALO'])>8)&(self.halo_catalog['SFR_HALO']>0))
             sSFR = self.halo_catalog['SFR_HALO'][inds_gal]/self.halo_catalog['SM_HALO'][inds_gal]
@@ -629,12 +634,11 @@ class Survey(Lightcone):
                 inds = inds&(sSFR > 10**bins[indlim])
             else:
                 inds = inds&(sSFR < 10**bins[indlim])
-            #Get the N brightest (e.g., higher Mstar) up to matching number density
-            #**assuming that the number density of each file is equivalent...**
+            #Get the N brightest (e.g., higher Mstar) up to matching number density as function of redshift
             if self.do_angular:
-                Ngal_tot = self.ngal*self.Omega_field/nfiles
+                Ngal_tot = self.gal_n_of_z[ifile]*self.Omega_field/nfiles
             else:
-                Ngal_tot = (self.ngal*((self.Lbox.value).prod()*(self.Mpch**3))).decompose()/nfiles
+                Ngal_tot = (self.gal_n_of_z[ifile]*((self.Lbox.value).prod()*(self.Mpch**3))).decompose()/nfiles
             Ngal_max = np.sum(inds)
             if Ngal_tot > Ngal_max:
                 if self.do_angular:
