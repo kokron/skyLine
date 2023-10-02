@@ -535,7 +535,7 @@ class Survey(Lightcone):
                         else:
                             Ngal_tot = (ngal_z[iz]*((self.Lbox.value).prod()*(self.Mpch**3))).decompose()
                         #filter the halos in the redshift bin of interest
-                        inds_z = inds&(self.halo_catalog_all['Z'][inds]+self.halo_catalog_all['DZ'][inds]>=zarr_z[iz])&(self.halo_catalog_all['Z'][inds]+self.halo_catalog_all['DZ'][inds]<zarr_z[iz+1])
+                        inds_z = inds&(self.halo_catalog_all['Z']+self.halo_catalog_all['DZ']>=zarr_z[iz])&(self.halo_catalog_all['Z']+self.halo_catalog_all['DZ']<zarr_z[iz+1])
                         Ngal_max = np.sum(inds_z)
                         if Ngal_tot > Ngal_max:
                             if self.do_angular:
