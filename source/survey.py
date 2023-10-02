@@ -122,13 +122,9 @@ class Survey(Lightcone):
     
     -gal_type               Whether to select only LRGs or ELGs, or all galaxies. Options: 'all', 'lrg', 'elg'. Irrelevant if number_count = False
 
-    -ngal                   Total/average number density of galaxies (in Mpc**-3 or sr**-1 depending if do_angular=False or True). 
-                            Irrelevant if number_count = False (Default: 0*u.Mpc**-3)
-
-    -dNgaldz_file           File containing a table with the redshift distribution of galaxies if number_count = True. Irrelevant otherwise. 
+    -dngaldz_file           File containing a table with the redshift distribution of galaxy number density if number_count = True. Irrelevant otherwise. 
                             Input a file in table to interpolate and normalize. Format: 2 columns with z, dNdz
-                            Applies to the all z-range given by zmin and zmax 
-                            (Default: None -> uniform distribution)   
+                            (Default: None -> must have one! Will be expected to be in Mpc**-3 or sr**-1 if angular map)   
     
     -resampler              Set the resampling window for the 3d maps (Irrelevant if do_angular=True). (Default: 'cic')
 
@@ -165,7 +161,6 @@ class Survey(Lightcone):
                  Mhalo_min=0.,
                  Mstar_min=0.,
                  gal_type='all',
-                 ngal=0.*u.Mpc**-3,
                  dNgaldz_file = None,
                  resampler='cic', 
                  **lightcone_kwargs):
@@ -416,27 +411,19 @@ class Survey(Lightcone):
     @cached_survey_property
     def gal_n_of_z(self):
         '''
-        Reads the input dNdz table file, normalize it, interpolates it and returns 
-        a normalized n(z) spline
+        Reads the input dNdz table file for number counts
+        if angular, we have dNdz and must be normalized, if not, we have n(z) 
         '''
+        #load the data
+        data = np.loadtxt(self.dNgaldz_file)
+        z_file, dndz_file = data[:,0],data[:,1]
         #first consider the case in which all halos are loaded at once
         if self.cache_catalog:
             #grid in redshift
             dz = 0.01
             zarr = np.arange(self.zmin,self.zmax,dz)
             if zarr[-1] < self.zmax:
-                np.concatenate((zarr,np.array([self.zmax])))
-            self.zarr_dndzgal = zarr
-            #dndz
-            if self.dNgaldz_file == None:
-                dndz = self.ngal/(self.zmax-self.zmin)*np.diff(zarr)
-            else:
-                #load, interpolate and normalize the dNdz
-                data = np.loadtxt(self.dNgaldz_file)
-                z_file, dndz_file = data[:,0],data[:,1]
-                dndz_spline = interp1d(z_file,dndz_file,bounds_error=False,fill_value=0.)(zarr)
-                dndz_spline *= 1/np.trapz(dndz_spline,zarr)
-                dndz = self.ngal*0.5(dndz_spline[1:]+dndz_spline[:-1])*np.diff(zarr)
+                zarr = np.concatenate((zarr,np.array([self.zmax])))
         #what if iterative loading
         else:
             #get the number of files loaded for the zrange
@@ -445,14 +432,16 @@ class Survey(Lightcone):
             #Get the z grid from the slices
             min_dist = self.cosmo.comoving_radial_distance(zmin)
             dist_array = min_dist+np.arange(nfiles+1)*self.lightcone_slice_width*self.Mpch.value
-            zedge = self.cosmo.redshift_at_comoving_radial_distance(dist_array)
-            if self.dNgaldz_file == None:
-                zrange = zedge[-1]-zedge[0]
-                dndz = self.ngal/zrange*np.diff(zedge)
-            else:
-                dndz_spline = interp1d(z_file,dndz_file,bounds_error=False,fill_value=0.)(zedge)
-                dndz_spline *= 1/np.trapz(dndz_spline,zedge)
-                dndz = self.ngal*0.5(dndz_spline[1:]+dndz_spline[:-1])*np.diff(zedge)
+            zarr = self.cosmo.redshift_at_comoving_radial_distance(dist_array)
+        #Get the values for the give z binning
+        self.zarr_dndzgal = zarr
+        if self.do_angular:
+            ntot = np.trapz(dndz_file,z_file)*u.sr**-1
+            dndz_spline = interp1d(z_file,dndz_file/ntot.value,bounds_error=False,fill_value=0.)(zarr)
+            dndz = ntot*0.5(dndz_spline[1:]+dndz_spline[:-1])*np.diff(zarr)
+        else:
+            dndz_spline = interp1d(z_file,dndz_file,bounds_error=False,fill_value=0.)(zarr)
+            dndz = 0.5*(dndz_spline[1:]+dndz_spline[:-1])*u.Mpc**-3
         return dndz
             
     
@@ -533,7 +522,9 @@ class Survey(Lightcone):
                         if self.do_angular:
                             Ngal_tot = ngal_z[iz]*self.Omega_field
                         else:
-                            Ngal_tot = (ngal_z[iz]*((self.Lbox.value).prod()*(self.Mpch**3))).decompose()
+                            zvec_slice = np.array([zarr_z[iz],zarr_z[iz+1]])
+                            Vslice = self.raside*self.decside*self.Mpch**2*((self.cosmo.comoving_radial_distance(zvec_slice)*u.Mpc).to(self.Mpch))
+                            Ngal_tot = (ngal_z[iz]*Vslice).decompose()
                         #filter the halos in the redshift bin of interest
                         inds_z = inds&(self.halo_catalog_all['Z']+self.halo_catalog_all['DZ']>=zarr_z[iz])&(self.halo_catalog_all['Z']+self.halo_catalog_all['DZ']<zarr_z[iz+1])
                         Ngal_max = np.sum(inds_z)
@@ -635,10 +626,14 @@ class Survey(Lightcone):
             else:
                 inds = inds&(sSFR < 10**bins[indlim])
             #Get the N brightest (e.g., higher Mstar) up to matching number density as function of redshift
+            ngal_z = self.gal_n_of_z
+            zarr_z = self.zarr_dndzgal
             if self.do_angular:
-                Ngal_tot = self.gal_n_of_z[ifile]*self.Omega_field/nfiles
+                Ngal_tot = ngal_z[ifile]*self.Omega_field
             else:
-                Ngal_tot = (self.gal_n_of_z[ifile]*((self.Lbox.value).prod()*(self.Mpch**3))).decompose()/nfiles
+                zvec_slice = np.array([zarr_z[ifile],zarr_z[ifile+1]])
+                Vslice = self.raside*self.decside*self.Mpch**2*((self.cosmo.comoving_radial_distance(zvec_slice)*u.Mpc).to(self.Mpch))
+                Ngal_tot = (ngal_z[ifile]*Vslice).decompose()
             Ngal_max = np.sum(inds)
             if Ngal_tot > Ngal_max:
                 if self.do_angular:
