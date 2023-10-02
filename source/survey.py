@@ -281,7 +281,7 @@ class Survey(Lightcone):
         '''
         phimax = self.RAObs_max.to(u.radian).value
         phimin = self.RAObs_min.to(u.radian).value
-        thetamax = np.pi/2 - self.DECObs_max.to(u.radian).dNdz_tablevalue
+        thetamax = np.pi/2 - self.DECObs_max.to(u.radian).value
         thetamin = np.pi/2 - self.DECObs_min.to(u.radian).value
         
         omega = (phimax - phimin) * (np.cos(thetamax) - np.cos(thetamin))*u.sr
