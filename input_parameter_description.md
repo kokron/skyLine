@@ -84,17 +84,17 @@ Here we briefly describe all the input parameters that can be set for SkyLine, s
 
 - **do_angular**: Create an angular survey (healpy map) (Default: False)
 
-- **average_angular_proj**: Average total integrated intensity per the number of channels for angular projections (Default: True)
-
 - **nside**: NSIDE used by healpy to create angular maps. (Default: 2048)
 
-- **number_count**: Boolean: Create a map with number density of haloes within the catalog. It allows to use all galaxies or select between lrgs and elgs (defaul: False)
+- **mode**: String: what kind of map you want to simulate. Options: 'lim' and 'number_count' (for galaxy density). Default: 'lim'. If mode = number_count, it allows to use all galaxies or select between lrgs, elgs, and all
 
 - **Mhalo_min**: Minimum halo mass (in Msun/h) to be included in the survey (filter for halos_in_survey). Default:0
 
 - **Mstar_min**: Minimum stellar mass in a halo (in Msun) to be ncluded in the survey (filter for halos_in_survey). Default:0
 
-- **gal_type**: Whether to select only LRGs or ELGs, or all galaxies. Options: 'all', 'lrg', 'elg'.
+- **gal_type**: Whether to select only LRGs or ELGs, or all galaxies. Options: Options: 'all', 'lrg', 'elg'. Irrelevant if mode != number_count
+
+- **dngaldz_file**: File containing a table with the redshift distribution of galaxy number density if number_count = True. Irrelevant otherwise. Input a file in table to interpolate and normalize. Format: 2 columns with z, dNdz    (Default: None -> must have one! Will be expected to be in Mpc**-3 or sr**-1 if angular map)   
 
 - **resampler**: Set the resampling window for the 3d maps (Irrelevant if do_angular=True). (Default: 'cic')
 
