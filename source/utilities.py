@@ -128,6 +128,9 @@ def check_params(self,input_params, default_params):
             elif key == 'dNgaldz_file':
                 if type(input_value) == str:
                     continue
+            elif key == 'dnu':
+                if type(input_value) == float:
+                    continue
             else:
                 raise TypeError("Parameter "+key+" must be a "+
                                 str(type(default_value)))

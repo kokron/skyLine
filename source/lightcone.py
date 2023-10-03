@@ -38,7 +38,8 @@ class Lightcone(object):
                             (conversion from Mpc/h to Mpc done internally). (Default: 25)
 
     -zmin,zmax              Minimum and maximum redshifts to read from the lightcone
-                            (default: 0,20 - limited by Universe Machine)
+                            (default: 0,20 - limited by Universe Machine). For number_count
+                            it is actually the maximum and minimum redshift of the survey
 
     -RA_width:              Total RA width to read from the lightcone.
                             Assumed to be centered in origin
