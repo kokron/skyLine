@@ -42,6 +42,7 @@ def LIR(self,halos,SFR,pars,rng):
             -K_IR, K_UV:    The coefficients to relate SFR to L_IR and L_UV
     '''
     #avoid SFR=0 issues
+    LIR = np.zeros_like(SFR)
     inds = np.where(SFR>0)[0]
 
     #Try to get IRX:
@@ -70,7 +71,7 @@ def LIR(self,halos,SFR,pars,rng):
 
         K_IR,K_UV = pars['K_IR'],pars['K_UV']
 
-    LIR = SFR[inds]/(K_IR + K_UV/IRX)*u.Lsun
+    LIR[inds] = SFR[inds]/(K_IR + K_UV/IRX)*u.Lsun
 
     return LIR
     
@@ -91,6 +92,7 @@ def LIR_and_LUV(self,halos,SFR,pars,rng):
             -K_IR, K_UV:    The coefficients to relate SFR to L_IR and L_UV
     '''
     #avoid SFR=0 issues
+    LIR = np.zeros_like(SFR)
     inds = np.where(SFR>0)[0]
 
     #Try to get IRX:
@@ -117,7 +119,7 @@ def LIR_and_LUV(self,halos,SFR,pars,rng):
 
         K_IR,K_UV = pars['K_IR'],pars['K_UV']
 
-    LIR = SFR[inds]/(K_IR + K_UV/IRX)*u.Lsun
+    LIR[inds] = SFR[inds]/(K_IR + K_UV/IRX)*u.Lsun
 
     return LIR,LIR/IRX
 
