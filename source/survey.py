@@ -13,6 +13,7 @@ import pmesh
 import healpy as hp
 from source.lightcone import Lightcone
 from source.utilities import cached_survey_property,get_default_params,check_params
+import source.line_models as LM
 from warnings import warn
 
 try:
@@ -45,6 +46,9 @@ class Survey(Lightcone):
     -Nfeeds:                Total number of feeds (detector*antennas*polarizations) (Default = 19)
 
     -nuObs_min,nuObs_max:   minimum and maximum ends of the frequency band (Default = 26-34 GHz)
+
+    -NnuObs:                Number of bins for imaging bands and CIB. Irrelevant if not CIB 
+                            and angular map (Default = 32)
 
     -RAObs_width:           Total RA width observed. Assumed centered at 0 (Default = 2 deg)
 
@@ -115,8 +119,8 @@ class Survey(Lightcone):
 
     -nside                  NSIDE used by healpy to create angular maps. (Default: 2048)
 
-    -mode                   String: what kind of map you want to simulate. Options: 'lim' and 'number_count'
-                            (for galaxy density). Default: 'lim'. If mode = number_count,
+    -mode                   String: what kind of map you want to simulate. Options: 'lim', 'number_count', 
+                            (for galaxy density) and 'cib' for only CIB. Default: 'lim'. If mode = number_count,
                             it allows to use all galaxies or select between lrgs, elgs, and all
 
     -Mhalo_min              Minimum halo mass (in Msun/h) to be included in the survey (filter for halos_in_survey). Default:0
@@ -126,9 +130,13 @@ class Survey(Lightcone):
     -gal_type               Whether to select only LRGs or ELGs, or all galaxies. Options: 'all', 'lrg', 'elg'. Irrelevant if number_count = False
 
     -dngaldz_file           File containing a table with the redshift distribution of galaxy number density if number_count = True. Irrelevant otherwise. 
-                            Input a file in table to interpolate and normalize. Format: 2 columns with z, dNdz
+                            Input a file with a table to interpolate and normalize. Format: 2 columns with z, dNdz
                             (Default: None -> must have one! Will be expected to be in Mpc**-3 or sr**-1 if angular map)   
-    
+  
+    -spectral_transmission_file: File containing a table with the spectral transmision function for the imaging 
+                            band of interest. Only relevant if mode = 'cib'. Input a file with a table to interpolate.
+                            Format: 2 columns [freq in GHz, tau_nu0] (Default: None -> Must have one if mode == 'cib'!)
+
     -resampler              Set the resampling window for the 3d maps (Irrelevant if do_angular=True). (Default: 'cic')
 
     '''
@@ -138,6 +146,7 @@ class Survey(Lightcone):
                  Nfeeds=19,
                  nuObs_min = 26.*u.GHz,
                  nuObs_max = 34.*u.GHz,
+                 NnuObs = 32,
                  RAObs_width = 2.*u.deg,
                  DECObs_width = 2.*u.deg,
                  dnu=15.6*u.MHz,
@@ -165,6 +174,7 @@ class Survey(Lightcone):
                  Mstar_min=0.,
                  gal_type='all',
                  dNgaldz_file = None,
+                 spectral_transmission_file = None,
                  resampler='cic', 
                  **lightcone_kwargs):
 
@@ -202,11 +212,12 @@ class Survey(Lightcone):
             warn('Please, your observed limits RA_Obs=[{},{}], DEC_Obs=[{},{}] must be within the lightcone limits RA=[{},{}], DEC=[{},{}].'.format(self.RAObs_min,self.RAObs_max,self.DECObs_min,self.DECObs_max,self.RA_min,self.RA_max,self.DEC_min,self.DEC_max))
 
         # Check that the bandwidth and lines used are included in the lightcone limits
-        for line in self.lines.keys():
-            if self.lines[line]:
-                zlims = (self.line_nu0[line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
-                if zlims[0] <= self.zmin or zlims [1] >= self.zmax:
-                    warn('The line {} on the bandwidth [{:.2f},{:.2f}] corresponds to z range [{:.2f},{:.2f}], while the included redshifts in the lightcone are within [{:.2f},{:.2f}]. Please remove the line, increase the zmin,zmax range or reduce the bandwith.'.format(line,self.nuObs_max,self.nuObs_min,zlims[0],zlims[1],self.zmin,self.zmax))
+        if self.mode == 'lim':
+            for line in self.lines.keys():
+                if self.lines[line]:
+                    zlims = (self.line_nu0[line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
+                    if zlims[0] <= self.zmin or zlims [1] >= self.zmax:
+                        warn('The line {} on the bandwidth [{:.2f},{:.2f}] corresponds to z range [{:.2f},{:.2f}], while the included redshifts in the lightcone are within [{:.2f},{:.2f}]. Please remove the line, increase the zmin,zmax range or reduce the bandwith.'.format(line,self.nuObs_max,self.nuObs_min,zlims[0],zlims[1],self.zmin,self.zmax))
 
         #Check healpy pixel size just in case:
         if self.do_angular:
@@ -219,8 +230,8 @@ class Survey(Lightcone):
         if self.cube_mode not in self.cube_mode_options:
             raise ValueError('The cube_mode choice must be one of {}'.format(self.cube_mode_options))
             
-        if self.mode not in ['lim','number_count']:
-            raise ValueError('mode input must be one of {}'.format(['lim','number_count']))
+        if self.mode not in ['lim','number_count','cib']:
+            raise ValueError('mode input must be one of {}'.format(['lim','number_count','cib']))
         
         if self.mode == 'number_count':
             if self.gal_type not in ['all','lrg','elg']:
@@ -230,6 +241,10 @@ class Survey(Lightcone):
             if type(self.dnu) == u.quantity.Quantity:
                 raise ValueError('If mode == number_count, dnu must be dimensionless (indicating the width in redshfit of the 3d cell)')
 
+        if self.mode == 'cib':
+            if self.spectral_transmission_file == None:
+                raise ValueError('Please input a file with the spectral transmission')
+        
         if NoPySM and self.do_gal_foregrounds==True:
             raise ValueError('PySM must be installed to model galactic foregrounds')
 
@@ -486,7 +501,9 @@ class Survey(Lightcone):
         if self.mode == 'lim':
             return self.halos_survey_all_lim(inds_sky&inds_mass)     
         elif self.mode == 'number_count':
-            return self.halos_survey_all_number_count(inds_sky&inds_mass)  
+            return self.halos_survey_all_number_count(inds_sky&inds_mass) 
+        elif self.mode == 'cib':
+            return self.halos_survey_all_cib(inds_sky&inds_mass) 
         
     def halos_survey_all_lim(self,inds_pre):
         '''
@@ -580,13 +597,28 @@ class Survey(Lightcone):
             halos_survey['Zobs'] = np.append(halos_survey['Zobs'],self.halo_catalog_all['Z'][inds_z]+self.halo_catalog_all['DZ'][inds_z])
             
         return halos_survey
+    
+    def halos_survey_all_cib(self,inds):
+        '''
+        Filters all the halo catalog for CIB
+        '''
+        #empty catalog
+        halos_survey = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),SFR=np.array([]),Mstar=np.array([]))
+        
+        halos_survey['RA'] = np.append(halos_survey['RA'],self.halo_catalog_all['RA'])
+        halos_survey['DEC'] = np.append(halos_survey['DEC'],self.halo_catalog_all['DEC'])
+        halos_survey['Zobs'] = np.append(halos_survey['Zobs'],self.halo_catalog_all['Z']+self.halo_catalog_all['DZ'])
+        halos_survey['SFR'] = np.append(halos_survey['SFR'],self.halo_catalog_all['SFR_HALO'])
+        halos_survey['Mstar'] = np.append(halos_survey['Mstar'],self.halo_catalog_all['SM_HALO'])
+            
+        return halos_survey
 
     def halos_in_survey_slice_lim(self,line,nfiles,ifile):
         '''
         Filters the halo catalog and only takes those that get into the lim survey and 
         lie in the observed RA - DEC ranges
         
-        for a single slice, not cached
+        for a single slice, not cached, for LIM
         '''
         #halos within footprint
         if self.full_sky:
@@ -655,7 +687,7 @@ class Survey(Lightcone):
         Filters the halo catalog and only takes those that get into the galaxy survey and 
         lie in the observed RA - DEC ranges
         
-        for a single slice, not cached
+        for a single slice, not cached, for number coutns
         '''
         #halos within footprint
         if self.full_sky:
@@ -726,6 +758,50 @@ class Survey(Lightcone):
         
         self.halos_in_survey = halos_survey
         return
+    
+    def halos_in_survey_slice_cib(self,ifile):
+        '''
+        Filters the halo catalog and only takes those that get into the galaxy survey and 
+        lie in the observed RA - DEC ranges
+        
+        for a single slice, not cached, for CIB
+        '''
+        #halos within footprint
+        if self.full_sky:
+            inds_sky = np.ones(len(self.halo_catalog['RA']),dtype=bool)
+        else:
+            if self.do_angular:
+                #Enhance the survey selection a bit to prevent healpy masking from giving limited objects at edges
+                #Computes the mid-point of the boundaries and then expands them by 1%
+                #May fail at low nside or weird survey masks
+                inds_RA = (self.halo_catalog['RA'] > 0.995*self.RAObs_min.value)&(self.halo_catalog['RA'] < 1.005*self.RAObs_max.value)
+                inds_DEC = (self.halo_catalog['DEC'] > 0.995*self.DECObs_min.value)&(self.halo_catalog['DEC'] < 1.005*self.DECObs_max.value)
+            else:
+                #make sure Lbox is run
+                Lbox = self.Lbox
+                inds_RA = (self.halo_catalog['RA'] > self.RAObs_min.value)&(self.halo_catalog['RA'] < self.RAObs_max.value)
+                inds_DEC = (self.halo_catalog['DEC'] > self.DECObs_min.value)&(self.halo_catalog['DEC'] < self.DECObs_max.value)
+            inds_sky = inds_RA&inds_DEC
+            
+        inds_mass = np.ones(len(inds_sky),dtype=bool)
+
+        if self.Mhalo_min != 0.:
+            inds_mass = inds_mass&(self.halo_catalog['M_HALO']>=self.Mhalo_min)
+        if self.Mstar_min != 0.:
+            inds_mass = inds_mass&(self.halo_catalog['SM_HALO']>=self.Mstar_min)
+
+        inds = inds_sky&inds_mass
+        halos_survey = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),
+                            SFR=np.array([]),Mstar=np.array([]))
+
+        halos_survey['RA'] = np.append(halos_survey['RA'],self.halo_catalog['RA'][inds])
+        halos_survey['DEC'] = np.append(halos_survey['DEC'],self.halo_catalog['DEC'][inds])
+        halos_survey['Zobs'] = np.append(halos_survey['Zobs'],self.halo_catalog['Z'][inds]+self.halo_catalog['DZ'][inds])
+        halos_survey['SFR'] = np.append(halos_survey['SFR'],self.halo_catalog['SFR_HALO'][inds])
+        halos_survey['Mstar'] = np.append(halos_survey['Mstar'],self.halo_catalog['SM_HALO'][inds])
+
+        self.halos_in_survey = halos_survey
+        return
 
     @cached_survey_property
     def obs_2d_map(self):
@@ -777,6 +853,20 @@ class Survey(Lightcone):
             else:
                 hp_map = self.paint_2d_number_count(self.halos_in_survey_all,hp_map)
 
+        elif self.mode == 'cib':
+            if not self.cache_catalog:
+                #add some buffer to be sure
+                fnames = self.halo_slices(self.zmin,self.zmax)
+                nfiles = len(fnames)          
+                for ifile in range(nfiles):
+                    #Get the halos and which of those fall in the survey
+                    self.halo_catalog_slice(fnames[ifile])
+                    self.halos_in_survey_slice_cib(ifile)
+                    #add the contribution from these halos
+                    hp_map = self.paint_2d_cib(self.halos_in_survey,hp_map)
+            else:
+                hp_map = self.paint_2d_cib(self.halos_in_survey_all,hp_map)
+        
         #smooth for angular resolution
         if self.do_angular_smooth:
             theta_beam = self.beam_FWHM.to(u.rad)
@@ -808,7 +898,7 @@ class Survey(Lightcone):
                 except:
                     pix_within = np.append(pix_within, [])
             self.pix_within = pix_within
-            mask = np.ones(hp.nside2npix(self.nside),np.bool)
+            mask = np.ones(hp.nside2npix(self.nside),dtype=bool)
             mask[pix_within.astype(int)] = 0
             hp_map = hp.ma(hp_map)
             hp_map.mask = mask
@@ -869,7 +959,37 @@ class Survey(Lightcone):
         np.add.at(hp_map, pixel_idxs, signal.value)
         
         return hp_map
-   
+    
+    def paint_2d_cib(self,halos,hp_map):
+        '''
+        Adds the contribution of CIB of a slice to the 2d healpy map
+        '''
+        #Get luminosity per halo for the halos of interest. Only works if
+        #   SFR and Mstar from catalog
+        LIR = getattr(LM,'LIR')(self,halos['SFR'],halos['Mstar'],self.LIR_pars,self.rng)
+        L_CIB_band = getattr(LM,'CIB_band_Agora')(self,halos,LIR,self.CIB_pars,self.rng)
+
+        #Get the flux S_nu = L_nu(1+z)/(4pi*chi^2*(1+z))
+        chi = self.cosmo.comoving_radial_distance(halos['Zobs'])*u.Mpc
+        signal = L_CIB_band/(4*np.pi*chi**2*(1+halos['Zobs']))
+
+        #WE NEED TO TURN THIS INTO THE CORRECT UNITS!!!
+        #CIB signal in the band per halo
+        #if self.do_intensity:
+        #    #intensity[Jy/sr]
+        #    signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*halos['Lhalo']/Vcell_true).to(self.unit)
+        #else:
+        #    #Temperature[uK]
+        #    signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*halos['Lhalo']/Vcell_true).to(self.unit)
+        #number counts [empty unit]
+            
+        #Paste the signals to the map
+        theta, phi = rd2tp(halos['RA'], halos['DEC'])
+        pixel_idxs = hp.ang2pix(self.nside, theta, phi)
+
+        np.add.at(hp_map, pixel_idxs, signal.value)
+        
+        return hp_map
 
     @cached_survey_property
     def obs_3d_map(self):

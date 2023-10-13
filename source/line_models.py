@@ -4,8 +4,12 @@ Catalog of different lines and models
 
 import numpy as np
 from numpy.random import normal,multivariate_normal
+from scipy.special import gamma, gammainc
+from scipy.interpolate import interp1d
 import astropy.units as u
 import astropy.constants as cu
+
+from source.utilities import newton_root
 
 ######################
 ## Lines considered ##
@@ -28,21 +32,22 @@ def lines_included(self):
 ## IR Luminosity ##
 ###################
 
-def LIR(self,halos,SFR,pars,rng):
+def LIR(self,SFR,Mstar,pars,rng):
     '''
     Obtain the IR luminosity from SFR or stellar mass
 
     Parameters:
-        -halos:     Halos to take into account (with all halo props)
         -SFR:       SFR of the halo in Msun/yr
+        -Mstar:     Stellar mass of the halo in Msun
         -pars:      Dictionary of parameters
             -IRX_name:      The reference to use the IRX from
             -IRX_params:    The parameters required to compute the IRX
                             (check each if instance below)
             -K_IR, K_UV:    The coefficients to relate SFR to L_IR and L_UV
+        -rng:       RNG object with the seed set in the input
     '''
     #avoid SFR=0 issues
-    LIR = np.zeros_like(SFR)
+    LIR = np.zeros_like(SFR)*u.Lsun
     inds = np.where(SFR>0)[0]
 
     #Try to get IRX:
@@ -54,15 +59,15 @@ def LIR(self,halos,SFR,pars,rng):
         #IRX - Mstar relation from Bouwens 2016, arXiv:1606.05280
         if pars['IRX_name'] == 'Bouwens2016':
             log10IRX_0,sigma_IRX = pars['log10IRX_0'],pars['sigma_IRX']
-            IRX = 10**log10IRX_0*halos['SM_HALO'][inds]
+            IRX = 10**log10IRX_0*Mstar[inds]
         #IRX - Mstar relation from Bouwens 2020, arXiv:2009.10727
         elif pars['IRX_name'] == 'Bouwens2020':
             log10Ms_IRX,alpha_IRX,sigma_IRX = pars['log10Ms_IRX'],pars['alpha_IRX'],pars['sigma_IRX']
-            IRX = (halos['SM_HALO'][inds]/10**log10Ms_IRX)**alpha_IRX
+            IRX = (Mstar[inds]/10**log10Ms_IRX)**alpha_IRX
         #IRX - Mstar relation from Heinis 2014, arXiv:1310.3227
         elif pars['IRX_name'] == 'Heinis2014':
             log10Ms_IRX,alpha_IRX,log10IRX_0,sigma_IRX = pars['log10Ms_IRX'],pars['alpha_IRX'],pars['log10IRX_0'],pars['sigma_IRX']
-            IRX = (halos['SM_HALO'][inds]/10**log10Ms_IRX)**alpha_IRX*10**log10IRX_0
+            IRX = (Mstar[inds]/10**log10Ms_IRX)**alpha_IRX*10**log10IRX_0
         else:
             raise ValueError('Please choose a valid IRX model')
         #Add mean-preserving lognormal scatter in the IRX relation
@@ -76,23 +81,25 @@ def LIR(self,halos,SFR,pars,rng):
     return LIR
     
 
-def LIR_and_LUV(self,halos,SFR,pars,rng):
+def LIR_and_LUV(self,SFR,Mstar,pars,rng):
     '''
     Obtain the IR and UV luminosities from SFR or stellar mass
     
     -to use outside code
 
     Parameters:
-        -halos:     Halos to take into account (with all halo props)
         -SFR:       SFR of the halo in Msun/yr
+        -Mstar:     Stellar mass of the halo in Msun
         -pars:      Dictionary of parameters
             -IRX_name:      The reference to use the IRX from
             -IRX_params:    The parameters required to compute the IRX
                             (check each if instance below)
             -K_IR, K_UV:    The coefficients to relate SFR to L_IR and L_UV
+        -rng:       RNG object with the seed set in the input
     '''
     #avoid SFR=0 issues
-    LIR = np.zeros_like(SFR)
+    LIR = np.zeros_like(SFR)*u.Lsun
+    LUV = np.zeros_like(SFR)*u.Lsun
     inds = np.where(SFR>0)[0]
 
     #Try to get IRX:
@@ -102,15 +109,15 @@ def LIR_and_LUV(self,halos,SFR,pars,rng):
         #IRX - Mstar relation from Bouwens 2016, arXiv:1606.05280
         if pars['IRX_name'] == 'Bouwens2016':
             log10IRX_0,sigma_IRX = pars['log10IRX_0'],pars['sigma_IRX']
-            IRX = 10**log10IRX_0*halos['SM_HALO'][inds]
+            IRX = 10**log10IRX_0*Mstar[inds]
         #IRX - Mstar relation from Bouwens 2020, arXiv:2009.10727
         elif pars['IRX_name'] == 'Bouwens2020':
             log10Ms_IRX,alpha_IRX,sigma_IRX = pars['log10Ms_IRX'],pars['alpha_IRX'],pars['sigma_IRX']
-            IRX = (halos['SM_HALO'][inds]/10**log10Ms_IRX)**alpha_IRX
+            IRX = (Mstar[inds]/10**log10Ms_IRX)**alpha_IRX
         #IRX - Mstar relation from Heinis 2014, arXiv:1310.3227
         elif pars['IRX_name'] == 'Heinis2014':
             log10Ms_IRX,alpha_IRX,log10IRX_0,sigma_IRX = pars['log10Ms_IRX'],pars['alpha_IRX'],pars['log10IRX_0'],pars['sigma_IRX']
-            IRX = (halos['SM_HALO'][inds]/10**log10Ms_IRX)**alpha_IRX*10**log10IRX_0
+            IRX = (Mstar[inds]/10**log10Ms_IRX)**alpha_IRX*10**log10IRX_0
         else:
             raise ValueError('Please choose a valid IRX model')
         #Add mean-preserving lognormal scatter in the IRX relation
@@ -120,8 +127,128 @@ def LIR_and_LUV(self,halos,SFR,pars,rng):
         K_IR,K_UV = pars['K_IR'],pars['K_UV']
 
     LIR[inds] = SFR[inds]/(K_IR + K_UV/IRX)*u.Lsun
+    LUV[inds] = LIR[inds]/IRX
 
-    return LIR,LIR/IRX
+    return LIR,LUV
+
+##########################
+## Cosmic IR Background ##
+##########################
+
+def CIB_band_Agora(self,halos,LIR,pars,rng):
+    '''
+    Model for the CIB luminosity in a given observed band.
+    Follows the modeling implemented in the Agora simulations
+    (arXiv:2212.07420)
+
+    Parameters:
+        -halos:     Halos to take into account (with all halo props)
+        -SFR:       SFR of the halo in Msun/yr
+        -LIR:       Infrared luminosity in Lsun
+        -pars:      Dictionary of parameters for the model (emulator parameters)
+            -B:         parameter of the gas-to-stellar mass ratio
+            -zeta_d:     
+            -A_d:       Normalization of the dust mass to Tdust relation 
+            -alpha:     Power of the suppression in Mdust/Mstar at z>2
+        -rng:       RNG object with the seed set in the input
+    '''
+    try:
+        B,zeta_d,A_d,alpha = pars['B'],pars['zeta_d'],pars['A_d'],pars['alpha']
+    except:
+        raise ValueError('The model_pars for CIB_Agora are "B", "zeta_d", "A_d", and "alpha", but {} were provided'.format(pars.keys()))
+
+    #We consider only galaxies that are forming stars and have stellar mass
+    Mstar = halos['Mstar']
+    SFR = halos['SFR']
+    inds = (SFR>0)&(Mstar>0)
+    #create a zeros-like array to store the CIB
+    L_CIB = np.zeros_like(LIR)
+    #Get the dust temperature and gray body parameter for all halos
+    Tdust, beta_d = Tdust_Agora(halos['Zobs'][inds],SFR[inds],Mstar[inds],LIR[inds],
+                                B,zeta_d,A_d,alpha)
+    #rest frame frequency for each halo corresponding to the observed bandwidth
+    nu0 = np.logspace(np.log10(self.nuObs_min.value),np.log10(self.nuObs_max.value),self.NnuObs)*self.nuObs_min.unit
+    nu_rest = nu0[:,None]*(1+halos['Zobs'][inds])
+    #Read the imaging band table
+    data_table = np.loadtxt(self.spectral_transmission_file)
+    tau_nu0 = interp1d(data_table[:,0],data_table[:,1],bounds_error=False,fill_value=0)(nu0)/nu0.unit
+    #CIB SED for each halo (modified gray body)
+    alpha_d = 2 #power-law index, from Planck papers
+    kTh = (cu.k_B*Tdust/(cu.h)).to(u.GHz)
+    nu_prime = kTh*(3+beta_d+alpha_d) #frequency at which the gray body becomes power law
+    SED = np.zeros_like(nu_rest.value)
+    import matplotlib.pyplot as plt
+    #Get SED for each nu0 entry
+    for inu in range(self.NnuObs):
+        nu_inu = nu_rest[inu,:]
+        nu_inds = nu_inu < nu_prime #indices for which SED is gray body
+        SED[inu,nu_inds] = nu_inu[nu_inds].value**(beta_d[nu_inds]+3)/np.exp((nu_inu[nu_inds]/kTh[nu_inds]).decompose())
+        nu_inds = np.invert(nu_inds)
+        SED[inu,nu_inds] = nu_prime[nu_inds].value**(beta_d[nu_inds]+3)/np.exp((nu_prime[nu_inds]/kTh[nu_inds]).decompose())*(nu_inu[nu_inds]/nu_prime[nu_inds])**-alpha_d
+    #Get the SED normalization
+    SEDnorm = kTh.value**(4+beta_d)*gamma(4+beta_d)*gammainc(4+beta_d,3+alpha_d+beta_d) + nu_prime.value**(4+beta_d)/(alpha_d-1)/np.exp(3+alpha_d+beta_d)
+    #Compute the L_CIB that each halo contributes to the band
+    L_CIB[inds] = LIR[inds]*np.trapz(SED*tau_nu0[:,None],nu0,axis=0)/SEDnorm*rng.normal(1.,0.25,len(SEDnorm))
+    N = 100
+    for i in range(int(SED.shape[1]/N)):
+        ic = int(N*i)
+        plt.loglog(nu0,SED[:,ic]/SEDnorm[ic]*LIR[inds][ic],c='k',alpha=0.05)
+    return L_CIB
+
+def Tdust_Agora(z,SFR,Mstar,LIR,B,zeta_d,A_d,alpha):
+    '''
+    Computes the dust temperature within a halo following the implementation in 
+    the Agora simulations (arXiv:2212.07420) 
+
+    Depends on redshift, metalicity, Mgas to Mstar ratio, 
+    specific star-formation rate
+
+    Returns both Tdust and the index beta_d for the SED for each halo
+    '''
+    #Gas metallicity from the empirical relation from Sanders et al 2021
+    #   (arXiv:2009.07292)
+    y = np.log10(Mstar) - 0.6 * np.log10(SFR) - 10
+    Zgas = 8.80 + 0.188*y - 0.220 * y**2 - 0.0531 * y**3
+    #Main-sequence specific star-formation state from Tacconi et al 2018,
+    #   (arXiv:1702.01140), using their "cosmic-time(z)" fit formula
+    #   Note there is a difference of 10^9 because our sSFR is in Yr^-1 and
+    #   theirs are in Gyr^-1.
+    logz = np.log10(1+z)
+    tc = 10**(1.143 - 1.026*logz - 0.599*logz**2 + 0.528*logz**3)
+    sSFR_MS = 10**((-0.16-0.026*tc) * (np.log10(Mstar)+0.025) - (6.51-0.11*tc))
+    #Gas-to-stellar mass ratio following Tacconi et al 2020, arXiv:2003.06245
+    A,C,D,F = 0.06,0.51,-0.41,0.65
+    sSFR = SFR/Mstar
+    Mgas_over_Mstar = 10**(A + B*(logz-F)**2 + C*np.log10(sSFR/sSFR_MS) + D*(np.log10(Mstar)-10.7))
+    #Compute suppression in the Mdust-to-Mstar ratio at z>2, from 
+    #   Donevski et al. 2020 (arXiv:2008.09995)
+    factor = np.ones_like(z)
+    zinds = z > 2
+    factor[zinds] = (1-0.05*z[zinds])**alpha
+    #Unnormalized dust mass to stellar mass ratio from the relation in 
+    #   Donevski et al. 2020 (arXiv:2008.09995)
+    Mdust = Mstar * Mgas_over_Mstar * Zgas * factor
+    #Find dust temperature and the index of its relation with IR luminosity
+    beta_d = newton_root(beta_d_function,beta_d_derivative,2.5,LIR.value,Mdust,zeta_d,A_d,Niter=5)
+    Tdust = A_d * (LIR.value/Mdust)**(1/(4+beta_d))
+
+    return Tdust*u.K, beta_d
+
+def beta_d_function(beta_d,LIR,Mdust,zeta_d,A_d):
+    '''
+    Function to find the root (i.e., beta_d)
+    '''
+    P3 = LIR/Mdust
+    P1,P2 = 125*zeta_d,125*0.4
+    return P1/beta_d - P2 - A_d*P3**(1/(4+beta_d))
+
+def beta_d_derivative(beta_d,LIR,Mdust,zeta_d,A_d):
+    '''
+    Derivative to find the root (i.e., beta_d)
+    '''
+    P3 = LIR/Mdust
+    P1 = 125*zeta_d
+    return A_d*P3**(1/(4+beta_d))*np.log(P3)/(beta_d+4)**2-P1/beta_d**2
 
 ##############
 ## CO LINES ##
@@ -134,11 +261,13 @@ def CO_Li16(self,halos,SFR,LIR,pars,nu0,rng):
     Parameters:
         -halos:     Halos to take into account (with all halo props)
         -SFR:       SFR of the halo in Msun/yr
+        -LIR:       Infrared luminosity in Lsun
         -pars:      Dictionary of parameters for the model
             -delta_mf:  IMF normalization
             -alpha:     power law coefficient relating IR and CO luminosities
             -beta:      Multiplicative normalization for the IR and CO luminosities
             -sigma_L: Scatter in dex of the CO luminosity
+        -rng:       RNG object with the seed set in the input
     '''
     try:
         alpha,beta,delta_mf,sigma_L = pars['alpha'],pars['beta'],pars['delta_mf'],pars['sigma_L']
@@ -172,10 +301,12 @@ def CO_lines_scaling_LFIR(self,halos,SFR,LIR,pars,nu0,rng):
     Parameters:
         -halos:     Halos to take into account (with all halo props)
         -SFR:       SFR of the halo in Msun/yr
+        -LIR:       Infrared luminosity in Lsun
         -pars:      Dictionary of parameters for the model
             -alpha
             -beta
             -sigma_L    Scatter in dex of the luminosity
+        -rng:       RNG object with the seed set in the input
     '''
     try:
         alpha,beta,sigma_L = pars['alpha'],pars['beta'],pars['sigma_L']
@@ -186,7 +317,7 @@ def CO_lines_scaling_LFIR(self,halos,SFR,LIR,pars,nu0,rng):
     inds = np.where(SFR>0)
     L = np.zeros(len(SFR))*u.Lsun
 
-    Lp = 10**((np.log10(LIR.value)-beta)/alpha)
+    Lp = 10**((np.log10(LIR[inds].value)-beta)/alpha)
 
     Lmean = (4.9e-5*u.Lsun)*Lp*(nu0/(115.27*u.GHz))**3
 
@@ -208,9 +339,11 @@ def CII_Silva15(self,halos,SFR,LIR,pars,nu0,rng):
     Parameters:
         -halos:     Halos to take into account (with all halo props)
         -SFR:       SFR of the halo in Msun/yr
+        -LIR:       Infrared luminosity in Lsun
         -pars:      Dictionary of parameters for the model
             -aLCII,bLCII    Fit to log10(L_CII/Lsun) = aLCII*log10(SFR/(Msun/yr)) + bLCII
             -sigma_L: Scatter in dex of the CII luminosity
+        -rng:       RNG object with the seed set in the input
     '''
     try:
         aLCII,bLCII, sigma_L = pars['aLCII'],pars['bLCII'],pars['sigma_L']
@@ -237,9 +370,11 @@ def CII_Lagache18(self,halos,SFR,LIR,pars,nu0,rng):
     Parameters:
         -halos:     Halos to take into account (with all halo props)
         -SFR:       SFR of the halo in Msun/yr
+        -LIR:       Infrared luminosity in Lsun
         -pars:      Dictionary of parameters for the model
             -alpha1, alpha2, beta1, beta2    Fit to log10(L_CII/Lsun) = alpha*log10(SFR/(Msun/yr)) + beta, where alpha=alpha1 + alpha2*z and beta=beta1 + beta2*z
             -sigma_L: Scatter in dex of the CII luminosity
+        -rng:       RNG object with the seed set in the input
     '''
     try:
         alpha1, alpha2, beta1, beta2, sigma_L = pars['alpha1'],pars['alpha2'],pars['beta1'],pars['beta2'],pars['sigma_L']
@@ -272,12 +407,12 @@ def Lyalpha_Chung19(self,halos,SFR,LIR,pars,nu0,rng):
     Parameters:
         -halos:     Halos to take into account (with all halo props)
         -SFR:       SFR of the halo in Msun/yr
+        -LIR:       Infrared luminosity in Lsun
         -pars:      Dictionary of parameters for the model
             -C      Conversion between SFR and Ly-alpha luminosity
             -xi, zeta, psi, z0, f0    Parametrize the escape fraction, reflecting the possibility of photons being absorbed by dust
             -sigma_L    log-normal scatter in the Ly-alpha luminosity
-
-    M
+        -rng:       RNG object with the seed set in the input
     '''
     try:
         C,xi,zeta,psi,z0,f0,SFR0,sigma_L = pars['C'],pars['xi'],pars['zeta'],pars['psi'],pars['z0'],pars['f0'],pars['SFR0'],pars['sigma_L']
@@ -304,11 +439,11 @@ def HI_VN18(self,halos,SFR,LIR,pars,nu0,rng):
     Parameters:
         -halos:     Halos to take into account (with all halo props)
         -SFR:       SFR of the halo in Msun/yr
+        -LIR:       Infrared luminosity in Lsun
         -pars:      Dictionary of parameters for the model
             -M0, Mmin, alpha    Normalization, cutoff mass, and slope in the M_HI-M_halo relation
             -sigma_L    log-normal scatter in the luminosity
-
-    M
+        -rng:       RNG object with the seed set in the input
     '''
     try:
         M0, Mmin, alpha, sigma_MHI = pars['M0'],pars['Mmin'],pars['alpha'],pars['sigma_MHI']
@@ -344,10 +479,12 @@ def SFR_scaling_relation_Kennicutt(self,halos,SFR,LIR,pars,nu0,rng):
     Parameters:
         -halos:     Halos to take into account (with all halo props)
         -SFR:       SFR of the halo in Msun/yr
+        -LIR:       Infrared luminosity in Lsun
         -pars:      Dictionary of parameters for the model
             -K            linear factor SFR = K*L (L in ergios/s)
             -Aext         Extinction of the line
             -sigma_L: Scatter in dex of the luminosity
+        -rng:       RNG object with the seed set in the input
     '''
     try:
         K,Aext,sigma_L = pars['K'],pars['Aext'],pars['sigma_L']
@@ -378,10 +515,12 @@ def FIR_scaling_relation(self,halos,SFR,LIR,pars,nu0,rng):
     Parameters:
         -halos:     Halos to take into account (with all halo props)
         -SFR:       SFR of the halo in Msun/yr
+        -LIR:       Infrared luminosity in Lsun
         -pars:      Dictionary of parameters for the model
             -alpha
             -beta
             -sigma_L    Scatter in dex of the luminosity
+        -rng:       RNG object with the seed set in the input
     '''
     try:
         alpha,beta,sigma_L = pars['alpha'],pars['beta'],pars['sigma_L']
@@ -391,7 +530,7 @@ def FIR_scaling_relation(self,halos,SFR,LIR,pars,nu0,rng):
     inds = np.where(SFR>0)
     L = np.zeros(len(SFR))*u.Lsun
 
-    LIR_norm = LIR.to(u.erg/u.s)*(1/1e41)
+    LIR_norm = LIR[inds].to(u.erg/u.s)*(1/1e41)
 
     Lerg_norm = 10**(alpha*np.log10(LIR_norm.value)-beta)
     Lmean = (Lerg_norm*1e41*u.erg/u.s).to(u.Lsun)

@@ -64,6 +64,11 @@ class Lightcone(object):
                             Check the LIR function in source/line_models.py for the required parameters 
                             and available models
 
+    -CIB_pars               Dictionary with the parameters required to compute cosmic infrared
+                            SED, needed to compute the CIB luminosities for a given band.
+                            Check the CIB functions in source/line_models.py for the required parameters 
+                            and available models
+
     -do_external_SFR        Boolean, whether to use a SFR different than Universe Machine
                             (default:False)
 
@@ -98,6 +103,7 @@ class Lightcone(object):
                                OIII_88 = dict(model_name = '', model_pars = {}), OI_63 = dict(model_name = '', model_pars = {}), 
                                OI_145 = dict(model_name = '', model_pars = {}), OII = dict(model_name = '', model_pars = {}), OIII_0p5 = dict(model_name = '', model_pars = {})),
                  LIR_pars = {},
+                 CIB_pars = {},
                  do_external_SFR = False, external_SFR = '',sig_extSFR = 0.3, SFR_pars=dict(M0=1e-6, Ma=10**8, Mb=10**12.3, a=1.9, b=3.0, c=-1.4), 
                  seed=None,
                  cache_catalog = True):
@@ -261,7 +267,7 @@ class Lightcone(object):
             SFR = self.halo_catalog_all['SFR_HALO']
             
         if len(self.LIR_pars.keys())>0:
-            LIR = getattr(LM,'LIR')(self,self.halo_catalog_all,SFR,self.LIR_pars,self.rng)
+            LIR = getattr(LM,'LIR')(self,SFR,self.halo_catalog_all['SM_HALO'],self.LIR_pars,self.rng)
         else:
             LIR = 0*u.Lsun
 
@@ -300,7 +306,7 @@ class Lightcone(object):
             SFR = self.halo_catalog['SFR_HALO']
             
         if len(self.LIR_pars.keys())>0:
-            LIR = getattr(LM,'LIR')(self,self.halo_catalog,SFR,self.LIR_pars,self.rng)
+            LIR = getattr(LM,'LIR')(self,SFR,self.halo_catalog_all['SM_HALO'],self.LIR_pars,self.rng)
         else:
             LIR = 0*u.Lsun
 

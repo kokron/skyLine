@@ -128,6 +128,9 @@ def check_params(self,input_params, default_params):
             elif key == 'dNgaldz_file':
                 if type(input_value) == str:
                     continue
+            elif key == 'spectral_transmission_file':
+                if type(input_value) == str:
+                    continue
             elif key == 'dnu':
                 if type(input_value) == float:
                     continue
@@ -258,3 +261,15 @@ def CompensateNGPShotnoise(w, v):
         the field array
     """
     return v
+
+def newton_root(fun,fun_prime,x0,*args,Niter=5):
+    '''
+    Quick implementation of the Newton-Raphson method for arrays
+    Usage: newton_root(<your function>,<derivative of the function>,
+                        <initial point>,<arg1>,...,<argN>,Niter=<Niter>)
+    fun and fun_prime must be defined with the same number and order of arguments
+    arg1 starts counting after the variable to find the root for (which should be the first)
+    '''
+    for i in range(Niter):
+        x0 = x0 - fun(x0,*args)/fun_prime(x0,*args)
+    return x0
