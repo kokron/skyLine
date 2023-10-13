@@ -189,10 +189,6 @@ def CIB_band_Agora(self,halos,LIR,pars,rng):
     SEDnorm = kTh.value**(4+beta_d)*gamma(4+beta_d)*gammainc(4+beta_d,3+alpha_d+beta_d) + nu_prime.value**(4+beta_d)/(alpha_d-1)/np.exp(3+alpha_d+beta_d)
     #Compute the L_CIB that each halo contributes to the band
     L_CIB[inds] = LIR[inds]*np.trapz(SED*tau_nu0[:,None],nu0,axis=0)/SEDnorm*rng.normal(1.,0.25,len(SEDnorm))
-    N = 100
-    for i in range(int(SED.shape[1]/N)):
-        ic = int(N*i)
-        plt.loglog(nu0,SED[:,ic]/SEDnorm[ic]*LIR[inds][ic],c='k',alpha=0.05)
     return L_CIB
 
 def Tdust_Agora(z,SFR,Mstar,LIR,B,zeta_d,A_d,alpha):
