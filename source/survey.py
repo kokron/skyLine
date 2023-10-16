@@ -831,9 +831,9 @@ class Survey(Lightcone):
                             self.halo_catalog_slice(fnames[ifile])
                             self.halos_in_survey_slice_lim(line,nfiles,ifile)
                             #add the contribution from these halos
-                            hp_map = self.paint_2d_lim(self.halos_in_survey[line],line,hp_map)
+                            hp_map += self.paint_2d_lim(self.halos_in_survey[line],line,hp_map)
                     else:
-                        hp_map = self.paint_2d_lim(self.halos_in_survey_all[line],line,hp_map)
+                        hp_map += self.paint_2d_lim(self.halos_in_survey_all[line],line,hp_map)
                     
             # add galactic foregrounds
             if self.do_gal_foregrounds:
@@ -849,9 +849,9 @@ class Survey(Lightcone):
                     self.halo_catalog_slice(fnames[ifile])
                     self.halos_in_survey_slice_number_count(ifile)
                     #add the contribution from these halos
-                    hp_map = self.paint_2d_number_count(self.halos_in_survey,hp_map)
+                    hp_map += self.paint_2d_number_count(self.halos_in_survey,hp_map)
             else:
-                hp_map = self.paint_2d_number_count(self.halos_in_survey_all,hp_map)
+                hp_map += self.paint_2d_number_count(self.halos_in_survey_all,hp_map)
 
         elif self.mode == 'cib':
             if not self.cache_catalog:
@@ -863,9 +863,9 @@ class Survey(Lightcone):
                     self.halo_catalog_slice(fnames[ifile])
                     self.halos_in_survey_slice_cib(ifile)
                     #add the contribution from these halos
-                    hp_map = self.paint_2d_cib(self.halos_in_survey,hp_map)
+                    hp_map += self.paint_2d_cib(self.halos_in_survey,hp_map)
             else:
-                hp_map = self.paint_2d_cib(self.halos_in_survey_all,hp_map)
+                hp_map += self.paint_2d_cib(self.halos_in_survey_all,hp_map)
         
         #smooth for angular resolution
         if self.do_angular_smooth:
@@ -971,7 +971,7 @@ class Survey(Lightcone):
 
         #Get the flux S_nu = L_nu(1+z)/(4pi*chi^2*(1+z))
         chi = self.cosmo.comoving_radial_distance(halos['Zobs'])*u.Mpc
-        signal = L_CIB_band/(4*np.pi*chi**2*(1+halos['Zobs']))
+        signal = (L_CIB_band/(4*np.pi*u.sr*chi**2*(1+halos['Zobs']))).to(u.Jy/u.sr)
 
         #WE NEED TO TURN THIS INTO THE CORRECT UNITS!!!
         #CIB signal in the band per halo

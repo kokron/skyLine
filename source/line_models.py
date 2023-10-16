@@ -161,8 +161,6 @@ def CIB_band_Agora(self,halos,LIR,pars,rng):
     Mstar = halos['Mstar']
     SFR = halos['SFR']
     inds = (SFR>0)&(Mstar>0)
-    #create a zeros-like array to store the CIB
-    L_CIB = np.zeros_like(LIR)
     #Get the dust temperature and gray body parameter for all halos
     Tdust, beta_d = Tdust_Agora(halos['Zobs'][inds],SFR[inds],Mstar[inds],LIR[inds],
                                 B,zeta_d,A_d,alpha)
@@ -171,7 +169,8 @@ def CIB_band_Agora(self,halos,LIR,pars,rng):
     nu_rest = nu0[:,None]*(1+halos['Zobs'][inds])
     #Read the imaging band table
     data_table = np.loadtxt(self.spectral_transmission_file)
-    tau_nu0 = interp1d(data_table[:,0],data_table[:,1],bounds_error=False,fill_value=0)(nu0)/nu0.unit
+    tau_nu0 = interp1d(data_table[:,0],data_table[:,1],bounds_error=False,fill_value=0)(nu0)
+    tau_nu0_norm = np.trapz(tau_nu0,nu0)
     #CIB SED for each halo (modified gray body)
     alpha_d = 2 #power-law index, from Planck papers
     kTh = (cu.k_B*Tdust/(cu.h)).to(u.GHz)
@@ -187,8 +186,10 @@ def CIB_band_Agora(self,halos,LIR,pars,rng):
         SED[inu,nu_inds] = nu_prime[nu_inds].value**(beta_d[nu_inds]+3)/np.exp((nu_prime[nu_inds]/kTh[nu_inds]).decompose())*(nu_inu[nu_inds]/nu_prime[nu_inds])**-alpha_d
     #Get the SED normalization
     SEDnorm = kTh.value**(4+beta_d)*gamma(4+beta_d)*gammainc(4+beta_d,3+alpha_d+beta_d) + nu_prime.value**(4+beta_d)/(alpha_d-1)/np.exp(3+alpha_d+beta_d)
-    #Compute the L_CIB that each halo contributes to the band
-    L_CIB[inds] = LIR[inds]*np.trapz(SED*tau_nu0[:,None],nu0,axis=0)/SEDnorm*rng.normal(1.,0.25,len(SEDnorm))
+    #create a zeros-like array to store the CIB
+    L_CIB = np.zeros_like(LIR)/nu0.unit
+    #Compute the L_CIB that each halo contributes to the band (giving SED its unit)
+    L_CIB[inds] = LIR[inds]*np.trapz(SED*tau_nu0[:,None],nu0.value,axis=0)/SEDnorm/tau_nu0_norm*rng.normal(1.,0.25,len(SEDnorm))
     return L_CIB
 
 def Tdust_Agora(z,SFR,Mstar,LIR,B,zeta_d,A_d,alpha):
