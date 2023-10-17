@@ -135,7 +135,7 @@ def check_params(self,input_params, default_params):
                 if type(input_value) == float:
                     continue
             elif key == 'flux_detection_lim':
-                if type(input_value) == u.quantity.Quantity or type(input_value) == function:
+                if type(input_value) == u.quantity.Quantity or callable(input_value):
                     continue
             elif key == 'nu_c':
                 if type(input_value) == u.quantity.Quantity:

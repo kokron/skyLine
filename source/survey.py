@@ -1003,6 +1003,29 @@ class Survey(Lightcone):
         chi = self.cosmo.comoving_radial_distance(halos['Zobs'])*u.Mpc
         signal = (L_CIB_band/(4*np.pi*u.sr*chi**2*(1+halos['Zobs']))).to(u.Jy/u.sr)
 
+        #removed "detected resolved" sources if required
+        if self.flux_detection_lim:
+            if type(self.flux_detection_lim) == u.quantity.Quantity:
+                flux = (signal*self.beam_FWHM**2).to(self.flux_detection_lim.unit)
+                inds = (flux.value < self.flux_detection_lim.value)
+                signal = signal[inds]
+                theta, phi = rd2tp(halos['RA'][inds], halos['DEC'][inds])
+            else:
+                flux = (signal*self.beam_FWHM**2).to(u.mJy)
+                flux_vec = np.linspace(0,np.max(flux.value),17)
+                inds = np.ones_like(signal.value,dtype=bool)
+                for i in range(len(flux_vec)-1):
+                    inds_flux = (flux.value >= flux_vec[i]) & (flux.value < flux_vec[i+1])
+                    Nsources = len(flux[inds_flux])
+                    Ndetected = int(self.flux_detection_lim(0.5*(flux_vec[i]+flux_vec[i+1]))*Nsources)
+                    #remove randomly from each bin
+                    inds_detected = np.random.choice(Nsources,Ndetected,replace=False)
+                    inds[inds_flux][inds_detected] = False
+                signal = signal[inds]
+                theta, phi = rd2tp(halos['RA'][inds], halos['DEC'][inds])
+        else:
+            theta, phi = rd2tp(halos['RA'], halos['DEC'])
+
         if self.unit_convention == 'Tcmb':
             #Read the imaging band table
             nu0 = np.logspace(np.log10(self.nuObs_min.value),np.log10(self.nuObs_max.value),self.NnuObs)*self.nuObs_min.unit
@@ -1025,31 +1048,10 @@ class Survey(Lightcone):
                 nu_c = self.nu_c
             #Brightness Temperature[uK]
             signal = (signal*u.sr*cu.c**2/2/cu.k_B/nu_c**2).to(u.uK)
-
+        
         #Paste the signals to the map
-        theta, phi = rd2tp(halos['RA'], halos['DEC'])
         pixel_idxs = hp.ang2pix(self.nside, theta, phi)
-
-        #removed "detected resolved" sources if required
-        if self.flux_detection_lim:
-            if type(self.flux_detection_lim) == float:
-                flux = (signal*self.beam_FWHM**2).to(flux_detection_lim.unit)
-                inds = (flux.value < self.flux_detection_lim.value)
-                np.add.at(hp_map, pixel_idxs[inds], signal[inds].value)
-            else:
-                flux = (signal*self.beam_FWHM**2).to(u.mJy)
-                flux_vec = np.linspace(0,np.max(flux.value),17)
-                for i in range(len(flux_vec)-1):
-                    inds = (flux.value >= flux_vec[i]) & (flux.value < flux_vec[i+1])
-                    Nsources = len(flux[inds])
-                    Ndetected = int(self.flux_detection_lim(0.5*(flux_vec[i]+flux_vec[i+1]))*Nsources)
-                    #remove randomly from each bin
-                    inds_detected = np.random.choice(Nsources,Ndetected,replace=False)
-                    inds[inds][inds_detected] = False
-                    #add to the map
-                    np.add.at(hp_map, pixel_idxs[inds], signal[inds].value)
-        else:
-            np.add.at(hp_map, pixel_idxs, signal.value)
+        np.add.at(hp_map, pixel_idxs, signal.value)
         
         return hp_map
 
