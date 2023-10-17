@@ -35,10 +35,9 @@ class Survey(Lightcone):
     INPUT PARAMETERS:
     ------------------
 
-    -do_intensity           Bool, if True quantities are output in specific temperature
-                            (Jy/sr units) rather than brightness temperature
-                            (muK units)
-                            (Default = False)
+    -unit_convention        String, to choose between 'Inu' (specific intensity in Jy/sr), 'Tb' 
+                            (brightness temperature, in muK) or 'Tcmb' (CMB Temperature, in muK)
+                            Default ('Tb')
 
     -Tsys:                  Instrument sensitivity. System temperature for brightness temperature
                             and noise equivalent intensitiy (NEI) for intensitiy (Default = 40 K)
@@ -134,14 +133,23 @@ class Survey(Lightcone):
                             (Default: None -> must have one! Will be expected to be in Mpc**-3 or sr**-1 if angular map)   
   
     -spectral_transmission_file: File containing a table with the spectral transmision function for the imaging 
-                            band of interest. Only relevant if mode = 'cib'. Input a file with a table to interpolate.
-                            Format: 2 columns [freq in GHz, tau_nu0] (Default: None -> Must have one if mode == 'cib'!)
+                            band of interest. Only relevant if mode = 'cib' or if angular map and unit_convention = 'Tcmb'. 
+                            Input a file with a table to interpolate.
+                            Format: 2 columns [freq in GHz, tau_nu0] (Default: None -> Must have one if mode == 'cib'
+                            or if angular map and 'Tcmb'!)
+
+    -nu_c                   Nominal frequency of the band. Only relevant if 'unit_convention' = 'Tcmb'
+                            (Default:None == mean freq of the spectral transmission)
+
+    -flux_detection_lim     Flux detection limit for dusty galaxies, to remove resolved galaxies. Only relevant if mode = 'cib'. It can be None, a
+                            an astropy quantity (if flat limit, make sure the units correspond to flux!), or a function [f(x) where x is the flux] 
+                            for the fraction of galaxies detected (default: None)
 
     -resampler              Set the resampling window for the 3d maps (Irrelevant if do_angular=True). (Default: 'cic')
 
     '''
     def __init__(self,
-                 do_intensity=False,
+                 unit_convention='Tb',
                  Tsys=40*u.K,
                  Nfeeds=19,
                  nuObs_min = 26.*u.GHz,
@@ -175,6 +183,8 @@ class Survey(Lightcone):
                  gal_type='all',
                  dNgaldz_file = None,
                  spectral_transmission_file = None,
+                 nu_c = None,
+                 flux_detection_lim = None,
                  resampler='cic', 
                  **lightcone_kwargs):
 
@@ -200,6 +210,10 @@ class Survey(Lightcone):
         #Limits for RA and DEC
         self.RAObs_min,self.RAObs_max = -self.RAObs_width/2.,self.RAObs_width/2.
         self.DECObs_min,self.DECObs_max = -self.DECObs_width/2.,self.DECObs_width/2.
+        
+        unit_conventions = ['Tb','Tcmb','Inu']
+        if self.unit_convention not in unit_conventions:
+            raise ValueError('The unit convention must be one of {}'.format(unit_conventions))
         
         if self.RAObs_width.value == 360 and self.DECObs_width.value == 180:
             self.full_sky = True
@@ -241,18 +255,21 @@ class Survey(Lightcone):
             if type(self.dnu) == u.quantity.Quantity:
                 raise ValueError('If mode == number_count, dnu must be dimensionless (indicating the width in redshfit of the 3d cell)')
 
-        if self.mode == 'cib':
-            if self.spectral_transmission_file == None:
-                raise ValueError('Please input a file with the spectral transmission')
+            if self.mode == 'cib' or ((self.do_angular and self.unit_convention == 'Tcmb') and self.mode != 'number_count'):
+                if self.spectral_transmission_file == None:
+                    raise ValueError('Please input a file with the spectral transmission')
         
         if NoPySM and self.do_gal_foregrounds==True:
             raise ValueError('PySM must be installed to model galactic foregrounds')
 
         #Set units for observable depending on convention
-        if self.do_intensity:
+        if self.unit_convention == 'Inu':
             self.unit = u.Jy/u.sr
         else:
             self.unit = u.uK
+
+        if self.mode == 'number_count':
+            self.unit = None
 
 
         #Set global variables for smoothing kernel
@@ -930,11 +947,24 @@ class Survey(Lightcone):
                             #D_A here is comoving angular diameter distance = comoving_radial_distance in flat space
         Vcell_true = hp.nside2pixarea(self.nside)*(self.cosmo.comoving_radial_distance(zmids)*u.Mpc )**2 * (self.dnu.value/nu_bins[bin_idxs]) * (1+zmids) * (cu.c.to('km/s')/self.cosmo.hubble_parameter(zmids)/(u.km/u.Mpc/u.s))
 
-        if self.do_intensity:
+        if self.unit_convention == 'Inu':
             #intensity[Jy/sr]
             signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*halos['Lhalo']/Vcell_true).to(self.unit)
+        elif self.unit_convention == 'Tcmb':
+            #intensity[Jy/sr]
+            signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*halos['Lhalo']/Vcell_true).to(self.unit)
+            #Read the imaging band table
+            nu0 = np.logspace(np.log10(self.nuObs_min.value),np.log10(self.nuObs_max.value),self.NnuObs)*self.nuObs_min.unit
+            data_table = np.loadtxt(self.spectral_transmission_file)
+            tau_nu0 = interp1d(data_table[:,0],data_table[:,1],bounds_error=False,fill_value=0)(nu0)
+            bnu = (2*cu.h*nu0**3/cu.c**2/(np.exp(cu.h*nu0/cu.k_B/2.7255/u.K)-1)).to(u.Jy)/u.sr/u.K
+            if self.nu_c == None:
+                nu_c = np.trapz(nu0*tau_nu0,nu0)/np.trapz(tau_nu0,nu0)
+            else:
+                nu_c = self.nu_c
+            signal = (signal/(np.trapz(bnu*tau_nu0,nu0)/np.trapz(tau_nu0*nu_c/nu0,nu0))).to(u.uK)
         else:
-            #Temperature[uK]
+            #Brightness Temperature[uK]
             signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*halos['Lhalo']/Vcell_true).to(self.unit)
             
         #Paste the signals to the map
@@ -973,21 +1003,53 @@ class Survey(Lightcone):
         chi = self.cosmo.comoving_radial_distance(halos['Zobs'])*u.Mpc
         signal = (L_CIB_band/(4*np.pi*u.sr*chi**2*(1+halos['Zobs']))).to(u.Jy/u.sr)
 
-        #WE NEED TO TURN THIS INTO THE CORRECT UNITS!!!
-        #CIB signal in the band per halo
-        #if self.do_intensity:
-        #    #intensity[Jy/sr]
-        #    signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*halos['Lhalo']/Vcell_true).to(self.unit)
-        #else:
-        #    #Temperature[uK]
-        #    signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*halos['Lhalo']/Vcell_true).to(self.unit)
-        #number counts [empty unit]
-            
+        if self.unit_convention == 'Tcmb':
+            #Read the imaging band table
+            nu0 = np.logspace(np.log10(self.nuObs_min.value),np.log10(self.nuObs_max.value),self.NnuObs)*self.nuObs_min.unit
+            data_table = np.loadtxt(self.spectral_transmission_file)
+            tau_nu0 = interp1d(data_table[:,0],data_table[:,1],bounds_error=False,fill_value=0)(nu0)
+            bnu = (2*cu.h*nu0**3/cu.c**2/(np.exp(cu.h*nu0/cu.k_B/2.7255/u.K)-1)).to(u.Jy)/u.sr/u.K
+            if self.nu_c == None:
+                nu_c = np.trapz(nu0*tau_nu0,nu0)/np.trapz(tau_nu0,nu0)
+            else:
+                nu_c = self.nu_c
+            signal = (signal/(np.trapz(bnu*tau_nu0,nu0)/np.trapz(tau_nu0*nu_c/nu0,nu0))).to(u.uK)
+        elif self.unit_convention == 'Tb':
+            if self.nu_c == None:
+                #Read the imaging band table
+                nu0 = np.logspace(np.log10(self.nuObs_min.value),np.log10(self.nuObs_max.value),self.NnuObs)*self.nuObs_min.unit
+                data_table = np.loadtxt(self.spectral_transmission_file)
+                tau_nu0 = interp1d(data_table[:,0],data_table[:,1],bounds_error=False,fill_value=0)(nu0)
+                nu_c = np.trapz(nu0*tau_nu0,nu0)/np.trapz(tau_nu0,nu0)
+            else:
+                nu_c = self.nu_c
+            #Brightness Temperature[uK]
+            signal = (signal*u.sr*cu.c**2/2/cu.k_B/nu_c**2).to(u.uK)
+
         #Paste the signals to the map
         theta, phi = rd2tp(halos['RA'], halos['DEC'])
         pixel_idxs = hp.ang2pix(self.nside, theta, phi)
 
-        np.add.at(hp_map, pixel_idxs, signal.value)
+        #removed "detected resolved" sources if required
+        if self.flux_detection_lim:
+            if type(self.flux_detection_lim) == float:
+                flux = (signal*self.beam_FWHM**2).to(flux_detection_lim.unit)
+                inds = (flux.value < self.flux_detection_lim.value)
+                np.add.at(hp_map, pixel_idxs[inds], signal[inds].value)
+            else:
+                flux = (signal*self.beam_FWHM**2).to(u.mJy)
+                flux_vec = np.linspace(0,np.max(flux.value),17)
+                for i in range(len(flux_vec)-1):
+                    inds = (flux.value >= flux_vec[i]) & (flux.value < flux_vec[i+1])
+                    Nsources = len(flux[inds])
+                    Ndetected = int(self.flux_detection_lim(0.5*(flux_vec[i]+flux_vec[i+1]))*Nsources)
+                    #remove randomly from each bin
+                    inds_detected = np.random.choice(Nsources,Ndetected,replace=False)
+                    inds[inds][inds_detected] = False
+                    #add to the map
+                    np.add.at(hp_map, pixel_idxs[inds], signal[inds].value)
+        else:
+            np.add.at(hp_map, pixel_idxs, signal.value)
         
         return hp_map
 
@@ -1197,20 +1259,20 @@ class Survey(Lightcone):
             
             warn("% of emitters of {} line left out filtering = {}".format(line, 1-len(Zhalo)/len(filtering)))
 
-            if self.do_intensity:
+            if self.unit_convention == 'Inu':
                 #intensity[Jy/sr]
                 signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*halos['Lhalo'][filtering]/Vcell_true).to(self.unit)
-            else:
+            elif self.unit_convention == 'Tb':
                 #Temperature[uK]
                 signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*halos['Lhalo'][filtering]/Vcell_true).to(self.unit)
         else:
             Zhalo = halos['Ztrue']
             Mhalo = halos['Mhalo']
             Hubble = self.cosmo.hubble_parameter(Zhalo)*(u.km/u.Mpc/u.s)
-            if self.do_intensity:
+            if self.unit_convention == 'Inu':
                 #intensity[Jy/sr]
                 signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*halos['Lhalo']/Vcell_true).to(self.unit)
-            else:
+            elif self.unit_convention == 'Tb':
                 #Temperature[uK]
                 signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*halos['Lhalo']/Vcell_true).to(self.unit)
         #Locate the grid such that bottom left corner of the box is [0,0,0] which is the nbodykit convention.
@@ -1607,10 +1669,12 @@ class Survey(Lightcone):
                 galmap_rotated=hp.pixelfunc.ud_grade(dgrade_galmap_rotated, self.nside)
             else:
                 galmap_rotated=dgrade_galmap_rotated
-            if self.do_intensity and sky.output_unit != self.unit:
+            if self.unit_convention == 'Inu' and sky.output_unit != self.unit:
                 galmap_rotated *= pysm3.bandpass_unit_conversion(obs_freqs, input_unit = sky.output_unit,output_unit=self.unit)
-            elif self.do_intensity == False and sky.output_unit != pysm3.units.uK_RJ:
+            elif self.unit_convention == 'Tb' and sky.output_unit != pysm3.units.uK_RJ:
                 galmap_rotated *= pysm3.bandpass_unit_conversion(obs_freqs, input_unit = sky.output_unit,output_unit=self.unit)
+            elif self.unit_convention == 'Tcmb' and sky.output_unit != pysm3.units.uK_CMB:
+                galmap_rotated *= pysm3.bandpass_unit_conversion(obs_freqs, input_unit = sky.output_unit,output_unit='uK_CMB')
                 
             hp_fg_map += galmap_rotated
             

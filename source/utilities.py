@@ -134,6 +134,12 @@ def check_params(self,input_params, default_params):
             elif key == 'dnu':
                 if type(input_value) == float:
                     continue
+            elif key == 'flux_detection_lim':
+                if type(input_value) == u.quantity.Quantity or type(input_value) == function:
+                    continue
+            elif key == 'nu_c':
+                if type(input_value) == u.quantity.Quantity:
+                    continue
             else:
                 raise TypeError("Parameter "+key+" must be a "+
                                 str(type(default_value)))
@@ -171,17 +177,23 @@ def check_updated_params(self):
     '''
     Set of checks for consistency between parameters after update
     '''
+    #check unit convention
+    unit_conventions = ['Tb','Tcmb','Inu']
+    if self.unit_convention not in unit_conventions:
+        raise ValueError('The unit convention must be one of {}'.format(unit_conventions))
+    
     # Check that the observed footprint is contained in the lightcone
     if self.RAObs_min < self.RA_min or self.RAObs_max > self.RA_max or \
-       self.DECObs_min < self.DEC_min or self.DECObs_max > self.DEC_max:
+        self.DECObs_min < self.DEC_min or self.DECObs_max > self.DEC_max:
         warn('Please, your observed limits RA_Obs=[{},{}], DEC_Obs=[{},{}] must be within the lightcone limits RA=[{},{}], DEC=[{},{}].'.format(self.RAObs_min,self.RAObs_max,self.DECObs_min,self.DECObs_max,self.RA_min,self.RA_max,self.DEC_min,self.DEC_max))
 
     # Check that the bandwidth and lines used are included in the lightcone limits
-    for line in self.lines.keys():
-        if self.lines[line]:
-            zlims = (self.line_nu0[line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
-            if zlims[0] <= self.zmin or zlims [1] >= self.zmax:
-                warn('The line {} on the bandwidth [{:.2f},{:.2f}] corresponds to z range [{:.2f},{:.2f}], while the included redshifts in the lightcone are within [{:.2f},{:.2f}]. Please remove the line, increase the zmin,zmax range or reduce the bandwith.'.format(line,self.nuObs_max,self.nuObs_min,zlims[0],zlims[1],self.zmin,self.zmax))
+    if self.mode == 'lim':
+        for line in self.lines.keys():
+            if self.lines[line]:
+                zlims = (self.line_nu0[line].value)/np.array([self.nuObs_max.value,self.nuObs_min.value])-1
+                if zlims[0] <= self.zmin or zlims [1] >= self.zmax:
+                    warn('The line {} on the bandwidth [{:.2f},{:.2f}] corresponds to z range [{:.2f},{:.2f}], while the included redshifts in the lightcone are within [{:.2f},{:.2f}]. Please remove the line, increase the zmin,zmax range or reduce the bandwith.'.format(line,self.nuObs_max,self.nuObs_min,zlims[0],zlims[1],self.zmin,self.zmax))
 
     #Check healpy pixel size just in case:
     if self.do_angular:
@@ -189,19 +201,38 @@ def check_updated_params(self):
         min_nside = hp.pixelfunc.get_min_valid_nside(npix_fullsky)
         if (min_nside > self.nside):
             warn("The minimum NSIDE to account for beam_FWHM*angular_supersample is {}, but NSIDE={} was input.".format(min_nside,self.nside))
-        # ~ #Avoid inner cut if do_angular:
-        # ~ if self.do_angular and self.do_inner_cut and not self.do_flat_sky:
-            # ~ warn('If you want to work with angular maps, you do not need the inner cut, hence please use do_inner_cut = False')
-            
+
+    self.cube_mode_options = ['outer_cube','inner_cube','mid_redshift','flat_sky']
     if self.cube_mode not in self.cube_mode_options:
-            raise ValueError('The cube_mode choice must be one of {}'.format(self.cube_mode_options))
+        raise ValueError('The cube_mode choice must be one of {}'.format(self.cube_mode_options))
+        
+    if self.mode not in ['lim','number_count','cib']:
+        raise ValueError('mode input must be one of {}'.format(['lim','number_count','cib']))
+    
+    if self.mode == 'number_count':
+        if self.gal_type not in ['all','lrg','elg']:
+            raise ValueError('gal_type input must be one of {}'.format(['all','lrg','elg']))
+        if self.dNgaldz_file == None:
+            raise ValueError('Please input a file with the number density per redshift')
+        if type(self.dnu) == u.quantity.Quantity:
+            raise ValueError('If mode == number_count, dnu must be dimensionless (indicating the width in redshfit of the 3d cell)')
+
+    if self.mode == 'cib' or ((self.do_angular and self.unit_convention == 'Tcmb') and self.mode != 'number_count'):
+        if self.spectral_transmission_file == None:
+            raise ValueError('Please input a file with the spectral transmission')
+    
+    if NoPySM and self.do_gal_foregrounds==True:
+        raise ValueError('PySM must be installed to model galactic foregrounds')
 
     #Set units for observable depending on convention
-    if self.do_intensity:
+    if self.unit_convention == 'Inu':
         self.unit = u.Jy/u.sr
     else:
         self.unit = u.uK
-        
+
+    if self.mode == 'number_count':
+        self.unit = None
+
     if self.do_angular != self.angular_map:
         raise ValueError("'do_angular' and 'angular_map' must be the same when the map is computed")
         
