@@ -8,7 +8,7 @@ from scipy.special import gamma, gammainc
 from scipy.interpolate import interp1d
 import astropy.units as u
 import astropy.constants as cu
-
+import gc
 from source.utilities import newton_root
 
 ######################
@@ -165,8 +165,11 @@ def CIB_band_Agora(self,halos,LIR,pars,rng):
     Tdust, beta_d = Tdust_Agora(halos['Zobs'][inds],SFR[inds],Mstar[inds],LIR[inds],
                                 B,zeta_d,A_d,alpha)
     #rest frame frequency for each halo corresponding to the observed bandwidth
-    nu0 = np.logspace(np.log10(self.nuObs_min.value),np.log10(self.nuObs_max.value),self.NnuObs)*self.nuObs_min.unit
+    nu0 = np.geomspace(self.nuObs_min.value,self.nuObs_max.value,self.NnuObs)*self.nuObs_min.unit
+
+    print('Trying to make nu_rest')
     nu_rest = nu0[:,None]*(1+halos['Zobs'][inds])
+    print('Made nu_rest')
     #Read the imaging band table
     data_table = np.loadtxt(self.spectral_transmission_file)
     tau_nu0 = interp1d(data_table[:,0],data_table[:,1],bounds_error=False,fill_value=0)(nu0)
@@ -176,7 +179,6 @@ def CIB_band_Agora(self,halos,LIR,pars,rng):
     kTh = (cu.k_B*Tdust/(cu.h)).to(u.GHz)
     nu_prime = kTh*(3+beta_d+alpha_d) #frequency at which the gray body becomes power law
     SED = np.zeros_like(nu_rest.value)
-    import matplotlib.pyplot as plt
     #Get SED for each nu0 entry
     for inu in range(self.NnuObs):
         nu_inu = nu_rest[inu,:]
@@ -206,6 +208,8 @@ def Tdust_Agora(z,SFR,Mstar,LIR,B,zeta_d,A_d,alpha):
     #   (arXiv:2009.07292)
     y = np.log10(Mstar) - 0.6 * np.log10(SFR) - 10
     Zgas = 8.80 + 0.188*y - 0.220 * y**2 - 0.0531 * y**3
+    del y
+    gc.collect()
     #Main-sequence specific star-formation state from Tacconi et al 2018,
     #   (arXiv:1702.01140), using their "cosmic-time(z)" fit formula
     #   Note there is a difference of 10^9 because our sSFR is in Yr^-1 and
@@ -213,10 +217,14 @@ def Tdust_Agora(z,SFR,Mstar,LIR,B,zeta_d,A_d,alpha):
     logz = np.log10(1+z)
     tc = 10**(1.143 - 1.026*logz - 0.599*logz**2 + 0.528*logz**3)
     sSFR_MS = 10**((-0.16-0.026*tc) * (np.log10(Mstar)+0.025) - (6.51-0.11*tc))
+    del tc
+    gc.collect()
     #Gas-to-stellar mass ratio following Tacconi et al 2020, arXiv:2003.06245
     A,C,D,F = 0.06,0.51,-0.41,0.65
     sSFR = SFR/Mstar
     Mgas_over_Mstar = 10**(A + B*(logz-F)**2 + C*np.log10(sSFR/sSFR_MS) + D*(np.log10(Mstar)-10.7))
+    del sSFR, sSFR_MS, logz
+    gc.collect()
     #Compute suppression in the Mdust-to-Mstar ratio at z>2, from 
     #   Donevski et al. 2020 (arXiv:2008.09995)
     factor = np.ones_like(z)
@@ -225,10 +233,11 @@ def Tdust_Agora(z,SFR,Mstar,LIR,B,zeta_d,A_d,alpha):
     #Unnormalized dust mass to stellar mass ratio from the relation in 
     #   Donevski et al. 2020 (arXiv:2008.09995)
     Mdust = Mstar * Mgas_over_Mstar * Zgas * factor
+    del factor
+    gc.collect()
     #Find dust temperature and the index of its relation with IR luminosity
     beta_d = newton_root(beta_d_function,beta_d_derivative,2.5,LIR.value,Mdust,zeta_d,A_d,Niter=5)
     Tdust = A_d * (LIR.value/Mdust)**(1/(4+beta_d))
-
     return Tdust*u.K, beta_d
 
 def beta_d_function(beta_d,LIR,Mdust,zeta_d,A_d):

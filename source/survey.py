@@ -622,11 +622,11 @@ class Survey(Lightcone):
         #empty catalog
         halos_survey = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),SFR=np.array([]),Mstar=np.array([]))
         
-        halos_survey['RA'] = np.append(halos_survey['RA'],self.halo_catalog_all['RA'])
-        halos_survey['DEC'] = np.append(halos_survey['DEC'],self.halo_catalog_all['DEC'])
-        halos_survey['Zobs'] = np.append(halos_survey['Zobs'],self.halo_catalog_all['Z']+self.halo_catalog_all['DZ'])
-        halos_survey['SFR'] = np.append(halos_survey['SFR'],self.halo_catalog_all['SFR_HALO'])
-        halos_survey['Mstar'] = np.append(halos_survey['Mstar'],self.halo_catalog_all['SM_HALO'])
+        halos_survey['RA'] = np.append(halos_survey['RA'],self.halo_catalog_all['RA'][inds])
+        halos_survey['DEC'] = np.append(halos_survey['DEC'],self.halo_catalog_all['DEC'][inds])
+        halos_survey['Zobs'] = np.append(halos_survey['Zobs'],self.halo_catalog_all['Z'][inds]+self.halo_catalog_all['DZ'][inds])
+        halos_survey['SFR'] = np.append(halos_survey['SFR'],self.halo_catalog_all['SFR_HALO'][inds])
+        halos_survey['Mstar'] = np.append(halos_survey['Mstar'],self.halo_catalog_all['SM_HALO'][inds])
             
         return halos_survey
 
@@ -808,14 +808,18 @@ class Survey(Lightcone):
             inds_mass = inds_mass&(self.halo_catalog['SM_HALO']>=self.Mstar_min)
 
         inds = inds_sky&inds_mass
-        halos_survey = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),
-                            SFR=np.array([]),Mstar=np.array([]))
+        Ngal = np.sum(inds)
 
-        halos_survey['RA'] = np.append(halos_survey['RA'],self.halo_catalog['RA'][inds])
-        halos_survey['DEC'] = np.append(halos_survey['DEC'],self.halo_catalog['DEC'][inds])
-        halos_survey['Zobs'] = np.append(halos_survey['Zobs'],self.halo_catalog['Z'][inds]+self.halo_catalog['DZ'][inds])
-        halos_survey['SFR'] = np.append(halos_survey['SFR'],self.halo_catalog['SFR_HALO'][inds])
-        halos_survey['Mstar'] = np.append(halos_survey['Mstar'],self.halo_catalog['SM_HALO'][inds])
+        #halos_survey = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),
+        #                    SFR=np.array([]),Mstar=np.array([]))
+
+        
+        halos_survey = np.zeros(Ngal, dtype={'names':('RA', 'DEC', 'Zobs', 'SFR', 'Mstar'), 'formats':('f4', 'f4', 'f4', 'f4', 'f4')})
+        halos_survey['RA'] = self.halo_catalog['RA'][inds]
+        halos_survey['DEC'] = self.halo_catalog['DEC'][inds]
+        halos_survey['Zobs'] = self.halo_catalog['Z'][inds]+self.halo_catalog['DZ'][inds]
+        halos_survey['SFR'] =  self.halo_catalog['SFR_HALO'][inds]
+        halos_survey['Mstar'] = self.halo_catalog['SM_HALO'][inds]
 
         self.halos_in_survey = halos_survey
         return
@@ -996,11 +1000,15 @@ class Survey(Lightcone):
         '''
         #Get luminosity per halo for the halos of interest. Only works if
         #   SFR and Mstar from catalog
+        print('getting LIR')
         LIR = getattr(LM,'LIR')(self,halos['SFR'],halos['Mstar'],self.LIR_pars,self.rng)
+
+        print('getting CIB band agora')
         L_CIB_band = getattr(LM,'CIB_band_Agora')(self,halos,LIR,self.CIB_pars,self.rng)
 
         #Get the flux S_nu = L_nu(1+z)/(4pi*chi^2*(1+z))
         chi = self.cosmo.comoving_radial_distance(halos['Zobs'])*u.Mpc
+        print('getting signal')
         signal = (L_CIB_band/(4*np.pi*u.sr*chi**2*(1+halos['Zobs']))).to(u.Jy/u.sr)
 
         #removed "detected resolved" sources if required
