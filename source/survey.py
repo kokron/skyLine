@@ -612,6 +612,12 @@ class Survey(Lightcone):
             halos_survey['RA'] = np.append(halos_survey['RA'],self.halo_catalog_all['RA'][inds_z])
             halos_survey['DEC'] = np.append(halos_survey['DEC'],self.halo_catalog_all['DEC'][inds_z])
             halos_survey['Zobs'] = np.append(halos_survey['Zobs'],self.halo_catalog_all['Z'][inds_z]+self.halo_catalog_all['DZ'][inds_z])
+
+        Ngal = len(halos_survey['RA'])
+        halos_survey_out = np.zeros(Ngal, dtype={'names':('RA', 'DEC', 'Zobs'), 'formats':('f4', 'f4', 'f4')})
+        halos_survey_out['RA'] = halos_survey['RA']
+        halos_survey_out['DEC'] = halos_survey['DEC']
+        halos_survey_out['Zobs'] = halos_survey['Zobs']
             
         return halos_survey
     
@@ -620,13 +626,14 @@ class Survey(Lightcone):
         Filters all the halo catalog for CIB
         '''
         #empty catalog
-        halos_survey = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),SFR=np.array([]),Mstar=np.array([]))
+        Ngal = np.sum(inds)
+        halos_survey = np.zeros(Ngal, dtype={'names':('RA', 'DEC', 'Zobs', 'SFR', 'Mstar'), 'formats':('f4', 'f4', 'f4', 'f4', 'f4')})
         
-        halos_survey['RA'] = np.append(halos_survey['RA'],self.halo_catalog_all['RA'][inds])
-        halos_survey['DEC'] = np.append(halos_survey['DEC'],self.halo_catalog_all['DEC'][inds])
-        halos_survey['Zobs'] = np.append(halos_survey['Zobs'],self.halo_catalog_all['Z'][inds]+self.halo_catalog_all['DZ'][inds])
-        halos_survey['SFR'] = np.append(halos_survey['SFR'],self.halo_catalog_all['SFR_HALO'][inds])
-        halos_survey['Mstar'] = np.append(halos_survey['Mstar'],self.halo_catalog_all['SM_HALO'][inds])
+        halos_survey['RA'] = self.halo_catalog_all['RA'][inds]
+        halos_survey['DEC'] = self.halo_catalog_all['DEC'][inds]
+        halos_survey['Zobs'] = self.halo_catalog_all['Z'][inds]+self.halo_catalog_all['DZ'][inds]
+        halos_survey['SFR'] = self.halo_catalog_all['SFR_HALO'][inds]
+        halos_survey['Mstar'] = self.halo_catalog_all['SM_HALO'][inds]
             
         return halos_survey
 
@@ -731,7 +738,6 @@ class Survey(Lightcone):
             inds_mass = inds_mass&(self.halo_catalog['SM_HALO']>=self.Mstar_min)
 
         inds = inds_sky&inds_mass
-        halos_survey = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]))
 
         if self.gal_type != 'all':
             #separate between ELGs and LRGs
@@ -751,6 +757,7 @@ class Survey(Lightcone):
         ngal_z = self.gal_n_of_z
         zarr_z = self.zarr_dndzgal
         Ngal_max = np.sum(inds)
+        
         if self.do_angular:
             Ngal_tot = ngal_z[ifile]*self.Omega_field
         else:
@@ -769,9 +776,12 @@ class Survey(Lightcone):
             indlim = np.where(np.cumsum(inds[argsort])>Ngal_tot)[0][0]
             inds[argsort[indlim:]] = False
 
-        halos_survey['RA'] = np.append(halos_survey['RA'],self.halo_catalog['RA'][inds])
-        halos_survey['DEC'] = np.append(halos_survey['DEC'],self.halo_catalog['DEC'][inds])
-        halos_survey['Zobs'] = np.append(halos_survey['Zobs'],self.halo_catalog['Z'][inds]+self.halo_catalog['DZ'][inds])
+        Ngal_in = np.sum(inds)
+        halos_survey = np.zeros(Ngal_in, dtype={'names':('RA', 'DEC', 'Zobs',), 'formats':('f4', 'f4', 'f4')})
+
+        halos_survey['RA'] = self.halo_catalog['RA'][inds]
+        halos_survey['DEC'] = self.halo_catalog['DEC'][inds]
+        halos_survey['Zobs'] = self.halo_catalog['Z'][inds]+self.halo_catalog['DZ'][inds]
         
         self.halos_in_survey = halos_survey
         return
@@ -809,10 +819,6 @@ class Survey(Lightcone):
 
         inds = inds_sky&inds_mass
         Ngal = np.sum(inds)
-
-        #halos_survey = dict(RA= np.array([]),DEC=np.array([]),Zobs=np.array([]),
-        #                    SFR=np.array([]),Mstar=np.array([]))
-
         
         halos_survey = np.zeros(Ngal, dtype={'names':('RA', 'DEC', 'Zobs', 'SFR', 'Mstar'), 'formats':('f4', 'f4', 'f4', 'f4', 'f4')})
         halos_survey['RA'] = self.halo_catalog['RA'][inds]
