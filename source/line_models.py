@@ -135,7 +135,7 @@ def LIR_and_LUV(self,SFR,Mstar,pars,rng):
 ## Cosmic IR Background ##
 ##########################
 
-def CIB_band_Agora(self,halos,LIR,pars,rng):
+def CIB_band_Agora(self,halos,LIR,pars):
     '''
     Model for the CIB luminosity in a given observed band.
     Follows the modeling implemented in the Agora simulations
@@ -150,7 +150,6 @@ def CIB_band_Agora(self,halos,LIR,pars,rng):
             -zeta_d:     
             -A_d:       Normalization of the dust mass to Tdust relation 
             -alpha:     Power of the suppression in Mdust/Mstar at z>2
-        -rng:       RNG object with the seed set in the input
     '''
     try:
         B,zeta_d,A_d,alpha = pars['B'],pars['zeta_d'],pars['A_d'],pars['alpha']
