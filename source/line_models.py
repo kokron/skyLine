@@ -10,7 +10,7 @@ import astropy.units as u
 import astropy.constants as cu
 import gc
 from source.utilities import newton_root
-
+from time import time
 ######################
 ## Lines considered ##
 ######################
@@ -161,38 +161,84 @@ def CIB_band_Agora(self,halos,LIR,pars,rng):
     Mstar = halos['Mstar']
     SFR = halos['SFR']
     inds = (SFR>0)&(Mstar>0)
+    hidx = np.argwhere(inds)
     #Get the dust temperature and gray body parameter for all halos
     Tdust, beta_d = Tdust_Agora(halos['Zobs'][inds],SFR[inds],Mstar[inds],LIR[inds],
                                 B,zeta_d,A_d,alpha)
     #rest frame frequency for each halo corresponding to the observed bandwidth
     nu0 = np.geomspace(self.nuObs_min.value,self.nuObs_max.value,self.NnuObs)*self.nuObs_min.unit
 
-    print('Trying to make nu_rest')
-    nu_rest = nu0[:,None]*(1+halos['Zobs'][inds])
-    print('Made nu_rest')
     #Read the imaging band table
     data_table = np.loadtxt(self.spectral_transmission_file)
     tau_nu0 = interp1d(data_table[:,0],data_table[:,1],bounds_error=False,fill_value=0)(nu0)
     tau_nu0_norm = np.trapz(tau_nu0,nu0)
     #CIB SED for each halo (modified gray body)
     alpha_d = 2 #power-law index, from Planck papers
-    kTh = (cu.k_B*Tdust/(cu.h)).to(u.GHz)
-    nu_prime = kTh*(3+beta_d+alpha_d) #frequency at which the gray body becomes power law
-    SED = np.zeros_like(nu_rest.value)
-    #Get SED for each nu0 entry
-    for inu in range(self.NnuObs):
-        nu_inu = nu_rest[inu,:]
-        nu_inds = nu_inu < nu_prime #indices for which SED is gray body
-        SED[inu,nu_inds] = nu_inu[nu_inds].value**(beta_d[nu_inds]+3)/np.exp((nu_inu[nu_inds]/kTh[nu_inds]).decompose())
-        nu_inds = np.invert(nu_inds)
-        SED[inu,nu_inds] = nu_prime[nu_inds].value**(beta_d[nu_inds]+3)/np.exp((nu_prime[nu_inds]/kTh[nu_inds]).decompose())*(nu_inu[nu_inds]/nu_prime[nu_inds])**-alpha_d
+   
+    #Fix unit stuff
+    #L_CIB = np.zeros_like(LIR)/nu0.unit
+    L_CIB = np.zeros(len(LIR))
+    #Hard coded right now
+    Niter = 100
+    nsubcat = len(halos)//Niter 
+   
+    #Iteratively compute the SED contribution to L_CIB for each halo
+    for i in range(Niter+1):
+        if i == Niter:
+            #last iteration
+            kTh = (cu.k_B * Tdust[i*nsubcat:-1]/(cu.h)).to(u.GHz)
+            bd = beta_d[i*nsubcat:-1]
+            Td = Tdust[i*nsubcat:-1]
+        else:
+            kTh = (cu.k_B * Tdust[i*nsubcat:(i+1)*nsubcat]/(cu.h)).to(u.GHz)
+            bd = beta_d[i*nsubcat:(i+1)*nsubcat]
+            Td = Tdust[i*nsubcat:(i+1)*nsubcat]
+        nu_prime = kTh*(3+bd+alpha_d) #frequency at which the gray body becomes power law
+        
+        SEDnorm = kTh.value**(4+bd)*gamma(4+bd)*gammainc(4+bd,3+alpha_d+bd) + nu_prime.value**(4+bd)/(alpha_d-1)/np.exp(3+alpha_d+bd)
+        integrand = SEDint(nu0, bd, Td,nu_prime)
+        int_term = np.trapz(integrand*tau_nu0[:,None], nu0.value, axis=0)/SEDnorm/tau_nu0_norm * self.rng.normal(1, 0.25, len(SEDnorm))    
+        if i== Niter:
+            L_CIB[hidx[i*nsubcat:-1][:,0]] = int_term
+
+        else:
+            L_CIB[hidx[i*nsubcat:(i+1)*nsubcat][:,0]] = int_term
     #Get the SED normalization
-    SEDnorm = kTh.value**(4+beta_d)*gamma(4+beta_d)*gammainc(4+beta_d,3+alpha_d+beta_d) + nu_prime.value**(4+beta_d)/(alpha_d-1)/np.exp(3+alpha_d+beta_d)
-    #create a zeros-like array to store the CIB
-    L_CIB = np.zeros_like(LIR)/nu0.unit
     #Compute the L_CIB that each halo contributes to the band (giving SED its unit)
-    L_CIB[inds] = LIR[inds]*np.trapz(SED*tau_nu0[:,None],nu0.value,axis=0)/SEDnorm/tau_nu0_norm*rng.normal(1.,0.25,len(SEDnorm))
+    #The units are super funky right now.. Need to double check
+    L_CIB[inds] = LIR[inds].value*L_CIB[inds]
     return L_CIB
+
+def SEDint(nus, beta_d, Td, nup):
+    '''
+    Compute SED for a set of N [beta_d, Td, nup] across a specified nu range
+    Do integral to get L_CIB for each object. 
+    
+    NOTE -- currently stops at given SED arrays. More to do to get L_CIB.
+    '''
+    alpha_d=2
+    #Build the SEDvec
+    SEDvec = np.zeros(shape=(len(nus), len(beta_d)))
+    
+    
+    kTh = (cu.k_B * Td / (cu.h)).to(u.GHz)
+
+    #Build the mask 
+    bignuvec = np.tile(nus, len(beta_d)).reshape(len(beta_d), len(nus)).T
+    nu_inds = bignuvec <= nup
+
+
+    #Compute nu < nup
+    SEDvec[nu_inds] = (np.exp(np.einsum('i, j->ij', np.log(nus.value),beta_d+3))/(np.exp(np.einsum('i, j->ij', nus, 1./kTh)) - 1))[nu_inds]
+    
+    #nu > nup
+    #Notice how the only nu dependence comes from nus**-alpha_d, so we can factor this out
+    nu_inds = ~nu_inds 
+    SEDvec[nu_inds] = np.einsum('i, j->ij', nus**-alpha_d, nup.value**(beta_d+3+alpha_d)/(np.exp(nup/kTh) - 1))[nu_inds]
+
+    #We still want to compute the SED normalization integral, etc. 
+    
+    return SEDvec
 
 def Tdust_Agora(z,SFR,Mstar,LIR,B,zeta_d,A_d,alpha):
     '''
@@ -206,10 +252,12 @@ def Tdust_Agora(z,SFR,Mstar,LIR,B,zeta_d,A_d,alpha):
     '''
     #Gas metallicity from the empirical relation from Sanders et al 2021
     #   (arXiv:2009.07292)
+    st = time()
     y = np.log10(Mstar) - 0.6 * np.log10(SFR) - 10
     Zgas = 8.80 + 0.188*y - 0.220 * y**2 - 0.0531 * y**3
     del y
     gc.collect()
+    print(time() - st, "y and zgas")
     #Main-sequence specific star-formation state from Tacconi et al 2018,
     #   (arXiv:1702.01140), using their "cosmic-time(z)" fit formula
     #   Note there is a difference of 10^9 because our sSFR is in Yr^-1 and
@@ -219,12 +267,14 @@ def Tdust_Agora(z,SFR,Mstar,LIR,B,zeta_d,A_d,alpha):
     sSFR_MS = 10**((-0.16-0.026*tc) * (np.log10(Mstar)+0.025) - (6.51-0.11*tc))
     del tc
     gc.collect()
+    print(time() - st, "tc and logz")
     #Gas-to-stellar mass ratio following Tacconi et al 2020, arXiv:2003.06245
     A,C,D,F = 0.06,0.51,-0.41,0.65
     sSFR = SFR/Mstar
     Mgas_over_Mstar = 10**(A + B*(logz-F)**2 + C*np.log10(sSFR/sSFR_MS) + D*(np.log10(Mstar)-10.7))
     del sSFR, sSFR_MS, logz
     gc.collect()
+    print(time() - st, "Mgas Mstar")
     #Compute suppression in the Mdust-to-Mstar ratio at z>2, from 
     #   Donevski et al. 2020 (arXiv:2008.09995)
     factor = np.ones_like(z)
@@ -235,8 +285,10 @@ def Tdust_Agora(z,SFR,Mstar,LIR,B,zeta_d,A_d,alpha):
     Mdust = Mstar * Mgas_over_Mstar * Zgas * factor
     del factor
     gc.collect()
+    print(time() - st, "Mdust get")
     #Find dust temperature and the index of its relation with IR luminosity
     beta_d = newton_root(beta_d_function,beta_d_derivative,2.5,LIR.value,Mdust,zeta_d,A_d,Niter=5)
+    print(time() - st, "Root find Niter=5")
     Tdust = A_d * (LIR.value/Mdust)**(1/(4+beta_d))
     return Tdust*u.K, beta_d
 
