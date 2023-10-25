@@ -180,25 +180,24 @@ def CIB_band_Agora(self,halos,LIR,pars):
     #Hard coded right now
     Niter = 100
     nsubcat = len(halos)//Niter 
-   
+
+    #Generate lookup tables for IR SEDs as a function of temperature
+    SEDSpl = SEDTabulate(nu0)
+    NormSpl = make_SEDnorm() 
     #Iteratively compute the SED contribution to L_CIB for each halo
     for i in range(Niter+1):
         if i == Niter:
             #last iteration
-            kTh = (cu.k_B * Tdust[i*nsubcat:-1]/(cu.h)).to(u.GHz)
-            bd = beta_d[i*nsubcat:-1]
-            Td = Tdust[i*nsubcat:-1]
+            Td = Tdust[i*nsubcat:].value
         else:
-            kTh = (cu.k_B * Tdust[i*nsubcat:(i+1)*nsubcat]/(cu.h)).to(u.GHz)
-            bd = beta_d[i*nsubcat:(i+1)*nsubcat]
-            Td = Tdust[i*nsubcat:(i+1)*nsubcat]
-        nu_prime = kTh*(3+bd+alpha_d) #frequency at which the gray body becomes power law
+            Td = Tdust[i*nsubcat:(i+1)*nsubcat].value
         
-        SEDnorm = kTh.value**(4+bd)*gamma(4+bd)*gammainc(4+bd,3+alpha_d+bd) + nu_prime.value**(4+bd)/(alpha_d-1)/np.exp(3+alpha_d+bd)
-        integrand = SEDint(nu0, bd, Td,nu_prime)
+        integrand = SEDSpl(Td) #Quick evaluation of full SED on nu0 for each entry
+        SEDnorm = NormSpl(Td)
+
         int_term = np.trapz(integrand*tau_nu0[:,None], nu0.value, axis=0)/SEDnorm/tau_nu0_norm * self.rng.normal(1, 0.25, len(SEDnorm))    
         if i== Niter:
-            L_CIB[hidx[i*nsubcat:-1][:,0]] = int_term
+            L_CIB[hidx[i*nsubcat:][:,0]] = int_term
 
         else:
             L_CIB[hidx[i*nsubcat:(i+1)*nsubcat][:,0]] = int_term
@@ -208,7 +207,57 @@ def CIB_band_Agora(self,halos,LIR,pars):
     L_CIB[inds] = LIR[inds].value*L_CIB[inds]
     return L_CIB
 
-def SEDint(nus, beta_d, Td, nup):
+def make_SEDnorm():
+    '''
+    Generate a function which computes the normalization of the SED
+    for a dust temperature Td [K]
+    '''
+    nus = np.geomspace(0.1, 1e7, 1000)*u.GHz
+    tablespl = SEDTabulate(nus)
+    Tdvec = np.geomspace(0.05, 100, 2000)
+    
+    #Generate table with broad range in nus, same values of T as other function, compute normalization
+    tableSED = tablespl(Tdvec)
+    norm = np.trapz(tableSED, nus, axis=0)
+    normspl = interp1d(Tdvec, norm)
+    return normspl
+
+def SEDTabulate(nu):
+    '''
+    Given an input set of frequencies nu, generate SED for Td. 
+    '''
+
+    Tdvec = np.geomspace(0.05, 100, 2000)
+    
+    #Add units
+    Td = Tdvec*u.K
+    alpha_d=2
+    betad = 1.25 / (0.4 + 0.008*Tdvec)
+    #Build the SEDvec
+    
+    SEDvec = np.zeros(shape=(len(nu), len(betad)))
+
+
+    kTh = (cu.k_B * Td / (cu.h)).to(u.GHz)
+    
+    nup = kTh*(3+betad+alpha_d)
+
+    #Build the mask
+    bignuvec = np.tile(nu, len(betad)).reshape(len(betad), len(nu)).T
+    
+    nu_inds = bignuvec <= nup
+    #Compute nu < nup
+
+    SEDvec[nu_inds] = np.exp((np.einsum('i, j->ij', np.log(nu.value),betad+3)) - np.log(np.exp(np.einsum('i, j->ij', nu, 1./kTh)) - 1)) [nu_inds]
+
+    nu_inds = ~nu_inds
+    SEDvec[nu_inds] = np.einsum('i, j->ij', nu**-alpha_d, nup.value**(betad+3+alpha_d)/(np.exp(nup/kTh) - 1))[nu_inds]
+
+    SEDspl = interp1d(Tdvec, SEDvec, axis=1)
+    
+    return SEDspl
+
+def SEDint(nus, Td, beta_d=None):
     '''
     Compute SED for a set of N [beta_d, Td, nup] across a specified nu range
     Do integral to get L_CIB for each object. 
@@ -216,11 +265,14 @@ def SEDint(nus, beta_d, Td, nup):
     NOTE -- currently stops at given SED arrays. More to do to get L_CIB.
     '''
     alpha_d=2
+    if beta_d is None:
+        beta_d = 1.25 / (0.4 * 0.008*Td)
     #Build the SEDvec
     SEDvec = np.zeros(shape=(len(nus), len(beta_d)))
     
     
     kTh = (cu.k_B * Td / (cu.h)).to(u.GHz)
+    nup = kTh*(3+beta_d+alpha_d)
 
     #Build the mask 
     bignuvec = np.tile(nus, len(beta_d)).reshape(len(beta_d), len(nus)).T
