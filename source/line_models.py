@@ -5,7 +5,7 @@ Catalog of different lines and models
 import numpy as np
 from numpy.random import normal,multivariate_normal
 from scipy.special import gamma, gammainc
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d, RegularGridInterpolator
 import astropy.units as u
 import astropy.constants as cu
 import gc
@@ -189,13 +189,14 @@ def CIB_band_Agora(self,halos,LIR,pars):
         if i == Niter:
             #last iteration
             Td = Tdust[i*nsubcat:].value
+            zhalo = halos['Zobs'][i*nsubcat:]
         else:
-            Td = Tdust[i*nsubcat:(i+1)*nsubcat].value
-        
-        integrand = SEDSpl(Td) #Quick evaluation of full SED on nu0 for each entry
+            Td = Tdust[i*nsubcat:(i+1)*nsubcat].value 
+            zhalo = halos['Zobs'][i*nsubcat:(i+1)*nsubcat]
+        integrand = SEDSpl((zhalo, Td)) #Quick evaluation of full SED on nu0 for each entry
         SEDnorm = NormSpl(Td)
 
-        int_term = np.trapz(integrand*tau_nu0[:,None], nu0.value, axis=0)/SEDnorm/tau_nu0_norm * self.rng.normal(1, 0.25, len(SEDnorm))    
+        int_term = np.trapz(integrand*tau_nu0[:,None], nu0.value, axis=1)/SEDnorm/tau_nu0_norm * self.rng.normal(1, 0.25, len(SEDnorm))    
         if i== Niter:
             L_CIB[hidx[i*nsubcat:][:,0]] = int_term
 
@@ -243,18 +244,25 @@ def SEDTabulate(nu):
     nup = kTh*(3+betad+alpha_d)
 
     #Build the mask
-    bignuvec = np.tile(nu, len(betad)).reshape(len(betad), len(nu)).T
-    
+   
+    nuvec = np.tile(nu, len(betad)*len(zvec)).reshape(len(betad), len(zvec), len(nu)).T
+    #Scale each of the frequencies coordinates to the rest frame frequencies at z
+
+    bignuvec = np.einsum('nzT, z->nzT', bignuvec, (1+zvec))
+
+
     nu_inds = bignuvec <= nup
     #Compute nu < nup
 
-    SEDvec[nu_inds] = np.exp((np.einsum('i, j->ij', np.log(nu.value),betad+3)) - np.log(np.exp(np.einsum('i, j->ij', nu, 1./kTh)) - 1)) [nu_inds]
+
+
+    SEDvec[nu_inds] = np.exp((np.einsum('nzh, h->nzh', np.log(bignuvec.value),betad+3)) - np.log(np.exp(np.einsum('nzh, h->nzh', bignuvec, 1./kTh)) - 1)) [nu_inds]
 
     nu_inds = ~nu_inds
-    SEDvec[nu_inds] = np.einsum('i, j->ij', nu**-alpha_d, nup.value**(betad+3+alpha_d)/(np.exp(nup/kTh) - 1))[nu_inds]
+    SEDvec[nu_inds] = np.einsum('nzh, h->nzh', bignuvec**-alpha_d, nup.value**(betad+3+alpha_d)/(np.exp(nup/kTh) - 1))[nu_inds]
+    SEDspl = RegularGridInterpolator((zvec, Td), np.einsum('nzh->zhn', SEDvec))
 
-    SEDspl = interp1d(Tdvec, SEDvec, axis=1)
-    
+
     return SEDspl
 
 def SEDint(nus, Td, beta_d=None):
