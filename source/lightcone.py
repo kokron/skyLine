@@ -210,7 +210,8 @@ class Lightcone(object):
         data = np.array(fil[1].data)
         inds_RA = (data['RA'] > self.RA_min.value)&(data['RA'] < self.RA_max.value)
         inds_DEC = (data['DEC'] > self.DEC_min.value)&(data['DEC'] < self.DEC_max.value)
-        inds_sky = inds_RA&inds_DEC
+        inds_z = (data['Z']+data['DZ'] > self.zmin)&(data['Z']+data['DZ'] < self.zmax)
+        inds_sky = inds_RA&inds_DEC&inds_z
         bigcat = data[inds_sky]
         #append the rest:
         for ifile in range(1,nfiles):
@@ -218,7 +219,8 @@ class Lightcone(object):
             data = np.array(fil[1].data)
             inds_RA = (data['RA'] > self.RA_min.value)&(data['RA'] < self.RA_max.value)
             inds_DEC = (data['DEC'] > self.DEC_min.value)&(data['DEC'] < self.DEC_max.value)
-            inds_sky = inds_RA&inds_DEC
+            inds_z = (data['Z']+data['DZ'] > self.zmin)&(data['Z']+data['DZ'] < self.zmax)
+            inds_sky = inds_RA&inds_DEC&inds_z
             bigcat = np.append(bigcat, data[inds_sky])
             
         #Return and cache the whole catalog:
@@ -232,7 +234,8 @@ class Lightcone(object):
         data = np.array(fil[1].data)
         inds_RA = (data['RA'] > self.RA_min.value)&(data['RA'] < self.RA_max.value)
         inds_DEC = (data['DEC'] > self.DEC_min.value)&(data['DEC'] < self.DEC_max.value)
-        inds_sky = inds_RA&inds_DEC
+        inds_z = (data['Z']+data['DZ'] > self.zmin)&(data['Z']+data['DZ'] < self.zmax)
+        inds_sky = inds_RA&inds_DEC&inds_z
         bigcat = data[inds_sky]
         
         #return *one* slice does not enter in cache
