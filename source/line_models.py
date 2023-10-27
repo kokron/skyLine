@@ -179,24 +179,24 @@ def CIB_band_Agora(self,halos,LIR,pars):
     L_CIB = np.zeros(len(LIR))
     #Hard coded right now
     Niter = 100
-    nsubcat = len(halos)//Niter 
+    nsubcat = len(halos[inds])//Niter 
 
     #Generate lookup tables for IR SEDs as a function of temperature
-    SEDSpl = SEDTabulate(nu0)
-    NormSpl = make_SEDnorm() 
+    SEDSpl = SEDTabulate(self,nu0)
+    NormSpl = make_SEDnorm(self) 
     #Iteratively compute the SED contribution to L_CIB for each halo
     for i in range(Niter+1):
         if i == Niter:
             #last iteration
             Td = Tdust[i*nsubcat:].value
-            zhalo = halos['Zobs'][i*nsubcat:]
+            zhalo = halos[inds]['Zobs'][i*nsubcat:]
         else:
             Td = Tdust[i*nsubcat:(i+1)*nsubcat].value 
-            zhalo = halos['Zobs'][i*nsubcat:(i+1)*nsubcat]
+            zhalo = halos[inds]['Zobs'][i*nsubcat:(i+1)*nsubcat]
         integrand = SEDSpl((zhalo, Td)) #Quick evaluation of full SED on nu0 for each entry
         SEDnorm = NormSpl(Td)
 
-        int_term = np.trapz(integrand*tau_nu0[:,None], nu0.value, axis=1)/SEDnorm/tau_nu0_norm * self.rng.normal(1, 0.25, len(SEDnorm))    
+        int_term = np.trapz(integrand*tau_nu0[None,:], nu0.value, axis=1)/SEDnorm/tau_nu0_norm * self.rng.normal(1, 0.25, len(SEDnorm))    
         if i== Niter:
             L_CIB[hidx[i*nsubcat:][:,0]] = int_term
 
@@ -208,60 +208,53 @@ def CIB_band_Agora(self,halos,LIR,pars):
     L_CIB[inds] = LIR[inds].value*L_CIB[inds]
     return L_CIB
 
-def make_SEDnorm():
+def make_SEDnorm(self):
     '''
     Generate a function which computes the normalization of the SED
     for a dust temperature Td [K]
     '''
     nus = np.geomspace(0.1, 1e7, 1000)*u.GHz
-    tablespl = SEDTabulate(nus)
+    tablespl = SEDTabulate(self,nus)
     Tdvec = np.geomspace(0.05, 100, 2000)
     
     #Generate table with broad range in nus, same values of T as other function, compute normalization
-    tableSED = tablespl(Tdvec)
+    tableSED = tablespl((self.zmin,Tdvec))
     norm = np.trapz(tableSED, nus, axis=0)
     normspl = interp1d(Tdvec, norm)
     return normspl
 
-def SEDTabulate(nu):
+def SEDTabulate(self,nu):
     '''
     Given an input set of frequencies nu, generate SED for Td. 
     '''
 
     Tdvec = np.geomspace(0.05, 100, 2000)
+    dz = 0.01
+    zvec = np.arange(self.zmin-dz,self.zmax+dz,dz)
     
     #Add units
     Td = Tdvec*u.K
     alpha_d=2
     betad = 1.25 / (0.4 + 0.008*Tdvec)
+
     #Build the SEDvec
-    
-    SEDvec = np.zeros(shape=(len(nu), len(betad)))
+    SEDvec = np.zeros(shape=(len(nu), len(zvec), len(betad)))
 
-
-    kTh = (cu.k_B * Td / (cu.h)).to(u.GHz)
-    
+    kTh = (cu.k_B * Td / (cu.h)).to(u.GHz)    
     nup = kTh*(3+betad+alpha_d)
 
     #Build the mask
-   
-    nuvec = np.tile(nu, len(betad)*len(zvec)).reshape(len(betad), len(zvec), len(nu)).T
+    bignuvec = np.tile(nu, len(betad)*len(zvec)).reshape(len(betad), len(zvec), len(nu)).T
     #Scale each of the frequencies coordinates to the rest frame frequencies at z
-
     bignuvec = np.einsum('nzT, z->nzT', bignuvec, (1+zvec))
 
-
-    nu_inds = bignuvec <= nup
     #Compute nu < nup
-
-
-
+    nu_inds = bignuvec <= nup
     SEDvec[nu_inds] = np.exp((np.einsum('nzh, h->nzh', np.log(bignuvec.value),betad+3)) - np.log(np.exp(np.einsum('nzh, h->nzh', bignuvec, 1./kTh)) - 1)) [nu_inds]
-
+    #Compute nu > nup
     nu_inds = ~nu_inds
     SEDvec[nu_inds] = np.einsum('nzh, h->nzh', bignuvec**-alpha_d, nup.value**(betad+3+alpha_d)/(np.exp(nup/kTh) - 1))[nu_inds]
     SEDspl = RegularGridInterpolator((zvec, Td), np.einsum('nzh->zhn', SEDvec))
-
 
     return SEDspl
 
