@@ -162,8 +162,8 @@ def CIB_band_Agora(self,halos,LIR,pars):
     inds = (SFR>0)&(Mstar>0)
     hidx = np.argwhere(inds)
     #Get the dust temperature and gray body parameter for all halos
-    Tdust, beta_d = Tdust_Agora(halos['Zobs'][inds],SFR[inds],Mstar[inds],LIR[inds],
-                                B,zeta_d,A_d,alpha)
+    Tdust = Tdust_Agora(halos['Zobs'][inds],SFR[inds],Mstar[inds],LIR[inds],
+                        B,zeta_d,A_d,alpha)
     #rest frame frequency for each halo corresponding to the observed bandwidth
     nu0 = np.geomspace(self.nuObs_min.value,self.nuObs_max.value,self.NnuObs)*self.nuObs_min.unit
 
@@ -171,11 +171,7 @@ def CIB_band_Agora(self,halos,LIR,pars):
     data_table = np.loadtxt(self.spectral_transmission_file)
     tau_nu0 = interp1d(data_table[:,0],data_table[:,1],bounds_error=False,fill_value=0)(nu0)
     tau_nu0_norm = np.trapz(tau_nu0,nu0)
-    #CIB SED for each halo (modified gray body)
-    alpha_d = 2 #power-law index, from Planck papers
    
-    #Fix unit stuff
-    #L_CIB = np.zeros_like(LIR)/nu0.unit
     L_CIB = np.zeros(len(LIR))
     #Hard coded right now
     Niter = 100
@@ -204,9 +200,10 @@ def CIB_band_Agora(self,halos,LIR,pars):
             L_CIB[hidx[i*nsubcat:(i+1)*nsubcat][:,0]] = int_term
     #Get the SED normalization
     #Compute the L_CIB that each halo contributes to the band (giving SED its unit)
-    #The units are super funky right now.. Need to double check
-    L_CIB[inds] = LIR[inds].value*L_CIB[inds]
-    return L_CIB
+    #The units are super funky right now.. Need to double check NOTE -> JOSE: Units are Lsun (from LIR) / GHz (from the SED). tau_nu0 has no units
+    #L_CIB[inds] = LIR[inds]*L_CIB[inds]
+    #return L_CIB
+    return LIR*L_CIB/u.GHz
 
 def make_SEDnorm(self):
     '''
@@ -342,7 +339,7 @@ def Tdust_Agora(z,SFR,Mstar,LIR,B,zeta_d,A_d,alpha):
     beta_d = newton_root(beta_d_function,beta_d_derivative,2.5,LIR.value,Mdust,zeta_d,A_d,Niter=5)
     print(time() - st, "Root find Niter=5")
     Tdust = A_d * (LIR.value/Mdust)**(1/(4+beta_d))
-    return Tdust*u.K, beta_d
+    return Tdust*u.K#, beta_d
 
 def beta_d_function(beta_d,LIR,Mdust,zeta_d,A_d):
     '''
