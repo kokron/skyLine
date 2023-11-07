@@ -185,10 +185,13 @@ class Lightcone(object):
             ind[ifile] =  int(fnames[ifile].split('_')[-1].split('.')[0])
         sort_ind = np.argsort(ind)
         #get the edge distances for each slice in Mpc (self.lightcone_slice_width in Mpc/h width each slice)
-        dist_edges = (np.arange(Nfiles+1)+ind[[sort_ind[0]]])*self.lightcone_slice_width*self.Mpch.value
+        dist_edges = (np.arange(Nfiles+1)+ind[[sort_ind[0]]]+1)*self.lightcone_slice_width*self.Mpch.value
         min_dist = self.cosmo.comoving_radial_distance(zmin)
         max_dist = self.cosmo.comoving_radial_distance(zmax)
-        inds_in = np.where(np.logical_and(dist_edges[:-1] >= min_dist, dist_edges[1:] <= max_dist))[0]
+        min_idx = min_dist//(self.lightcone_slice_width*self.Mpch.value) - 1
+        max_idx = max_dist//(self.lightcone_slice_width*self.Mpch.value) + 1
+        inds_in = np.arange(min_idx, max_idx, dtype=int)
+
         N_in = len(inds_in)
         fnames = np.array(fnames)
 

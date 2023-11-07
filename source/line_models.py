@@ -216,7 +216,9 @@ def make_SEDnorm(self):
     
     #Generate table with broad range in nus, same values of T as other function, compute normalization
     tableSED = tablespl((self.zmin,Tdvec))
-    norm = np.trapz(tableSED, nus, axis=0)
+    print(tableSED.shape)
+    print(nus.shape)
+    norm = np.trapz(tableSED, nus, axis=1)
     normspl = interp1d(Tdvec, norm)
     return normspl
 
