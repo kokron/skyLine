@@ -691,13 +691,18 @@ class Survey(Lightcone):
         halos_survey[line] = dict(RA=np.array([]),DEC=np.array([]),Zobs=np.array([]),Ztrue=np.array([]),Lhalo=np.array([])*u.Lsun,Mhalo=np.array([])*self.Msunh)
         #get observed freqs and luminosities
         self.nuObs_line_halo_slice(line)
+        print('Got nuobs line halo')
         self.L_line_halo_slice(line)
+        print('got L line halo')
         inds = (self.nuObs_line_halo[line] >= nu_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky&inds_mass
-        
+        print('got inds') 
         halos_survey[line]['RA'] = np.append(halos_survey[line]['RA'],self.halo_catalog['RA'][inds])
+        print('got ra')
         halos_survey[line]['DEC'] = np.append(halos_survey[line]['DEC'],self.halo_catalog['DEC'][inds])
+        print('got dec')
         halos_survey[line]['Zobs'] = np.append(halos_survey[line]['Zobs'],(self.line_nu0[self.target_line]/self.nuObs_line_halo[line][inds]).decompose()-1)
         #doing DZ correction
+        print('got zs')
         halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog['Z'][inds]+self.halo_catalog['DZ'][inds])
         #halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog['Z'][inds])
         halos_survey[line]['Lhalo'] = np.append(halos_survey[line]['Lhalo'],self.L_line_halo[line][inds])
@@ -854,9 +859,12 @@ class Survey(Lightcone):
                         nfiles = len(fnames)
                                         
                         for ifile in range(nfiles):
+                            print(ifile)
                             #Get the halos and which of those fall in the survey
                             self.halo_catalog_slice(fnames[ifile])
+                            print('die 1')
                             self.halos_in_survey_slice_lim(line,nfiles,ifile)
+                            print('die 2')
                             #add the contribution from these halos
                             hp_map = self.paint_2d_lim(self.halos_in_survey[line],line,hp_map)
                     else:
