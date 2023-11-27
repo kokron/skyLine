@@ -291,7 +291,6 @@ class Lightcone(object):
         L_line_halo = {}
         nuObs_line_halo = {}
         #Get the SFR
-        print('Ngalsfr is', len(self.halo_catalog['SFR_HALO']))
         if self.do_external_SFR:
             if self.external_SFR == 'Custom_SFR' or self.external_SFR == 'Dongwoo_SFR':
                 #convert halo mass to Msun

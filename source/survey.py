@@ -859,12 +859,9 @@ class Survey(Lightcone):
                         nfiles = len(fnames)
                                         
                         for ifile in range(nfiles):
-                            print(ifile)
                             #Get the halos and which of those fall in the survey
                             self.halo_catalog_slice(fnames[ifile])
-                            print('die 1')
                             self.halos_in_survey_slice_lim(line,nfiles,ifile)
-                            print('die 2')
                             #add the contribution from these halos
                             hp_map = self.paint_2d_lim(self.halos_in_survey[line],line,hp_map)
                     else:
@@ -896,7 +893,6 @@ class Survey(Lightcone):
                 for ifile in range(nfiles):
                     #Get the halos and which of those fall in the survey
                     self.halo_catalog_slice(fnames[ifile])
-                    print(fnames[ifile])
                     self.halos_in_survey_slice_cib(ifile)
                     #add the contribution from these halos
                     hp_map = self.paint_2d_cib(self.halos_in_survey,hp_map)
