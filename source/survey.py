@@ -965,7 +965,7 @@ class Survey(Lightcone):
             #intensity[Jy/sr]
             signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*halos['Lhalo']/Vcell_true).to(self.unit)
             #Read the imaging band table
-            nu0 = np.logspace(np.log10(self.nuObs_min.value),np.log10(self.nuObs_max.value),self.NnuObs)*self.nuObs_min.unit
+            nu0 = np.geomspace(self.nuObs_min,self.nuObs_max,self.NnuObs)
             data_table = np.loadtxt(self.spectral_transmission_file)
             tau_nu0 = interp1d(data_table[:,0],data_table[:,1],bounds_error=False,fill_value=0)(nu0)
             bnu = (2*cu.h*nu0**3/cu.c**2/(np.exp(cu.h*nu0/cu.k_B/2.7255/u.K)-1)).to(u.Jy)/u.sr/u.K
@@ -973,7 +973,8 @@ class Survey(Lightcone):
                 nu_c = np.trapz(nu0*tau_nu0,nu0)/np.trapz(tau_nu0,nu0)
             else:
                 nu_c = self.nu_c
-            signal = (signal/(np.trapz(bnu*tau_nu0,nu0)/np.trapz(tau_nu0*nu_c/nu0,nu0))).to(u.uK)
+            conv_factor = np.trapz(bnu*tau_nu0,nu0)/np.trapz(tau_nu0*nu_c/nu0,nu0)
+            signal = (signal/conv_factor).to(u.uK)
         else:
             #Brightness Temperature[uK]
             signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*halos['Lhalo']/Vcell_true).to(self.unit)
@@ -1046,7 +1047,7 @@ class Survey(Lightcone):
 
         if self.unit_convention == 'Tcmb':
             #Read the imaging band table
-            nu0 = np.logspace(np.log10(self.nuObs_min.value),np.log10(self.nuObs_max.value),self.NnuObs)*self.nuObs_min.unit
+            nu0 = np.geomspace(self.nuObs_min,self.nuObs_max,self.NnuObs)
             data_table = np.loadtxt(self.spectral_transmission_file)
             tau_nu0 = interp1d(data_table[:,0],data_table[:,1],bounds_error=False,fill_value=0)(nu0)
             bnu = (2*cu.h*nu0**3/cu.c**2/(np.exp(cu.h*nu0/cu.k_B/2.7255/u.K)-1)).to(u.Jy)/u.sr/u.K
@@ -1054,11 +1055,12 @@ class Survey(Lightcone):
                 nu_c = np.trapz(nu0*tau_nu0,nu0)/np.trapz(tau_nu0,nu0)
             else:
                 nu_c = self.nu_c
-            signal = (signal/(np.trapz(bnu*tau_nu0,nu0)/np.trapz(tau_nu0*nu_c/nu0,nu0))).to(u.uK)
+            conv_factor = np.trapz(bnu*tau_nu0,nu0)/np.trapz(tau_nu0*nu_c/nu0,nu0)
+            signal = (signal/conv_factor).to(u.uK)
         elif self.unit_convention == 'Tb':
             if self.nu_c == None:
                 #Read the imaging band table
-                nu0 = np.logspace(np.log10(self.nuObs_min.value),np.log10(self.nuObs_max.value),self.NnuObs)*self.nuObs_min.unit
+                nu0 = np.geomspace(self.nuObs_min,self.nuObs_max,self.NnuObs)
                 data_table = np.loadtxt(self.spectral_transmission_file)
                 tau_nu0 = interp1d(data_table[:,0],data_table[:,1],bounds_error=False,fill_value=0)(nu0)
                 nu_c = np.trapz(nu0*tau_nu0,nu0)/np.trapz(tau_nu0,nu0)
