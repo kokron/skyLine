@@ -1017,7 +1017,7 @@ class Survey(Lightcone):
         #Get the flux S_nu = L_nu(1+z)/(4pi*chi^2*(1+z))
         chi = self.cosmo.comoving_radial_distance(halos['Zobs'])*u.Mpc
         print('getting signal')
-        signal = (L_CIB_band/(4*np.pi*u.sr*chi**2*(1+halos['Zobs']))).to(u.Jy/u.sr)
+        signal = (L_CIB_band/(4*np.pi*chi**2*(1+halos['Zobs']))).to(u.Jy)
         
         if len(signal)==0:
             return hp_map
@@ -1025,17 +1025,18 @@ class Survey(Lightcone):
         #removed "detected resolved" sources if required
         if self.flux_detection_lim:
             if type(self.flux_detection_lim) == u.quantity.Quantity:
-                flux = (signal*self.beam_FWHM**2).to(self.flux_detection_lim.unit)
-                inds = (flux.value < self.flux_detection_lim.value)
+                ##flux = (signal*self.beam_FWHM**2).to(self.flux_detection_lim.unit)
+                inds = ((signal.to(self.flux_detection_lim.unit)).value < self.flux_detection_lim.value)
                 signal = signal[inds]
                 theta, phi = rd2tp(halos['RA'][inds], halos['DEC'][inds])
             else:
-                flux = (signal*self.beam_FWHM**2).to(u.mJy)
+                ##flux = (signal*self.beam_FWHM**2).to(u.mJy)
+                signal = signal.to(u.mJy)
                 flux_vec = np.linspace(0,np.max(flux.value),17)
                 inds = np.ones_like(signal.value,dtype=bool)
                 for i in range(len(flux_vec)-1):
-                    inds_flux = (flux.value >= flux_vec[i]) & (flux.value < flux_vec[i+1])
-                    Nsources = len(flux[inds_flux])
+                    inds_flux = (signal.value >= flux_vec[i]) & (signal.value < flux_vec[i+1])
+                    Nsources = len(signal[inds_flux])
                     Ndetected = int(self.flux_detection_lim(0.5*(flux_vec[i]+flux_vec[i+1]))*Nsources)
                     #remove randomly from each bin
                     inds_detected = np.random.choice(Nsources,Ndetected,replace=False)
@@ -1044,6 +1045,9 @@ class Survey(Lightcone):
                 theta, phi = rd2tp(halos['RA'][inds], halos['DEC'][inds])
         else:
             theta, phi = rd2tp(halos['RA'], halos['DEC'])
+
+        #Transform flux to intensity
+        signal *= 1./(hp.nside2pixarea(self.nside, degrees = False)*u.sr)
 
         if self.unit_convention == 'Tcmb':
             #Read the imaging band table
