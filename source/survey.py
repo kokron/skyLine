@@ -130,7 +130,7 @@ class Survey(Lightcone):
 
     -dngaldz_file           File containing a table with the redshift distribution of galaxy number density if number_count = True. Irrelevant otherwise. 
                             Input a file with a table to interpolate and normalize. Format: 2 columns with z, dNdz
-                            (Default: None -> must have one! Will be expected to be in Mpc**-3 or sr**-1 if angular map)   
+                            (Default: None -> must have one! Will be expected to be in (Mpc/h)**-3 or sr**-1 if angular map)   
   
     -spectral_transmission_file: File containing a table with the spectral transmision function for the imaging 
                             band of interest. Only relevant if mode = 'cib' or if angular map and unit_convention = 'Tcmb'. 
@@ -481,7 +481,7 @@ class Survey(Lightcone):
             dndz = ntot*0.5*(dndz_spline[1:]+dndz_spline[:-1])*np.diff(zarr)
         else:
             dndz_spline = interp1d(z_file,dndz_file,bounds_error=False,fill_value=0.)(zarr)
-            dndz = 0.5*(dndz_spline[1:]+dndz_spline[:-1])*u.Mpc**-3
+            dndz = 0.5*(dndz_spline[1:]+dndz_spline[:-1])*self.Mpch**-3
         return dndz
             
     
@@ -593,8 +593,8 @@ class Survey(Lightcone):
             if self.do_angular:
                 Ngal_tot = ngal_z[iz]*self.Omega_field
             else:
-                zvec_slice = np.array([zarr_z[iz],zarr_z[iz+1]])
-                Vslice = np.diff(self.raside_lim)*np.diff(self.decside_lim)*self.Mpch**2*((np.diff(self.cosmo.comoving_radial_distance(zvec_slice))*u.Mpc).to(self.Mpch))[0]
+                dist1,dist2 = (self.cosmo.comoving_radial_distance(zarr_z[iz])*u.Mpc).to(self.Mpch),(self.cosmo.comoving_radial_distance(zarr_z[iz+1])*u.Mpc).to(self.Mpch)
+                Vslice = np.diff(self.raside_lim)*np.diff(self.decside_lim)*(dist2-dist1)
                 Ngal_tot = (ngal_z[iz]*Vslice).decompose()
             #if enough galaxies, get the brightests
             if Ngal_tot > Ngal_max:
@@ -632,7 +632,7 @@ class Survey(Lightcone):
         halos_survey['RA'] = self.halo_catalog_all['RA'][inds]
         halos_survey['DEC'] = self.halo_catalog_all['DEC'][inds]
         halos_survey['Zobs'] = self.halo_catalog_all['Z'][inds]+self.halo_catalog_all['DZ'][inds]
-        halos_survey['SFR'] = self.halo_catalog_all['SFR_HALO'][inds]
+        halos_survey['SFR'] = self.halo_catalog_all['SA[OII]FR_HALO'][inds]
         halos_survey['Mstar'] = self.halo_catalog_all['SM_HALO'][inds]
             
         return halos_survey
@@ -766,8 +766,8 @@ class Survey(Lightcone):
         if self.do_angular:
             Ngal_tot = ngal_z[ifile]*self.Omega_field
         else:
-            zvec_slice = np.array([zarr_z[ifile],zarr_z[ifile+1]])
-            Vslice = np.diff(self.raside_lim)*np.diff(self.decside_lim)*self.Mpch**2*((np.diff(self.cosmo.comoving_radial_distance(zvec_slice))*u.Mpc).to(self.Mpch))[0]
+            dist1,dist2 = (self.cosmo.comoving_radial_distance(zarr_z[ifile])*u.Mpc).to(self.Mpch),(self.cosmo.comoving_radial_distance(zarr_z[ifile+1])*u.Mpc).to(self.Mpch)
+            Vslice = np.diff(self.raside_lim)*np.diff(self.decside_lim)*(dist2-dist1)
             Ngal_tot = (ngal_z[ifile]*Vslice).decompose()
         #if enough galaxies, get the brightests
         if Ngal_tot > Ngal_max:
