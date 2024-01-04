@@ -199,14 +199,15 @@ def CIB_band_Agora(self,halos,LIR,pars):
         integrand = SEDSpl((zhalo, Td)) #Quick evaluation of full SED on nu0 for each entry
         SEDnorm = NormSpl(Td)/(1+zhalo) #Account for the ratio of redshifts
 
-        Cc = np.trapz(tau_nu0*SEDSpl((z,Td))/iSEDSpl[:,None],nu0)/Cc_norm #Color correction
+        iSEDSpl = interp1d(nu0,SEDSpl((zhalo,Td)))(nu_c)
+        Cc = np.trapz(tau_nu0*SEDSpl((zhalo,Td))/iSEDSpl[:,None],nu0)/Cc_norm #Color correction
 
-        int_term = np.trapz(integrand*tau_nu0[None,:], nu0.value, axis=1)/SEDnorm/tau_nu0_norm * self.rng.normal(1, 0.25, len(SEDnorm))    
+        int_term = Cc*np.trapz(integrand*tau_nu0[None,:], nu0.value, axis=1)/SEDnorm/tau_nu0_norm * self.rng.normal(1, 0.25, len(SEDnorm))    
         if i== Niter:
-            L_CIB[hidx[i*nsubcat:][:,0]] = int_term*Cc
+            L_CIB[hidx[i*nsubcat:][:,0]] = int_term
 
         else:
-            L_CIB[hidx[i*nsubcat:(i+1)*nsubcat][:,0]] = int_term*Cc
+            L_CIB[hidx[i*nsubcat:(i+1)*nsubcat][:,0]] = int_term
     #Get the SED normalization
     #Compute the L_CIB that each halo contributes to the band (giving SED its unit)
     #The units are super funky right now.. Need to double check NOTE -> JOSE: Units are Lsun (from LIR) / GHz (from the SED). tau_nu0 has no units
