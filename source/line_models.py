@@ -171,6 +171,13 @@ def CIB_band_Agora(self,halos,LIR,pars):
     data_table = np.loadtxt(self.spectral_transmission_file)
     tau_nu0 = interp1d(data_table[:,0],data_table[:,1],bounds_error=False,fill_value=0)(nu0)
     tau_nu0_norm = np.trapz(tau_nu0,nu0)
+
+    #Prepare to compute the color correction term
+    if self.nu_c == None:
+        nu_c = np.trapz(nu0*tau_nu0,nu0)/np.trapz(tau_nu0,nu0)
+    else:
+        nu_c = self.nu_c
+    Cc_norm = np.trapz(nu_c/nu0*tau_nu0,nu0)
    
     L_CIB = np.zeros(len(LIR))
     #Hard coded right now
@@ -190,14 +197,16 @@ def CIB_band_Agora(self,halos,LIR,pars):
             Td = Tdust[i*nsubcat:(i+1)*nsubcat].value 
             zhalo = halos[inds]['Zobs'][i*nsubcat:(i+1)*nsubcat]
         integrand = SEDSpl((zhalo, Td)) #Quick evaluation of full SED on nu0 for each entry
-        SEDnorm = NormSpl(Td)
+        SEDnorm = NormSpl(Td)/(1+zhalo) #Account for the ratio of redshifts
+
+        Cc = np.trapz(tau_nu0*SEDSpl((z,Td))/iSEDSpl[:,None],nu0)/Cc_norm #Color correction
 
         int_term = np.trapz(integrand*tau_nu0[None,:], nu0.value, axis=1)/SEDnorm/tau_nu0_norm * self.rng.normal(1, 0.25, len(SEDnorm))    
         if i== Niter:
-            L_CIB[hidx[i*nsubcat:][:,0]] = int_term
+            L_CIB[hidx[i*nsubcat:][:,0]] = int_term*Cc
 
         else:
-            L_CIB[hidx[i*nsubcat:(i+1)*nsubcat][:,0]] = int_term
+            L_CIB[hidx[i*nsubcat:(i+1)*nsubcat][:,0]] = int_term*Cc
     #Get the SED normalization
     #Compute the L_CIB that each halo contributes to the band (giving SED its unit)
     #The units are super funky right now.. Need to double check NOTE -> JOSE: Units are Lsun (from LIR) / GHz (from the SED). tau_nu0 has no units
@@ -218,7 +227,7 @@ def make_SEDnorm(self):
     tableSED = tablespl((self.zmin,Tdvec))
     print(tableSED.shape)
     print(nus.shape)
-    norm = np.trapz(tableSED, nus, axis=1)
+    norm = np.trapz(tableSED, nus, axis=1)*(1+self.zmin) #correction factor to do this integral at nuObs
     normspl = interp1d(Tdvec, norm)
     return normspl
 

@@ -381,7 +381,7 @@ class Lightcone(object):
                 delattr(self,attribute)
             self._update_survey_list = []
             for attribute in self._update_measure_list:
-                delattr(self,attribute)
+                delattr(self.__class__,attribute)
             self._update_measure_list = []
         elif any(item in survey_params for item in new_params.keys()):
             for attribute in self._update_survey_list:
