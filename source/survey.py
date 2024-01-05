@@ -1188,8 +1188,12 @@ class Survey(Lightcone):
                             #Get the halos and which of those fall in the survey
                             self.halo_catalog_slice(fnames[ifile])
                             self.halos_in_survey_slice_lim(line,nfiles,ifile)
-                            #add the contribution from these halos
-                            field += self.paint_3d_lim(self.halos_in_survey[line],line,rmid,mins_obs,Vcell_true,pm)
+                            #check if there are halos or it is a buffer slice
+                            if len(self.halos_in_survey[line]['RA']) == 0:
+                                continue
+                            else:
+                                #add the contribution from these halos
+                                field += self.paint_3d_lim(self.halos_in_survey[line],line,rmid,mins_obs,Vcell_true,pm)
                     else:
                         field += self.paint_3d_lim(self.halos_in_survey_all[line],line,rmid,mins_obs,Vcell_true,pm)
             # add galactic foregrounds
@@ -1217,8 +1221,12 @@ class Survey(Lightcone):
                     #Get the halos and which of those fall in the survey
                     self.halo_catalog_slice(fnames[ifile])
                     self.halos_in_survey_slice_number_count(ifile)
-                    #add the contribution from these halos
-                    field += self.paint_3d_number_count(self.halos_in_survey,rmid,mins_obs,pm)
+                    #check if there are halos or it is a buffer slice
+                    if len(self.halos_in_survey['RA']) == 0:
+                        continue
+                    else:
+                        #add the contribution from these halos
+                        field += self.paint_3d_number_count(self.halos_in_survey,rmid,mins_obs,pm)
             else:
                 field += self.paint_3d_number_count(self.halos_in_survey_all,rmid,mins_obs,pm)
 
