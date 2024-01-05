@@ -164,7 +164,7 @@ class Survey(Lightcone):
                  dnu=15.6*u.MHz,
                  beam_FWHM=4.1*u.arcmin,
                  tobs=6000*u.hr,
-                 target_line = 'CO',
+                 target_line = 'CO_J10',
                  v_of_M=None,
                  line_incli=True,
                  Nsigma_v_of_M=10,
@@ -461,9 +461,7 @@ class Survey(Lightcone):
 
     @cached_survey_property
     def gal_n_of_z(self):
-        '''ne] <= self.nuObs_max)&inds_sky&inds_mass
-                
-
+        '''
         Reads the input dNdz table file for number counts
         if angular, we have dNdz and must be normalized, if not, we have n(z) 
         '''
@@ -495,7 +493,7 @@ class Survey(Lightcone):
         else:
             dndz_spline = interp1d(z_file,dndz_file,bounds_error=False,fill_value=0.)(zarr)
             dndz = 0.5*(dndz_spline[1:]+dndz_spline[:-1])*self.Mpch**-3
-        return dndz
+        return dndz.to(self.Mpch**-3)
             
     
     @cached_survey_property
@@ -607,7 +605,7 @@ class Survey(Lightcone):
                 Ngal_tot = ngal_z[iz]*self.Omega_field
             else:
                 dist1,dist2 = (self.cosmo.comoving_radial_distance(zarr_z[iz])*u.Mpc).to(self.Mpch),(self.cosmo.comoving_radial_distance(zarr_z[iz+1])*u.Mpc).to(self.Mpch)
-                Vslice = np.diff(self.raside_lim)*np.diff(self.decside_lim)*(dist2-dist1)
+                Vslice = ((np.diff(self.raside_lim)*np.diff(self.decside_lim)*(dist2-dist1))[0]*self.Mpch**2).to(self.Mpch**3)
                 Ngal_tot = (ngal_z[iz]*Vslice).decompose()
             #if enough galaxies, get the brightests
             if Ngal_tot > Ngal_max:
@@ -615,7 +613,7 @@ class Survey(Lightcone):
                     ngal_max = np.sum(Ngal_max)/self.Omega_field
                 else:
                     ngal_max = np.sum(Ngal_max)/Vslice
-                warn("Maximum n_gal in redshift bin [{:.2f},{:.2f}] with the total number of {:}s is {:.5f}, input was {:5f}, reduce it or work with all {:}".format(zarr_z[iz],zarr_z[iz+1],self.gal_type,ngal_max,ngal_z[iz],self.gal_type))
+                warn("Maximum n_gal in redshift bin [{:.2f},{:.2f}] with the total number of galaxies is {:.5f}, input was {:.5f}, reduce it or work with all galaxies".format(zarr_z[iz],zarr_z[iz+1],ngal_max,ngal_z[iz]))
             else:
                 argsort = np.argsort(self.halo_catalog_all['SM_HALO'])[::-1]
                 indlim = np.where(np.cumsum(inds_z[argsort])>Ngal_tot)[0][0]
@@ -775,7 +773,7 @@ class Survey(Lightcone):
             Ngal_tot = ngal_z[ifile]*self.Omega_field
         else:
             dist1,dist2 = (self.cosmo.comoving_radial_distance(zarr_z[ifile])*u.Mpc).to(self.Mpch),(self.cosmo.comoving_radial_distance(zarr_z[ifile+1])*u.Mpc).to(self.Mpch)
-            Vslice = np.diff(self.raside_lim)*np.diff(self.decside_lim)*(dist2-dist1)
+            Vslice = ((np.diff(self.raside_lim)*np.diff(self.decside_lim)*(dist2-dist1))[0]*self.Mpch**2).to(self.Mpch**3)
             Ngal_tot = (ngal_z[ifile]*Vslice).decompose()
         #if enough galaxies, get the brightests
         if Ngal_tot > Ngal_max:
@@ -783,7 +781,8 @@ class Survey(Lightcone):
                 ngal_max = np.sum(Ngal_max)/self.Omega_field
             else:
                 ngal_max = np.sum(Ngal_max)/Vslice
-            warn("Maximum n_gal in redshift bin [{:.2f},{:.2f}] with the total number of {:}s is {:.5f}, input was {:5f}, reduce it or work with all {:}".format(zarr_z[ifile],zarr_z[ifile+1],self.gal_type,ngal_max,ngal_z[ifile],self.gal_type))
+
+            warn("Maximum n_gal in redshift bin [{:.2f},{:.2f}] with the total number of galaxies is {:.5f}, input was {:.5f}, reduce it or work with all galaxies".format(zarr_z[ifile],zarr_z[ifile+1],ngal_max,ngal_z[ifile]))
         else:
             argsort = np.argsort(self.halo_catalog['SM_HALO'])[::-1]
             indlim = np.where(np.cumsum(inds[argsort])>Ngal_tot)[0][0]
