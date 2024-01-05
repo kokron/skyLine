@@ -131,6 +131,10 @@ class Survey(Lightcone):
     -dngaldz_file           File containing a table with the redshift distribution of galaxy number density if number_count = True. Irrelevant otherwise. 
                             Input a file with a table to interpolate and normalize. Format: 2 columns with z, dNdz
                             (Default: None -> must have one! Will be expected to be in (Mpc/h)**-3 or sr**-1 if angular map)   
+
+    -nu_ratio_proj          Ratio between the target rest-frame frequency and the actual rest-frame frequency of an interloper, to model the projection
+                            effects in number-count observables. Irrelevant if mode != number_count. Can be understood as the ratio 
+                            (z_proj+1)/(z_true+1). (Default: 1.)
   
     -spectral_transmission_file: File containing a table with the spectral transmision function for the imaging 
                             band of interest. Only relevant if mode = 'cib' or if angular map and unit_convention = 'Tcmb'. 
@@ -182,6 +186,7 @@ class Survey(Lightcone):
                  Mstar_min=0.,
                  gal_type='all',
                  dNgaldz_file = None,
+                 nu_ratio_proj = 1.,
                  spectral_transmission_file = None,
                  nu_c = None,
                  flux_detection_lim = None,
@@ -286,9 +291,13 @@ class Survey(Lightcone):
     @cached_survey_property
     def zmid(self):
         '''
-        Effective mid redshift (obtained from nuObshalos_survey_lim_mean):
+        Effective mid redshift (obtained from nuObshalos_survey_lim_mean, or from the 
+        projected redshifts of galaxies if number_count)
         '''
-        return ((self.line_nu0[self.target_line]/self.nuObs_mean).decompose()).value-1
+        if self.mode != 'number_count':
+            return ((self.line_nu0[self.target_line]/self.nuObs_mean).decompose()).value-1
+        else:
+            return ((self.zmax+1)*self.nu_ratio_proj-(self.zmin+1)*self.nu_ratio_proj)/2
 
     @cached_survey_property
     def delta_nuObs(self):
@@ -345,7 +354,7 @@ class Survey(Lightcone):
             #return int(np.round((self.delta_nuObs/(self.dnu)).decompose()))
             return int(np.round((self.delta_nuObs/(dnu_FWHM)).decompose()))
         else:
-            return (self.zmax-self.zmin)/self.dnu
+            return ((self.zmax+1)*self.nu_ratio_proj-(self.zmin+1)*self.nu_ratio_proj)/self.dnu
         
     @cached_survey_property
     def Vsurvey(self):
@@ -356,7 +365,11 @@ class Survey(Lightcone):
         #Omega_field * D_A (z)^2 * (1+z) * Delta_nu/nu_obs * c/H is the volume of the survey
             #D_A here is comoving angular diameter distance = comoving_radial_distance in flat space
         Area = self.Omega_field/u.sr*(self.cosmo.comoving_radial_distance(self.zmid)*u.Mpc)**2
-        Depth = self.delta_nuObs/(0.5*(self.nuObs_max+self.nuObs_min))*(1+self.zmid)*(cu.c.to('km/s')/self.cosmo.hubble_parameter(self.zmid)/(u.km/u.Mpc/u.s))
+        if self.mode != 'number_count':
+            Depth = self.delta_nuObs/(0.5*(self.nuObs_max+self.nuObs_min))*(1+self.zmid)*(cu.c.to('km/s')/self.cosmo.hubble_parameter(self.zmid)/(u.km/u.Mpc/u.s))
+        else:
+            Depth = (self.cosmo.comoving_radial_distance((self.zmax+1)*self.nu_ratio_proj-1)-
+                     self.cosmo.comoving_radial_distance((self.zmin+1)*self.nu_ratio_proj-1))*u.Mpc
         return (Area*Depth).to(u.Mpc**3)
 
     @cached_survey_property
@@ -375,7 +388,7 @@ class Survey(Lightcone):
             rlim = ((self.cosmo.comoving_radial_distance(zlims)*u.Mpc).to(self.Mpch)).value
         else:
             #use zmin and zmax
-            rlim = ((self.cosmo.comoving_radial_distance(np.array([self.zmin,self.zmax]))*u.Mpc).to(self.Mpch)).value
+            rlim = ((self.cosmo.comoving_radial_distance(np.array([(self.zmin+1)*self.nu_ratio_proj-1,(self.zmax+1)*self.nu_ratio_proj-1]))*u.Mpc).to(self.Mpch)).value
 
         #projection to the unit sphere
         xlim = np.cos(declim) * np.cos(ralim)
@@ -611,7 +624,7 @@ class Survey(Lightcone):
     
             halos_survey['RA'] = np.append(halos_survey['RA'],self.halo_catalog_all['RA'][inds_z])
             halos_survey['DEC'] = np.append(halos_survey['DEC'],self.halo_catalog_all['DEC'][inds_z])
-            halos_survey['Zobs'] = np.append(halos_survey['Zobs'],self.halo_catalog_all['Z'][inds_z]+self.halo_catalog_all['DZ'][inds_z])
+            halos_survey['Zobs'] = np.append(halos_survey['Zobs'],(self.halo_catalog_all['Z'][inds_z]+self.halo_catalog_all['DZ'][inds_z]+1)*self.nu_ratio_proj-1)
 
         Ngal = len(halos_survey['RA'])
         halos_survey_out = np.zeros(Ngal, dtype={'names':('RA', 'DEC', 'Zobs'), 'formats':('f4', 'f4', 'f4')})
@@ -619,7 +632,7 @@ class Survey(Lightcone):
         halos_survey_out['DEC'] = halos_survey['DEC']
         halos_survey_out['Zobs'] = halos_survey['Zobs']
             
-        return halos_survey
+        return halos_survey_out
     
     def halos_survey_all_cib(self,inds):
         '''
@@ -781,7 +794,7 @@ class Survey(Lightcone):
 
         halos_survey['RA'] = self.halo_catalog['RA'][inds]
         halos_survey['DEC'] = self.halo_catalog['DEC'][inds]
-        halos_survey['Zobs'] = self.halo_catalog['Z'][inds]+self.halo_catalog['DZ'][inds]
+        halos_survey['Zobs'] = (self.halo_catalog['Z'][inds]+self.halo_catalog['DZ'][inds]+1)*self.nu_ratio_proj-1
         
         self.halos_in_survey = halos_survey
         return
@@ -1086,12 +1099,11 @@ class Survey(Lightcone):
         obtained from Cartesian coordinates. It does not include noise.
         '''
         #Define the mesh divisions and the box size
+        zmid = self.zmid
         if self.mode != 'number_count':
-            zmid = (self.line_nu0[self.target_line]/self.nuObs_mean).decompose().value-1
             dnu_FWHM = self.dnu/0.4247
             sigma_par_target = (cu.c*dnu_FWHM*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
         else:
-            zmid = 0.5*(self.zmin+self.zmax)
             #remember dnu in this case is equivalent to dz
             sigma_par_target = (cu.c*self.dnu/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s))).to(self.Mpch).value
             
@@ -1199,7 +1211,7 @@ class Survey(Lightcone):
 
             if not self.cache_catalog:
                 #add some buffer to be sure
-                fnames = self.halo_slices(self.zmin,self.zmax)
+                fnames = self.halo_slices(self.zmin,self.zmax) #not projected since these are true redshifts
                 nfiles = len(fnames)
                 for ifile in range(nfiles):
                     #Get the halos and which of those fall in the survey
@@ -1214,8 +1226,7 @@ class Survey(Lightcone):
         field = field.r2c()
         #This smoothing comes from the resolution window function.
         if self.do_spectral_smooth or self.do_angular_smooth:
-            #compute scales for the anisotropic filter (in Ztrue -> zmid)
-            zmid = (self.line_nu0[self.target_line]/self.nuObs_mean).decompose().value-1
+            #compute scales for the anisotropic filter
             sigma_par = self.do_spectral_smooth*(cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
             sigma_perp = self.do_angular_smooth*(self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
             if self.kind_spectral_smooth == 'tophat':
@@ -1401,7 +1412,6 @@ class Survey(Lightcone):
         #Convert the halo position in each volume to Cartesian coordinates (from Nbodykit)
         ra,dec,redshift = da.broadcast_arrays(halos['RA'], halos['DEC'],
                                               halos['Zobs'])
-        zmid = 0.5*(self.zmin+self.zmax)
         #radial distances in Mpch/h
         r = redshift.map_blocks(lambda zz: (((self.cosmo.comoving_radial_distance(zz)*u.Mpc).to(self.Mpch)).value),
                                 dtype=redshift.dtype)
