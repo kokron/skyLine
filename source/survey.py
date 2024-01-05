@@ -297,7 +297,7 @@ class Survey(Lightcone):
         if self.mode != 'number_count':
             return ((self.line_nu0[self.target_line]/self.nuObs_mean).decompose()).value-1
         else:
-            return ((self.zmax+1)*self.nu_ratio_proj-(self.zmin+1)*self.nu_ratio_proj)/2
+            return ((self.zmax+1)*self.nu_ratio_proj+(self.zmin+1)*self.nu_ratio_proj-2)/2
 
     @cached_survey_property
     def delta_nuObs(self):
