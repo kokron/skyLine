@@ -471,7 +471,7 @@ class Survey(Lightcone):
         #first consider the case in which all halos are loaded at once
         if self.cache_catalog:
             #grid in redshift
-            dz = 0.02
+            dz = self.dnu
             zarr = np.arange(self.zmin,self.zmax,dz)
             if zarr[-1] < self.zmax:
                 zarr = np.concatenate((zarr,np.array([self.zmax])))
@@ -605,7 +605,16 @@ class Survey(Lightcone):
                 Ngal_tot = ngal_z[iz]*self.Omega_field
             else:
                 dist1,dist2 = (self.cosmo.comoving_radial_distance(zarr_z[iz])*u.Mpc).to(self.Mpch),(self.cosmo.comoving_radial_distance(zarr_z[iz+1])*u.Mpc).to(self.Mpch)
-                Vslice = ((np.diff(self.raside_lim)*np.diff(self.decside_lim)*(dist2-dist1))[0]*self.Mpch**2).to(self.Mpch**3)
+                if self.cube_mode == 'outer_cube':
+                    Vslice = (self.Omega_field.to(u.sr)).value*((dist1+dist2)/2)**2*(dist2-dist1)
+                elif self.cube_mode == 'inner_cube':
+                    r0_proj = (self.cosmo.comoving_radial_distance((self.zmin+1)*self.nu_ratio_proj-1)*u.Mpc).to(self.Mpch)
+                    r0_true = (self.cosmo.comoving_radial_distance(self.zmin)*u.Mpc).to(self.Mpch)
+                    Vslice = ((np.diff(self.raside_lim)*np.diff(self.decside_lim)*(dist2-dist1))[0]/r0_proj**2*r0_true**2*self.Mpch**2).to(self.Mpch**3)
+                else:
+                    rmid_proj = (self.cosmo.comoving_radial_distance((self.zmid+1)*self.nu_ratio_proj-1)*u.Mpc).to(self.Mpch)
+                    rmid_true = (self.cosmo.comoving_radial_distance(self.zmid)*u.Mpc).to(self.Mpch)
+                    Vslice = ((np.diff(self.raside_lim)*np.diff(self.decside_lim)*(dist2-dist1))[0]/rmid_proj**2*rmid_true**2*self.Mpch**2).to(self.Mpch**3)
                 Ngal_tot = (ngal_z[iz]*Vslice).decompose()
             #if enough galaxies, get the brightests
             if Ngal_tot > Ngal_max:
@@ -773,7 +782,16 @@ class Survey(Lightcone):
             Ngal_tot = ngal_z[ifile]*self.Omega_field
         else:
             dist1,dist2 = (self.cosmo.comoving_radial_distance(zarr_z[ifile])*u.Mpc).to(self.Mpch),(self.cosmo.comoving_radial_distance(zarr_z[ifile+1])*u.Mpc).to(self.Mpch)
-            Vslice = ((np.diff(self.raside_lim)*np.diff(self.decside_lim)*(dist2-dist1))[0]*self.Mpch**2).to(self.Mpch**3)
+            if self.cube_mode == 'outer_cube':
+                Vslice = (self.Omega_field.to(u.sr)).value*((dist1+dist2)/2)**2*(dist2-dist1)
+            elif self.cube_mode == 'inner_cube':
+                r0_proj = (self.cosmo.comoving_radial_distance((self.zmin+1)*self.nu_ratio_proj-1)*u.Mpc).to(self.Mpch)
+                r0_true = (self.cosmo.comoving_radial_distance(self.zmin)*u.Mpc).to(self.Mpch)
+                Vslice = ((np.diff(self.raside_lim)*np.diff(self.decside_lim)*(dist2-dist1))[0]/r0_proj**2*r0_true**2*self.Mpch**2).to(self.Mpch**3)
+            else:
+                rmid_proj = (self.cosmo.comoving_radial_distance((self.zmid+1)*self.nu_ratio_proj-1)*u.Mpc).to(self.Mpch)
+                rmid_true = (self.cosmo.comoving_radial_distance(self.zmid)*u.Mpc).to(self.Mpch)
+                Vslice = ((np.diff(self.raside_lim)*np.diff(self.decside_lim)*(dist2-dist1))[0]/rmid_proj**2*rmid_true**2*self.Mpch**2).to(self.Mpch**3)
             Ngal_tot = (ngal_z[ifile]*Vslice).decompose()
         #if enough galaxies, get the brightests
         if Ngal_tot > Ngal_max:
