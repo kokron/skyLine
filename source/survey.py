@@ -1062,7 +1062,7 @@ class Survey(Lightcone):
             else:
                 ##flux = (signal*self.beam_FWHM**2).to(u.mJy)
                 signal = signal.to(u.mJy)
-                flux_vec = np.linspace(0,np.max(flux.value),17)
+                flux_vec = np.linspace(0,np.max(signal.value),17)
                 inds = np.ones_like(signal.value,dtype=bool)
                 for i in range(len(flux_vec)-1):
                     inds_flux = (signal.value >= flux_vec[i]) & (signal.value < flux_vec[i+1])
