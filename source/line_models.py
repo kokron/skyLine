@@ -318,7 +318,7 @@ def Tdust_Agora(z,SFR,Mstar,LIR,B,zeta_d,A_d,alpha):
     Zgas = 8.80 + 0.188*y - 0.220 * y**2 - 0.0531 * y**3
     del y
     gc.collect()
-    print(time() - st, "y and zgas")
+    #print(time() - st, "y and zgas")
     #Main-sequence specific star-formation state from Tacconi et al 2018,
     #   (arXiv:1702.01140), using their "cosmic-time(z)" fit formula
     #   Note there is a difference of 10^9 because our sSFR is in Yr^-1 and
@@ -328,14 +328,14 @@ def Tdust_Agora(z,SFR,Mstar,LIR,B,zeta_d,A_d,alpha):
     sSFR_MS = 10**((-0.16-0.026*tc) * (np.log10(Mstar)+0.025) - (6.51-0.11*tc))
     del tc
     gc.collect()
-    print(time() - st, "tc and logz")
+    #print(time() - st, "tc and logz")
     #Gas-to-stellar mass ratio following Tacconi et al 2020, arXiv:2003.06245
     A,C,D,F = 0.06,0.51,-0.41,0.65
     sSFR = SFR/Mstar
     Mgas_over_Mstar = 10**(A + B*(logz-F)**2 + C*np.log10(sSFR/sSFR_MS) + D*(np.log10(Mstar)-10.7))
     del sSFR, sSFR_MS, logz
     gc.collect()
-    print(time() - st, "Mgas Mstar")
+    #print(time() - st, "Mgas Mstar")
     #Compute suppression in the Mdust-to-Mstar ratio at z>2, from 
     #   Donevski et al. 2020 (arXiv:2008.09995)
     factor = np.ones_like(z)
@@ -346,10 +346,10 @@ def Tdust_Agora(z,SFR,Mstar,LIR,B,zeta_d,A_d,alpha):
     Mdust = Mstar * Mgas_over_Mstar * Zgas * factor
     del factor
     gc.collect()
-    print(time() - st, "Mdust get")
+    #print(time() - st, "Mdust get")
     #Find dust temperature and the index of its relation with IR luminosity
     beta_d = newton_root(beta_d_function,beta_d_derivative,2.5,LIR.value,Mdust,zeta_d,A_d,Niter=5)
-    print(time() - st, "Root find Niter=5")
+    #print(time() - st, "Root find Niter=5")
     Tdust = A_d * (LIR.value/Mdust)**(1/(4+beta_d))
     return Tdust*u.K#, beta_d
 

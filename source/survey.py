@@ -691,18 +691,12 @@ class Survey(Lightcone):
         halos_survey[line] = dict(RA=np.array([]),DEC=np.array([]),Zobs=np.array([]),Ztrue=np.array([]),Lhalo=np.array([])*u.Lsun,Mhalo=np.array([])*self.Msunh)
         #get observed freqs and luminosities
         self.nuObs_line_halo_slice(line)
-        print('Got nuobs line halo')
         self.L_line_halo_slice(line)
-        print('got L line halo')
         inds = (self.nuObs_line_halo[line] >= nu_min)&(self.nuObs_line_halo[line] <= self.nuObs_max)&inds_sky&inds_mass
-        print('got inds') 
         halos_survey[line]['RA'] = np.append(halos_survey[line]['RA'],self.halo_catalog['RA'][inds])
-        print('got ra')
         halos_survey[line]['DEC'] = np.append(halos_survey[line]['DEC'],self.halo_catalog['DEC'][inds])
-        print('got dec')
         halos_survey[line]['Zobs'] = np.append(halos_survey[line]['Zobs'],(self.line_nu0[self.target_line]/self.nuObs_line_halo[line][inds]).decompose()-1)
         #doing DZ correction
-        print('got zs')
         halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog['Z'][inds]+self.halo_catalog['DZ'][inds])
         #halos_survey[line]['Ztrue'] = np.append(halos_survey[line]['Ztrue'],self.halo_catalog['Z'][inds])
         halos_survey[line]['Lhalo'] = np.append(halos_survey[line]['Lhalo'],self.L_line_halo[line][inds])
@@ -967,7 +961,7 @@ class Survey(Lightcone):
             signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*halos['Lhalo']/Vcell_true).to(self.unit)
         elif self.unit_convention == 'Tcmb':
             #intensity[Jy/sr]
-            signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*halos['Lhalo']/Vcell_true).to(self.unit)
+            signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*halos['Lhalo']/Vcell_true).to(u.Jy/u.sr)
             #Read the imaging band table
             nu0 = np.geomspace(self.nuObs_min,self.nuObs_max,self.NnuObs)
             data_table = np.loadtxt(self.spectral_transmission_file)
@@ -1012,15 +1006,15 @@ class Survey(Lightcone):
         '''
         #Get luminosity per halo for the halos of interest. Only works if
         #   SFR and Mstar from catalog
-        print('getting LIR')
+        #print('getting LIR')
         LIR = getattr(LM,'LIR')(self,halos['SFR'],halos['Mstar'],self.LIR_pars,self.rng)
 
-        print('getting CIB band agora')
+        #print('getting CIB band agora')
         L_CIB_band = getattr(LM,'CIB_band_Agora')(self,halos,LIR,self.CIB_pars)
 
         #Get the flux S_nu = L_nu(1+z)/(4pi*chi^2*(1+z))
         chi = self.cosmo.comoving_radial_distance(halos['Zobs'])*u.Mpc
-        print('getting signal')
+        #print('getting signal')
         signal = (L_CIB_band/(4*np.pi*chi**2*(1+halos['Zobs']))).to(u.Jy)
         
         if len(signal)==0:
@@ -1036,7 +1030,7 @@ class Survey(Lightcone):
             else:
                 ##flux = (signal*self.beam_FWHM**2).to(u.mJy)
                 signal = signal.to(u.mJy)
-                flux_vec = np.linspace(0,np.max(flux.value),17)
+                flux_vec = np.linspace(0,np.max(signal.value),17)
                 inds = np.ones_like(signal.value,dtype=bool)
                 for i in range(len(flux_vec)-1):
                     inds_flux = (signal.value >= flux_vec[i]) & (signal.value < flux_vec[i+1])
