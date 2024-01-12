@@ -137,7 +137,7 @@ class Lightcone(object):
         self._update_survey_list = []
         self._update_measure_list = []
 
-        #Initialize camb (we need background only) - values used in UM
+        #Initialize camb (we nee804380.08585994d background only) - values used in UM
         camb_pars = camb.set_params(H0=67.8, omch2 = 0.118002988, ombh2 = 0.02312)
         self.h = 0.678
         self.cosmo = camb.get_background(camb_pars)
@@ -402,5 +402,13 @@ class Lightcone(object):
         self.rng = np.random.default_rng(self.seed)
         #check updated paramters:
         check_updated_params(self)
+
+        for key in new_params:
+            if 'width' in key:
+                self.RA_min,self.RA_max = -self.RA_width/2.,self.RA_width/2.
+                self.DEC_min,self.DEC_max = -self.DEC_width/2.,self.DEC_width/2.
+                self.RAObs_min,self.RAObs_max = -self.RAObs_width/2.,self.RAObs_width/2.
+                self.DECObs_min,self.DECObs_max = -self.DECObs_width/2.,self.DECObs_width/2.
+                break
 
         return

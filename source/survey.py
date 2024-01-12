@@ -131,12 +131,16 @@ class Survey(Lightcone):
     -dngaldz_file           File containing a table with the redshift distribution of galaxy number density if number_count = True. Irrelevant otherwise. 
                             Input a file with a table to interpolate and normalize. Format: 2 columns with z, dNdz
                             (Default: None -> must have one! Will be expected to be in (Mpc/h)**-3 or sr**-1 if angular map)   
+
+    -nu_ratio_proj          Ratio between the target rest-frame frequency and the actual rest-frame frequency of an interloper, to model the projection
+                            effects in number-count observables. Irrelevant if mode != number_count. Can be understood as the ratio 
+                            (z_proj+1)/(z_true+1). (Default: 1.)
   
     -spectral_transmission_file: File containing a table with the spectral transmision function for the imaging 
-                            band of interest. Only relevant if mode = 'cib' or if angular map and unit_convention = 'Tcmb'. 
+                            band of interest. Only relevant if mode = 'cib' or 'lim' and if angular map. 
                             Input a file with a table to interpolate.
                             Format: 2 columns [freq in GHz, tau_nu0] (Default: None -> Must have one if mode == 'cib'
-                            or if angular map and 'Tcmb'!)
+                            or 'lim' angular map)
 
     -nu_c                   Nominal frequency of the band. Only relevant if 'unit_convention' = 'Tcmb'
                             (Default:None == mean freq of the spectral transmission)
@@ -160,7 +164,7 @@ class Survey(Lightcone):
                  dnu=15.6*u.MHz,
                  beam_FWHM=4.1*u.arcmin,
                  tobs=6000*u.hr,
-                 target_line = 'CO',
+                 target_line = 'CO_J10',
                  v_of_M=None,
                  line_incli=True,
                  Nsigma_v_of_M=10,
@@ -182,6 +186,7 @@ class Survey(Lightcone):
                  Mstar_min=0.,
                  gal_type='all',
                  dNgaldz_file = None,
+                 nu_ratio_proj = 1.,
                  spectral_transmission_file = None,
                  nu_c = None,
                  flux_detection_lim = None,
@@ -286,9 +291,13 @@ class Survey(Lightcone):
     @cached_survey_property
     def zmid(self):
         '''
-        Effective mid redshift (obtained from nuObshalos_survey_lim_mean):
+        Effective mid redshift (obtained from nuObshalos_survey_lim_mean, or from the 
+        projected redshifts of galaxies if number_count)
         '''
-        return ((self.line_nu0[self.target_line]/self.nuObs_mean).decompose()).value-1
+        if self.mode != 'number_count':
+            return ((self.line_nu0[self.target_line]/self.nuObs_mean).decompose()).value-1
+        else:
+            return ((self.zmax+1)*self.nu_ratio_proj+(self.zmin+1)*self.nu_ratio_proj-2)/2
 
     @cached_survey_property
     def delta_nuObs(self):
@@ -345,7 +354,7 @@ class Survey(Lightcone):
             #return int(np.round((self.delta_nuObs/(self.dnu)).decompose()))
             return int(np.round((self.delta_nuObs/(dnu_FWHM)).decompose()))
         else:
-            return (self.zmax-self.zmin)/self.dnu
+            return ((self.zmax+1)*self.nu_ratio_proj-(self.zmin+1)*self.nu_ratio_proj)/self.dnu
         
     @cached_survey_property
     def Vsurvey(self):
@@ -356,7 +365,11 @@ class Survey(Lightcone):
         #Omega_field * D_A (z)^2 * (1+z) * Delta_nu/nu_obs * c/H is the volume of the survey
             #D_A here is comoving angular diameter distance = comoving_radial_distance in flat space
         Area = self.Omega_field/u.sr*(self.cosmo.comoving_radial_distance(self.zmid)*u.Mpc)**2
-        Depth = self.delta_nuObs/(0.5*(self.nuObs_max+self.nuObs_min))*(1+self.zmid)*(cu.c.to('km/s')/self.cosmo.hubble_parameter(self.zmid)/(u.km/u.Mpc/u.s))
+        if self.mode != 'number_count':
+            Depth = self.delta_nuObs/(0.5*(self.nuObs_max+self.nuObs_min))*(1+self.zmid)*(cu.c.to('km/s')/self.cosmo.hubble_parameter(self.zmid)/(u.km/u.Mpc/u.s))
+        else:
+            Depth = (self.cosmo.comoving_radial_distance((self.zmax+1)*self.nu_ratio_proj-1)-
+                     self.cosmo.comoving_radial_distance((self.zmin+1)*self.nu_ratio_proj-1))*u.Mpc
         return (Area*Depth).to(u.Mpc**3)
 
     @cached_survey_property
@@ -375,7 +388,7 @@ class Survey(Lightcone):
             rlim = ((self.cosmo.comoving_radial_distance(zlims)*u.Mpc).to(self.Mpch)).value
         else:
             #use zmin and zmax
-            rlim = ((self.cosmo.comoving_radial_distance(np.array([self.zmin,self.zmax]))*u.Mpc).to(self.Mpch)).value
+            rlim = ((self.cosmo.comoving_radial_distance(np.array([(self.zmin+1)*self.nu_ratio_proj-1,(self.zmax+1)*self.nu_ratio_proj-1]))*u.Mpc).to(self.Mpch)).value
 
         #projection to the unit sphere
         xlim = np.cos(declim) * np.cos(ralim)
@@ -448,9 +461,7 @@ class Survey(Lightcone):
 
     @cached_survey_property
     def gal_n_of_z(self):
-        '''ne] <= self.nuObs_max)&inds_sky&inds_mass
-                
-
+        '''
         Reads the input dNdz table file for number counts
         if angular, we have dNdz and must be normalized, if not, we have n(z) 
         '''
@@ -460,7 +471,7 @@ class Survey(Lightcone):
         #first consider the case in which all halos are loaded at once
         if self.cache_catalog:
             #grid in redshift
-            dz = 0.02
+            dz = self.dnu
             zarr = np.arange(self.zmin,self.zmax,dz)
             if zarr[-1] < self.zmax:
                 zarr = np.concatenate((zarr,np.array([self.zmax])))
@@ -482,7 +493,7 @@ class Survey(Lightcone):
         else:
             dndz_spline = interp1d(z_file,dndz_file,bounds_error=False,fill_value=0.)(zarr)
             dndz = 0.5*(dndz_spline[1:]+dndz_spline[:-1])*self.Mpch**-3
-        return dndz
+        return dndz.to(self.Mpch**-3)
             
     
     @cached_survey_property
@@ -594,7 +605,16 @@ class Survey(Lightcone):
                 Ngal_tot = ngal_z[iz]*self.Omega_field
             else:
                 dist1,dist2 = (self.cosmo.comoving_radial_distance(zarr_z[iz])*u.Mpc).to(self.Mpch),(self.cosmo.comoving_radial_distance(zarr_z[iz+1])*u.Mpc).to(self.Mpch)
-                Vslice = np.diff(self.raside_lim)*np.diff(self.decside_lim)*(dist2-dist1)
+                if self.cube_mode == 'outer_cube':
+                    Vslice = (self.Omega_field.to(u.sr)).value*((dist1+dist2)/2)**2*(dist2-dist1)
+                elif self.cube_mode == 'inner_cube':
+                    r0_proj = (self.cosmo.comoving_radial_distance((self.zmin+1)*self.nu_ratio_proj-1)*u.Mpc).to(self.Mpch)
+                    r0_true = (self.cosmo.comoving_radial_distance(self.zmin)*u.Mpc).to(self.Mpch)
+                    Vslice = ((np.diff(self.raside_lim)*np.diff(self.decside_lim)*(dist2-dist1))[0]/r0_proj**2*r0_true**2*self.Mpch**2).to(self.Mpch**3)
+                else:
+                    rmid_proj = (self.cosmo.comoving_radial_distance((self.zmid+1)*self.nu_ratio_proj-1)*u.Mpc).to(self.Mpch)
+                    rmid_true = (self.cosmo.comoving_radial_distance(self.zmid)*u.Mpc).to(self.Mpch)
+                    Vslice = ((np.diff(self.raside_lim)*np.diff(self.decside_lim)*(dist2-dist1))[0]/rmid_proj**2*rmid_true**2*self.Mpch**2).to(self.Mpch**3)
                 Ngal_tot = (ngal_z[iz]*Vslice).decompose()
             #if enough galaxies, get the brightests
             if Ngal_tot > Ngal_max:
@@ -602,7 +622,7 @@ class Survey(Lightcone):
                     ngal_max = np.sum(Ngal_max)/self.Omega_field
                 else:
                     ngal_max = np.sum(Ngal_max)/Vslice
-                warn("Maximum n_gal in redshift bin [{:.2f},{:.2f}] with the total number of {:}s is {:.5f}, input was {:5f}, reduce it or work with all {:}".format(zarr_z[iz],zarr_z[iz+1],self.gal_type,ngal_max,ngal_z[iz],self.gal_type))
+                warn("Maximum n_gal in redshift bin [{:.2f},{:.2f}] with the total number of galaxies is {:.5f}, input was {:.5f}, reduce it or work with all galaxies".format(zarr_z[iz],zarr_z[iz+1],ngal_max,ngal_z[iz]))
             else:
                 argsort = np.argsort(self.halo_catalog_all['SM_HALO'])[::-1]
                 indlim = np.where(np.cumsum(inds_z[argsort])>Ngal_tot)[0][0]
@@ -611,7 +631,7 @@ class Survey(Lightcone):
     
             halos_survey['RA'] = np.append(halos_survey['RA'],self.halo_catalog_all['RA'][inds_z])
             halos_survey['DEC'] = np.append(halos_survey['DEC'],self.halo_catalog_all['DEC'][inds_z])
-            halos_survey['Zobs'] = np.append(halos_survey['Zobs'],self.halo_catalog_all['Z'][inds_z]+self.halo_catalog_all['DZ'][inds_z])
+            halos_survey['Zobs'] = np.append(halos_survey['Zobs'],(self.halo_catalog_all['Z'][inds_z]+self.halo_catalog_all['DZ'][inds_z]+1)*self.nu_ratio_proj-1)
 
         Ngal = len(halos_survey['RA'])
         halos_survey_out = np.zeros(Ngal, dtype={'names':('RA', 'DEC', 'Zobs'), 'formats':('f4', 'f4', 'f4')})
@@ -619,7 +639,7 @@ class Survey(Lightcone):
         halos_survey_out['DEC'] = halos_survey['DEC']
         halos_survey_out['Zobs'] = halos_survey['Zobs']
             
-        return halos_survey
+        return halos_survey_out
     
     def halos_survey_all_cib(self,inds):
         '''
@@ -761,7 +781,16 @@ class Survey(Lightcone):
             Ngal_tot = ngal_z[ifile]*self.Omega_field
         else:
             dist1,dist2 = (self.cosmo.comoving_radial_distance(zarr_z[ifile])*u.Mpc).to(self.Mpch),(self.cosmo.comoving_radial_distance(zarr_z[ifile+1])*u.Mpc).to(self.Mpch)
-            Vslice = np.diff(self.raside_lim)*np.diff(self.decside_lim)*(dist2-dist1)
+            if self.cube_mode == 'outer_cube':
+                Vslice = (self.Omega_field.to(u.sr)).value*((dist1+dist2)/2)**2*(dist2-dist1)
+            elif self.cube_mode == 'inner_cube':
+                r0_proj = (self.cosmo.comoving_radial_distance((self.zmin+1)*self.nu_ratio_proj-1)*u.Mpc).to(self.Mpch)
+                r0_true = (self.cosmo.comoving_radial_distance(self.zmin)*u.Mpc).to(self.Mpch)
+                Vslice = ((np.diff(self.raside_lim)*np.diff(self.decside_lim)*(dist2-dist1))[0]/r0_proj**2*r0_true**2*self.Mpch**2).to(self.Mpch**3)
+            else:
+                rmid_proj = (self.cosmo.comoving_radial_distance((self.zmid+1)*self.nu_ratio_proj-1)*u.Mpc).to(self.Mpch)
+                rmid_true = (self.cosmo.comoving_radial_distance(self.zmid)*u.Mpc).to(self.Mpch)
+                Vslice = ((np.diff(self.raside_lim)*np.diff(self.decside_lim)*(dist2-dist1))[0]/rmid_proj**2*rmid_true**2*self.Mpch**2).to(self.Mpch**3)
             Ngal_tot = (ngal_z[ifile]*Vslice).decompose()
         #if enough galaxies, get the brightests
         if Ngal_tot > Ngal_max:
@@ -769,7 +798,8 @@ class Survey(Lightcone):
                 ngal_max = np.sum(Ngal_max)/self.Omega_field
             else:
                 ngal_max = np.sum(Ngal_max)/Vslice
-            warn("Maximum n_gal in redshift bin [{:.2f},{:.2f}] with the total number of {:}s is {:.5f}, input was {:5f}, reduce it or work with all {:}".format(zarr_z[ifile],zarr_z[ifile+1],self.gal_type,ngal_max,ngal_z[ifile],self.gal_type))
+
+            warn("Maximum n_gal in redshift bin [{:.2f},{:.2f}] with the total number of galaxies is {:.5f}, input was {:.5f}, reduce it or work with all galaxies".format(zarr_z[ifile],zarr_z[ifile+1],ngal_max,ngal_z[ifile]))
         else:
             argsort = np.argsort(self.halo_catalog['SM_HALO'])[::-1]
             indlim = np.where(np.cumsum(inds[argsort])>Ngal_tot)[0][0]
@@ -780,7 +810,7 @@ class Survey(Lightcone):
 
         halos_survey['RA'] = self.halo_catalog['RA'][inds]
         halos_survey['DEC'] = self.halo_catalog['DEC'][inds]
-        halos_survey['Zobs'] = self.halo_catalog['Z'][inds]+self.halo_catalog['DZ'][inds]
+        halos_survey['Zobs'] = (self.halo_catalog['Z'][inds]+self.halo_catalog['DZ'][inds]+1)*self.nu_ratio_proj-1
         
         self.halos_in_survey = halos_survey
         return
@@ -839,6 +869,15 @@ class Survey(Lightcone):
         npix = hp.nside2npix(self.nside)
         hp_map = np.zeros(npix)
 
+        if self.mode == 'lim' or self.mode == 'cib':
+            #rest frame frequency for each halo corresponding to the observed bandwidth
+            nu0 = np.geomspace(self.nuObs_min.value,self.nuObs_max.value,256)*self.nuObs_min.unit
+
+            #Read the imaging band table
+            data_table = np.loadtxt(self.spectral_transmission_file)
+            itau_nu0 = interp1d(data_table[:,0],data_table[:,1],bounds_error=False,fill_value=0)
+            tau_nu0_norm = np.trapz(itau_nu0(nu0),nu0)
+
         #what mode is being used?
         if self.mode == 'lim':
             # First, compute the intensity/temperature of each halo in the catalog we will include
@@ -857,13 +896,14 @@ class Survey(Lightcone):
                             self.halo_catalog_slice(fnames[ifile])
                             self.halos_in_survey_slice_lim(line,nfiles,ifile)
                             #add the contribution from these halos
-                            hp_map = self.paint_2d_lim(self.halos_in_survey[line],line,hp_map)
+                            hp_map = self.paint_2d_lim(self.halos_in_survey[line],line,hp_map,itau_nu0, tau_nu0_norm)
                     else:
-                        hp_map = self.paint_2d_lim(self.halos_in_survey_all[line],line,hp_map)
+                        hp_map = self.paint_2d_lim(self.halos_in_survey_all[line],line,hp_map,itau_nu0, tau_nu0_norm)
                     
+            
             # add galactic foregrounds
             if self.do_gal_foregrounds:
-                hp_map+=self.create_2d_foreground_map()
+                hp_map = self.create_2d_foreground_map(hp_map, itau_nu0)
 
         elif self.mode == 'number_count':
             if not self.cache_catalog:
@@ -889,10 +929,13 @@ class Survey(Lightcone):
                     self.halo_catalog_slice(fnames[ifile])
                     self.halos_in_survey_slice_cib(ifile)
                     #add the contribution from these halos
-                    hp_map = self.paint_2d_cib(self.halos_in_survey,hp_map)
+                    hp_map = self.paint_2d_cib(self.halos_in_survey,hp_map,itau_nu0, tau_nu0_norm)
             else:
-                hp_map = self.paint_2d_cib(self.halos_in_survey_all,hp_map)
-        
+                hp_map = self.paint_2d_cib(self.halos_in_survey_all,hp_map,itau_nu0, tau_nu0_norm)
+            # add galactic foregrounds
+            if self.do_gal_foregrounds:
+                hp_map = self.create_2d_foreground_map(hp_map, itau_nu0)
+
         #smooth for angular resolution
         if self.do_angular_smooth:
             theta_beam = self.beam_FWHM.to(u.rad)
@@ -935,37 +978,26 @@ class Survey(Lightcone):
 
         return hp_map
         
-    def paint_2d_lim(self,halos,line,hp_map):
+    def paint_2d_lim(self,halos,line,hp_map, itau_nu0, tau_nu0_norm):
         '''
         Adds the contribution of LIM from a slice to the 2d healpy map
         '''
-        #Get true cell volume
+        #Get the line flux
         Zhalo = halos['Ztrue']
-        Hubble = self.cosmo.hubble_parameter(Zhalo)*(u.km/u.Mpc/u.s)
+        chi = self.cosmo.comoving_radial_distance(Zhalo)*u.Mpc
 
-        #Figure out what channel the halos will be in to figure out the voxel volume, for the signal.
-        #This is what will be added to the healpy map.
-        nu_bins = self.nuObs_min.to('GHz').value + np.arange(self.Nchan)*self.dnu.to('GHz').value
-        zmid_channel = self.line_nu0[line].to('GHz').value/(nu_bins + 0.5*self.dnu.to('GHz').value) - 1
+        #observed frequency for each halo
+        nu0_halo = self.line_nu0[line].to('GHz')/(1+Zhalo)
+        
+        #get the specific flux and intensity for each halo
+        signal = (halos['Lhalo']/(4*np.pi*chi**2*(1+Zhalo))*itau_nu0(nu0_halo)/tau_nu0_norm).to(u.Jy)
+        signal *= 1/(hp.nside2pixarea(self.nside, degrees = False)*u.sr)
 
-        #Channel of each halo, can now compute voxel volumes where each of them are seamlessly
-        bin_idxs = np.digitize(self.line_nu0[line].to('GHz').value/(1+Zhalo), nu_bins)-1
-        zmids = zmid_channel[bin_idxs]
-
-        #Vcell = Omega_pix * D_A (z)^2 * (1+z) * dnu/nu_obs * c/H is the volume of the voxel for a given channel
-                            #D_A here is comoving angular diameter distance = comoving_radial_distance in flat space
-        Vcell_true = hp.nside2pixarea(self.nside)*(self.cosmo.comoving_radial_distance(zmids)*u.Mpc )**2 * (self.dnu.value/nu_bins[bin_idxs]) * (1+zmids) * (cu.c.to('km/s')/self.cosmo.hubble_parameter(zmids)/(u.km/u.Mpc/u.s))
-
-        if self.unit_convention == 'Inu':
-            #intensity[Jy/sr]
-            signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*halos['Lhalo']/Vcell_true).to(self.unit)
-        elif self.unit_convention == 'Tcmb':
-            #intensity[Jy/sr]
-            signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*halos['Lhalo']/Vcell_true).to(u.Jy/u.sr)
+        #unit conventions
+        if self.unit_convention == 'Tcmb':
             #Read the imaging band table
             nu0 = np.geomspace(self.nuObs_min,self.nuObs_max,self.NnuObs)
-            data_table = np.loadtxt(self.spectral_transmission_file)
-            tau_nu0 = interp1d(data_table[:,0],data_table[:,1],bounds_error=False,fill_value=0)(nu0)
+            tau_nu0 = itau_nu0(nu0)
             bnu = (2*cu.h*nu0**3/cu.c**2/(np.exp(cu.h*nu0/cu.k_B/2.7255/u.K)-1)).to(u.Jy)/u.sr/u.K
             if self.nu_c == None:
                 nu_c = np.trapz(nu0*tau_nu0,nu0)/np.trapz(tau_nu0,nu0)
@@ -973,9 +1005,50 @@ class Survey(Lightcone):
                 nu_c = self.nu_c
             conv_factor = np.trapz(bnu*tau_nu0,nu0)/np.trapz(tau_nu0*nu_c/nu0,nu0)
             signal = (signal/conv_factor).to(u.uK)
-        else:
+        elif self.unit_convention == 'Tb':
+            if self.nu_c == None:
+                #Read the imaging band table
+                nu0 = np.geomspace(self.nuObs_min,self.nuObs_max,self.NnuObs)
+                tau_nu0 = itau_nu0(nu0)
+                nu_c = np.trapz(nu0*tau_nu0,nu0)/np.trapz(tau_nu0,nu0)
+            else:
+                nu_c = self.nu_c
             #Brightness Temperature[uK]
-            signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*halos['Lhalo']/Vcell_true).to(self.unit)
+            signal = (signal*u.sr*cu.c**2/2/cu.k_B/nu_c**2).to(u.uK)
+        
+        #Figure out what channel the halos will be in to figure out the voxel volume, for the signal.
+        #This is what will be added to the healpy map.
+        #nu_bins = self.nuObs_min.to('GHz').value + np.arange(self.Nchan)*self.dnu.to('GHz').value
+        #zmid_channel = self.line_nu0[line].to('GHz').value/(nu_bins + 0.5*self.dnu.to('GHz').value) - 1
+
+        #Channel of each halo, can now compute voxel volumes where each of them are seamlessly
+        #bin_idxs = np.digitize(self.line_nu0[line].to('GHz').value/(1+Zhalo), nu_bins)-1
+        #zmids = zmid_channel[bin_idxs]
+
+        #Vcell = Omega_pix * D_A (z)^2 * (1+z) * dnu/nu_obs * c/H is the volume of the voxel for a given channel
+                            #D_A here is comoving angular diameter distance = comoving_radial_distance in flat space
+        #Vcell_true = hp.nside2pixarea(self.nside)*(self.cosmo.comoving_radial_distance(zmids)*u.Mpc )**2 * (self.dnu.value/nu_bins[bin_idxs]) * (1+zmids) * (cu.c.to('km/s')/self.cosmo.hubble_parameter(zmids)/(u.km/u.Mpc/u.s))
+
+        #if self.unit_convention == 'Inu':
+            #intensity[Jy/sr]
+        #    signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*halos['Lhalo']/Vcell_true).to(self.unit)
+        #elif self.unit_convention == 'Tcmb':
+            #intensity[Jy/sr]
+        #    signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*halos['Lhalo']/Vcell_true).to(self.unit)
+            #Read the imaging band table
+        #    nu0 = np.geomspace(self.nuObs_min,self.nuObs_max,self.NnuObs)
+        #    data_table = np.loadtxt(self.spectral_transmission_file)
+        #    tau_nu0 = interp1d(data_table[:,0],data_table[:,1],bounds_error=False,fill_value=0)(nu0)
+        #    bnu = (2*cu.h*nu0**3/cu.c**2/(np.exp(cu.h*nu0/cu.k_B/2.7255/u.K)-1)).to(u.Jy)/u.sr/u.K
+        #    if self.nu_c == None:
+        #        nu_c = np.trapz(nu0*tau_nu0,nu0)/np.trapz(tau_nu0,nu0)
+        #    else:
+        #        nu_c = self.nu_c
+        #    conv_factor = np.trapz(bnu*tau_nu0,nu0)/np.trapz(tau_nu0*nu_c/nu0,nu0)
+        #    signal = (signal/conv_factor).to(u.uK)
+        #else:
+        #    #Brightness Temperature[uK]
+        #    signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*halos['Lhalo']/Vcell_true).to(self.unit)
             
         #Paste the signals to the map
         theta, phi = rd2tp(halos['RA'], halos['DEC'])
@@ -1000,7 +1073,7 @@ class Survey(Lightcone):
         
         return hp_map
     
-    def paint_2d_cib(self,halos,hp_map):
+    def paint_2d_cib(self,halos,hp_map,itau_nu0, tau_nu0_norm):
         '''
         Adds the contribution of CIB of a slice to the 2d healpy map
         '''
@@ -1009,8 +1082,8 @@ class Survey(Lightcone):
         #print('getting LIR')
         LIR = getattr(LM,'LIR')(self,halos['SFR'],halos['Mstar'],self.LIR_pars,self.rng)
 
-        #print('getting CIB band agora')
-        L_CIB_band = getattr(LM,'CIB_band_Agora')(self,halos,LIR,self.CIB_pars)
+        print('getting CIB band agora')
+        L_CIB_band = getattr(LM,'CIB_band_Agora')(self,halos,LIR,self.CIB_pars,itau_nu0,tau_nu0_norm)
 
         #Get the flux S_nu = L_nu(1+z)/(4pi*chi^2*(1+z))
         chi = self.cosmo.comoving_radial_distance(halos['Zobs'])*u.Mpc
@@ -1050,8 +1123,7 @@ class Survey(Lightcone):
         if self.unit_convention == 'Tcmb':
             #Read the imaging band table
             nu0 = np.geomspace(self.nuObs_min,self.nuObs_max,self.NnuObs)
-            data_table = np.loadtxt(self.spectral_transmission_file)
-            tau_nu0 = interp1d(data_table[:,0],data_table[:,1],bounds_error=False,fill_value=0)(nu0)
+            tau_nu0 = itau_nu0(nu0)
             bnu = (2*cu.h*nu0**3/cu.c**2/(np.exp(cu.h*nu0/cu.k_B/2.7255/u.K)-1)).to(u.Jy)/u.sr/u.K
             if self.nu_c == None:
                 nu_c = np.trapz(nu0*tau_nu0,nu0)/np.trapz(tau_nu0,nu0)
@@ -1063,8 +1135,7 @@ class Survey(Lightcone):
             if self.nu_c == None:
                 #Read the imaging band table
                 nu0 = np.geomspace(self.nuObs_min,self.nuObs_max,self.NnuObs)
-                data_table = np.loadtxt(self.spectral_transmission_file)
-                tau_nu0 = interp1d(data_table[:,0],data_table[:,1],bounds_error=False,fill_value=0)(nu0)
+                tau_nu0 = itau_nu0(nu0)
                 nu_c = np.trapz(nu0*tau_nu0,nu0)/np.trapz(tau_nu0,nu0)
             else:
                 nu_c = self.nu_c
@@ -1084,12 +1155,11 @@ class Survey(Lightcone):
         obtained from Cartesian coordinates. It does not include noise.
         '''
         #Define the mesh divisions and the box size
+        zmid = self.zmid
         if self.mode != 'number_count':
-            zmid = (self.line_nu0[self.target_line]/self.nuObs_mean).decompose().value-1
             dnu_FWHM = self.dnu/0.4247
             sigma_par_target = (cu.c*dnu_FWHM*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
         else:
-            zmid = 0.5*(self.zmin+self.zmax)
             #remember dnu in this case is equivalent to dz
             sigma_par_target = (cu.c*self.dnu/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s))).to(self.Mpch).value
             
@@ -1174,8 +1244,12 @@ class Survey(Lightcone):
                             #Get the halos and which of those fall in the survey
                             self.halo_catalog_slice(fnames[ifile])
                             self.halos_in_survey_slice_lim(line,nfiles,ifile)
-                            #add the contribution from these halos
-                            field += self.paint_3d_lim(self.halos_in_survey[line],line,rmid,mins_obs,Vcell_true,pm)
+                            #check if there are halos or it is a buffer slice
+                            if len(self.halos_in_survey[line]['RA']) == 0:
+                                continue
+                            else:
+                                #add the contribution from these halos
+                                field += self.paint_3d_lim(self.halos_in_survey[line],line,rmid,mins_obs,Vcell_true,pm)
                     else:
                         field += self.paint_3d_lim(self.halos_in_survey_all[line],line,rmid,mins_obs,Vcell_true,pm)
             # add galactic foregrounds
@@ -1197,14 +1271,18 @@ class Survey(Lightcone):
 
             if not self.cache_catalog:
                 #add some buffer to be sure
-                fnames = self.halo_slices(self.zmin,self.zmax)
+                fnames = self.halo_slices(self.zmin,self.zmax) #not projected since these are true redshifts
                 nfiles = len(fnames)
                 for ifile in range(nfiles):
                     #Get the halos and which of those fall in the survey
                     self.halo_catalog_slice(fnames[ifile])
                     self.halos_in_survey_slice_number_count(ifile)
-                    #add the contribution from these halos
-                    field += self.paint_3d_number_count(self.halos_in_survey,rmid,mins_obs,pm)
+                    #check if there are halos or it is a buffer slice
+                    if len(self.halos_in_survey['RA']) == 0:
+                        continue
+                    else:
+                        #add the contribution from these halos
+                        field += self.paint_3d_number_count(self.halos_in_survey,rmid,mins_obs,pm)
             else:
                 field += self.paint_3d_number_count(self.halos_in_survey_all,rmid,mins_obs,pm)
 
@@ -1212,8 +1290,7 @@ class Survey(Lightcone):
         field = field.r2c()
         #This smoothing comes from the resolution window function.
         if self.do_spectral_smooth or self.do_angular_smooth:
-            #compute scales for the anisotropic filter (in Ztrue -> zmid)
-            zmid = (self.line_nu0[self.target_line]/self.nuObs_mean).decompose().value-1
+            #compute scales for the anisotropic filter
             sigma_par = self.do_spectral_smooth*(cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
             sigma_perp = self.do_angular_smooth*(self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
             if self.kind_spectral_smooth == 'tophat':
@@ -1399,7 +1476,6 @@ class Survey(Lightcone):
         #Convert the halo position in each volume to Cartesian coordinates (from Nbodykit)
         ra,dec,redshift = da.broadcast_arrays(halos['RA'], halos['DEC'],
                                               halos['Zobs'])
-        zmid = 0.5*(self.zmin+self.zmax)
         #radial distances in Mpch/h
         r = redshift.map_blocks(lambda zz: (((self.cosmo.comoving_radial_distance(zz)*u.Mpc).to(self.Mpch)).value),
                                 dtype=redshift.dtype)
@@ -1645,7 +1721,7 @@ class Survey(Lightcone):
         return field
         
         
-    def create_2d_foreground_map(self):
+    def create_2d_foreground_map(self, hp_fg_map, itau_nu0):
         '''
         Creates a 2D map of galactic continuum foregrounds using pySM
         '''
@@ -1654,8 +1730,6 @@ class Survey(Lightcone):
         else:
             dgrade_nside=self.nside
             
-        hp_fg_map = np.zeros(hp.nside2npix(self.nside))
-
         if self.foreground_model['precomputed_file']!=None:
             for i in range(len(self.foreground_model['precomputed_file'])):
                 dgrade_galmap_rotated=hp.fitsfunc.read_map(self.foreground_model['precomputed_file'][i]) #read pre-computed healpy maps
@@ -1681,12 +1755,12 @@ class Survey(Lightcone):
                 else:
                     warn('Unknown galactic foreground component: {}'.format(cmp))
                     
-            obs_freqs_edge=np.linspace(self.nuObs_min, self.nuObs_max, self.Nchan+1)
-            obs_freqs=(obs_freqs_edge[1:]+obs_freqs_edge[:-1])/2 #frequencies observed in survey
+            nu0 = np.geomspace(self.nuObs_min,self.nuObs_max,self.NnuObs)
+            tau_nu0 = itau_nu0(nu0)
 
             sky = pysm3.Sky(nside=dgrade_nside, preset_strings=sky_config)#create sky object using the specified model
             #produce healpy maps, 0 index corresponds to intensity
-            dgrade_galmap=sky.get_emission(obs_freqs)[0]#produce healpy maps, 0 index corresponds to intensity
+            dgrade_galmap=sky.get_emission(nu0, tau_nu0)[0]#produce healpy maps, 0 index corresponds to intensity
             rot_center = hp.Rotator(rot=[self.foreground_model['survey_center'][0].to_value(u.deg), self.foreground_model['survey_center'][1].to_value(u.deg)], inv=True) #rotation to place the center of the survey at the origin              
             dgrade_galmap_rotated = pysm3.apply_smoothing_and_coord_transform(dgrade_galmap, rot=rot_center, fwhm=0*u.arcmin)
             if self.foreground_model['dgrade_nside']!=self.nside:
@@ -1694,11 +1768,11 @@ class Survey(Lightcone):
             else:
                 galmap_rotated=dgrade_galmap_rotated
             if self.unit_convention == 'Inu' and sky.output_unit != self.unit:
-                galmap_rotated *= pysm3.bandpass_unit_conversion(obs_freqs, input_unit = sky.output_unit,output_unit=self.unit)
+                galmap_rotated *= pysm3.bandpass_unit_conversion(nu0,tau_nu0, input_unit = sky.output_unit,output_unit=self.unit)
             elif self.unit_convention == 'Tb' and sky.output_unit != pysm3.units.uK_RJ:
-                galmap_rotated *= pysm3.bandpass_unit_conversion(obs_freqs, input_unit = sky.output_unit,output_unit=self.unit)
+                galmap_rotated *= pysm3.bandpass_unit_conversion(nu0,tau_nu0, input_unit = sky.output_unit,output_unit=self.unit)
             elif self.unit_convention == 'Tcmb' and sky.output_unit != pysm3.units.uK_CMB:
-                galmap_rotated *= pysm3.bandpass_unit_conversion(obs_freqs, input_unit = sky.output_unit,output_unit='uK_CMB')
+                galmap_rotated *= pysm3.bandpass_unit_conversion(nu0,tau_nu0, input_unit = sky.output_unit,output_unit='uK_CMB')
                 
             hp_fg_map += galmap_rotated
             
