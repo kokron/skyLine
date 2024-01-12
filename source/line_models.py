@@ -135,7 +135,7 @@ def LIR_and_LUV(self,SFR,Mstar,pars,rng):
 ## Cosmic IR Background ##
 ##########################
 
-def CIB_band_Agora(self,halos,LIR,pars):
+def CIB_band_Agora(self,halos,LIR,pars,itau_nu0,tau_nu0_norm):
     '''
     Model for the CIB luminosity in a given observed band.
     Follows the modeling implemented in the Agora simulations
@@ -168,13 +168,11 @@ def CIB_band_Agora(self,halos,LIR,pars):
     nu0 = np.geomspace(self.nuObs_min.value,self.nuObs_max.value,self.NnuObs)*self.nuObs_min.unit
 
     #Read the imaging band table
-    data_table = np.loadtxt(self.spectral_transmission_file)
-    tau_nu0 = interp1d(data_table[:,0],data_table[:,1],bounds_error=False,fill_value=0)(nu0)
-    tau_nu0_norm = np.trapz(tau_nu0,nu0)
+    tau_nu0 = itau_nu0(nu0)
 
     #Prepare to compute the color correction term
     if self.nu_c == None:
-        nu_c = np.trapz(nu0*tau_nu0,nu0)/np.trapz(tau_nu0,nu0)
+        nu_c = np.trapz(nu0*tau_nu0,nu0)/tau_nu0_norm
     else:
         nu_c = self.nu_c
     Cc_norm = np.trapz(nu_c/nu0*tau_nu0,nu0)
@@ -205,7 +203,6 @@ def CIB_band_Agora(self,halos,LIR,pars):
         int_term = Cc*np.trapz(integrand*tau_nu0[None,:], nu0.value, axis=1)/SEDnorm/tau_nu0_norm * self.rng.normal(1, 0.25, len(SEDnorm))    
         if i== Niter:
             L_CIB[hidx[i*nsubcat:][:,0]] = int_term
-
         else:
             L_CIB[hidx[i*nsubcat:(i+1)*nsubcat][:,0]] = int_term
     #Get the SED normalization
@@ -266,40 +263,6 @@ def SEDTabulate(self,nu):
     SEDspl = RegularGridInterpolator((zvec, Td), np.einsum('nzh->zhn', SEDvec))
 
     return SEDspl
-
-def SEDint(nus, Td, beta_d=None):
-    '''
-    Compute SED for a set of N [beta_d, Td, nup] across a specified nu range
-    Do integral to get L_CIB for each object. 
-    
-    NOTE -- currently stops at given SED arrays. More to do to get L_CIB.
-    '''
-    alpha_d=2
-    if beta_d is None:
-        beta_d = 1.25 / (0.4 * 0.008*Td)
-    #Build the SEDvec
-    SEDvec = np.zeros(shape=(len(nus), len(beta_d)))
-    
-    
-    kTh = (cu.k_B * Td / (cu.h)).to(u.GHz)
-    nup = kTh*(3+beta_d+alpha_d)
-
-    #Build the mask 
-    bignuvec = np.tile(nus, len(beta_d)).reshape(len(beta_d), len(nus)).T
-    nu_inds = bignuvec <= nup
-
-
-    #Compute nu < nup
-    SEDvec[nu_inds] = (np.exp(np.einsum('i, j->ij', np.log(nus.value),beta_d+3))/(np.exp(np.einsum('i, j->ij', nus, 1./kTh)) - 1))[nu_inds]
-    
-    #nu > nup
-    #Notice how the only nu dependence comes from nus**-alpha_d, so we can factor this out
-    nu_inds = ~nu_inds 
-    SEDvec[nu_inds] = np.einsum('i, j->ij', nus**-alpha_d, nup.value**(beta_d+3+alpha_d)/(np.exp(nup/kTh) - 1))[nu_inds]
-
-    #We still want to compute the SED normalization integral, etc. 
-    
-    return SEDvec
 
 def Tdust_Agora(z,SFR,Mstar,LIR,B,zeta_d,A_d,alpha):
     '''
