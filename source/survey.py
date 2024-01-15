@@ -1294,7 +1294,7 @@ class Survey(Lightcone):
             if self.mode != 'number_count':
                 sigma_par = self.do_spectral_smooth*(cu.c*self.dnu*(1+zmid)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s)*self.nuObs_mean)).to(self.Mpch).value
             else:
-                sigma_par = self.do_spectral_smooth*((cu.c*self.dnu)/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s))).to(self.Mpch).value
+                sigma_par = self.do_spectral_smooth*((cu.c*self.dnu)/0.4247/(self.cosmo.hubble_parameter(zmid)*(u.km/u.Mpc/u.s))).to(self.Mpch).value
             sigma_perp = self.do_angular_smooth*(self.cosmo.comoving_radial_distance(zmid)*u.Mpc*(self.beam_width/(1*u.rad))).to(self.Mpch).value
             if self.kind_spectral_smooth == 'tophat':
                 field = field.apply(aniso_filter_tophat_los, kind='wavenumber')
