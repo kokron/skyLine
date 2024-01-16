@@ -998,12 +998,14 @@ class Survey(Lightcone):
             #Read the imaging band table
             nu0 = np.geomspace(self.nuObs_min,self.nuObs_max,self.NnuObs)
             tau_nu0 = itau_nu0(nu0)
-            bnu = (2*cu.h*nu0**3/cu.c**2/(np.exp(cu.h*nu0/cu.k_B/2.7255/u.K)-1)).to(u.Jy)/u.sr/u.K
+            T = 2.7255*u.K
+            hnu_kT = (cu.h*nu0/cu.k_B/T).decompose()
+            bnu_prime = (2*cu.h*nu0**3/cu.c**2/(np.exp(hnu_kT)-1)**2*np.exp(hnu_kT)*hnu_kT/T/u.sr).to(u.Jy/u.sr/u.K)
             if self.nu_c == None:
                 nu_c = np.trapz(nu0*tau_nu0,nu0)/np.trapz(tau_nu0,nu0)
             else:
                 nu_c = self.nu_c
-            conv_factor = np.trapz(bnu*tau_nu0,nu0)/np.trapz(tau_nu0*nu_c/nu0,nu0)
+            conv_factor = np.trapz(bnu_prime*tau_nu0,nu0)/np.trapz(tau_nu0*nu_c/nu0,nu0)
             signal = (signal/conv_factor).to(u.uK)
         elif self.unit_convention == 'Tb':
             if self.nu_c == None:
@@ -1124,12 +1126,14 @@ class Survey(Lightcone):
             #Read the imaging band table
             nu0 = np.geomspace(self.nuObs_min,self.nuObs_max,self.NnuObs)
             tau_nu0 = itau_nu0(nu0)
-            bnu = (2*cu.h*nu0**3/cu.c**2/(np.exp(cu.h*nu0/cu.k_B/2.7255/u.K)-1)).to(u.Jy)/u.sr/u.K
+            T = 2.7255*u.K
+            hnu_kT = (cu.h*nu0/cu.k_B/T).decompose()
+            bnu_prime = (2*cu.h*nu0**3/cu.c**2/(np.exp(hnu_kT)-1)**2*np.exp(hnu_kT)*hnu_kT/T/u.sr).to(u.Jy/u.sr/u.K)
             if self.nu_c == None:
                 nu_c = np.trapz(nu0*tau_nu0,nu0)/np.trapz(tau_nu0,nu0)
             else:
                 nu_c = self.nu_c
-            conv_factor = np.trapz(bnu*tau_nu0,nu0)/np.trapz(tau_nu0*nu_c/nu0,nu0)
+            conv_factor = np.trapz(bnu_prime*tau_nu0,nu0)/np.trapz(tau_nu0*nu_c/nu0,nu0)
             signal = (signal/conv_factor).to(u.uK)
         elif self.unit_convention == 'Tb':
             if self.nu_c == None:
