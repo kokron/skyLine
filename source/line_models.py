@@ -223,8 +223,8 @@ def make_SEDnorm(self):
     
     #Generate table with broad range in nus, same values of T as other function, compute normalization
     tableSED = tablespl((self.zmin,Tdvec))
-    print(tableSED.shape)
-    print(nus.shape)
+    #print(tableSED.shape)
+    #print(nus.shape)
     norm = np.trapz(tableSED, nus, axis=1)*(1+self.zmin) #correction factor to do this integral at nuObs
     normspl = interp1d(Tdvec, norm)
     return normspl

@@ -652,7 +652,7 @@ class Survey(Lightcone):
         halos_survey['RA'] = self.halo_catalog_all['RA'][inds]
         halos_survey['DEC'] = self.halo_catalog_all['DEC'][inds]
         halos_survey['Zobs'] = self.halo_catalog_all['Z'][inds]+self.halo_catalog_all['DZ'][inds]
-        halos_survey['SFR'] = self.halo_catalog_all['SA[OII]FR_HALO'][inds]
+        halos_survey['SFR'] = self.halo_catalog_all['SFR_HALO'][inds]
         halos_survey['Mstar'] = self.halo_catalog_all['SM_HALO'][inds]
             
         return halos_survey
@@ -1002,7 +1002,7 @@ class Survey(Lightcone):
             hnu_kT = (cu.h*nu0/cu.k_B/T).decompose()
             bnu_prime = (2*cu.h*nu0**3/cu.c**2/(np.exp(hnu_kT)-1)**2*np.exp(hnu_kT)*hnu_kT/T/u.sr).to(u.Jy/u.sr/u.K)
             if self.nu_c == None:
-                nu_c = np.trapz(nu0*tau_nu0,nu0)/np.trapz(tau_nu0,nu0)
+                nu_c = np.trapz(nu0*tau_nu0,nu0)/tau_nu0_norm
             else:
                 nu_c = self.nu_c
             conv_factor = np.trapz(bnu_prime*tau_nu0,nu0)/np.trapz(tau_nu0*nu_c/nu0,nu0)
