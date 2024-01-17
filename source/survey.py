@@ -1099,7 +1099,7 @@ class Survey(Lightcone):
         if self.flux_detection_lim:
             if type(self.flux_detection_lim) == u.quantity.Quantity:
                 ##flux = (signal*self.beam_FWHM**2).to(self.flux_detection_lim.unit)
-                inds = ((signal.to(self.flux_detection_lim.unit)).value < self.flux_detection_lim.value)
+                inds = ((signal.to(self.flux_detection_lim.unit)).value < self.flux_detection_lim.value) & (signal.value > 0.) 
                 signal = signal[inds]
                 theta, phi = rd2tp(halos['RA'][inds], halos['DEC'][inds])
             else:
@@ -1114,10 +1114,13 @@ class Survey(Lightcone):
                     #remove randomly from each bin
                     inds_detected = np.random.choice(Nsources,Ndetected,replace=False)
                     inds[inds_flux][inds_detected] = False
+                inds = inds & (signal.value > 0.)
                 signal = signal[inds]
                 theta, phi = rd2tp(halos['RA'][inds], halos['DEC'][inds])
         else:
-            theta, phi = rd2tp(halos['RA'], halos['DEC'])
+            inds = (signal.value > 0.)
+            signal = signal[inds]
+            theta, phi = rd2tp(halos['RA'][inds], halos['DEC'][inds])
 
         #Transform flux to intensity
         signal *= 1./(hp.nside2pixarea(self.nside, degrees = False)*u.sr)
@@ -1145,6 +1148,8 @@ class Survey(Lightcone):
                 nu_c = self.nu_c
             #Brightness Temperature[uK]
             signal = (signal*u.sr*cu.c**2/2/cu.k_B/nu_c**2).to(u.uK)
+        else:
+            signal = signal.to(u.Jy/u.sr)
         
         #Paste the signals to the map
         pixel_idxs = hp.ang2pix(self.nside, theta, phi)
