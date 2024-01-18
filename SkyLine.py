@@ -5,7 +5,7 @@ Primary functions to call the modules
 from source.lightcone import Lightcone
 from source.survey import Survey
 from source.measurements import Measure
-
+from source import line_models as LM
 try:
     import yaml
 except:
