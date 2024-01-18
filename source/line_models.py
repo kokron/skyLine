@@ -194,13 +194,15 @@ def CIB_band_Agora(self,halos,LIR,pars,itau_nu0,tau_nu0_norm):
         else:
             Td = Tdust[i*nsubcat:(i+1)*nsubcat].value 
             zhalo = halos[inds]['Zobs'][i*nsubcat:(i+1)*nsubcat]
-        integrand = SEDSpl((zhalo, Td)) #Quick evaluation of full SED on nu0 for each entry
-        SEDnorm = NormSpl(Td)/(1+zhalo) #Account for the ratio of redshifts
+        #Quick evaluation of full SED on nu0 for each entry
+        SEDhalos = SEDSpl((zhalo, Td))
+        SEDnorm = NormSpl(Td)
 
-        iSEDSpl = interp1d(nu0,SEDSpl((zhalo,Td)))(nu_c)
-        Cc = np.trapz(tau_nu0*SEDSpl((zhalo,Td))/iSEDSpl[:,None],nu0)/Cc_norm #Color correction
+        iSEDSpl = interp1d(nu0,SEDhalos)(nu_c)
+        Cc = np.trapz(tau_nu0*SEDhalos/iSEDSpl[:,None],nu0)/Cc_norm #Color correction
 
-        int_term = Cc*np.trapz(integrand*tau_nu0[None,:], nu0.value, axis=1)/SEDnorm/tau_nu0_norm * self.rng.normal(1, 0.25, len(SEDnorm))    
+        #(1+zhalo)^2 added in the integralto do the integral in restframe nu and to set tau in rest-frame nu
+        int_term = Cc*np.trapz(SEDhalos*tau_nu0[None,:]*(1+zhalo[None,:])**2, nu0.value, axis=1)/SEDnorm/tau_nu0_norm * self.rng.normal(1, 0.25, len(SEDnorm))    
         if i== Niter:
             L_CIB[hidx[i*nsubcat:][:,0]] = int_term
         else:
@@ -225,7 +227,7 @@ def make_SEDnorm(self):
     tableSED = tablespl((self.zmin,Tdvec))
     #print(tableSED.shape)
     #print(nus.shape)
-    norm = np.trapz(tableSED, nus, axis=1)*(1+self.zmin) #correction factor to do this integral at nuObs
+    norm = np.trapz(tableSED, nus, axis=1)*(1+self.zmin) #correction factor to do this integral at same frame
     normspl = interp1d(Tdvec, norm)
     return normspl
 
