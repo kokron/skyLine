@@ -146,8 +146,9 @@ class Survey(Lightcone):
                             (Default:None == mean freq of the spectral transmission)
 
     -flux_detection_lim     Flux detection limit for dusty galaxies, to remove resolved galaxies. Only relevant if mode = 'cib'. It can be None, a
-                            an astropy quantity (if flat limit, make sure the units correspond to flux!), or a function [f(x) where x is the flux] 
-                            for the fraction of galaxies detected (default: None)
+                            an astropy quantity (if flat limit, make sure the units correspond to flux!), or a function being the inverse function of the 
+                            fraction of galaxies detected for a given flux [S(frac) where frac is the fraction of galaxies detected and S in the corresponding
+                            flux of those galaxies with units (otherwise understood as Jy)] (default: None)
 
     -resampler              Set the resampling window for the 3d maps (Irrelevant if do_angular=True). (Default: 'cic')
 
@@ -1104,19 +1105,37 @@ class Survey(Lightcone):
                 theta, phi = rd2tp(halos['RA'][inds], halos['DEC'][inds])
             else:
                 ##flux = (signal*self.beam_FWHM**2).to(u.mJy)
-                signal = signal.to(u.mJy)
-                flux_vec = np.linspace(0,np.max(signal.value),17)
+                probvec = np.linspace(0.,1.,33)
+                fluxvec_edge = self.flux_detection_lim(probvec)
+                try:
+                    dummy = fluxvec_edge.unit
+                    fluxvec_edge = fluxvec_edge.to(u.Jy)
+                except:
+                    fluxvec_edge *= u.Jy
                 inds = np.ones_like(signal.value,dtype=bool)
-                for i in range(len(flux_vec)-1):
-                    inds_flux = (signal.value >= flux_vec[i]) & (signal.value < flux_vec[i+1])
-                    Nsources = len(signal[inds_flux])
-                    Ndetected = int(self.flux_detection_lim(0.5*(flux_vec[i]+flux_vec[i+1]))*Nsources)
+                inds[signal.value < 0] = False
+                for i in range(len(probvec)-1):
+                    inds_flux = (signal.value >= fluxvec_edge.value[i]) & (signal.value < fluxvec_edge[i+1].value)
+                    Nsources = np.sum(inds_flux)
+                    Ndetected = int(0.5*(probvec[i]+probvec[i+1])*Nsources)
                     #remove randomly from each bin
                     inds_detected = np.random.choice(Nsources,Ndetected,replace=False)
                     inds[inds_flux][inds_detected] = False
-                inds = inds & (signal.value > 0.)
                 signal = signal[inds]
                 theta, phi = rd2tp(halos['RA'][inds], halos['DEC'][inds])
+                #signal = signal.to(u.mJy)
+                #flux_vec = np.linspace(0,np.max(signal.value),17)
+                #inds = np.ones_like(signal.value,dtype=bool)
+                #for i in range(len(flux_vec)-1):
+                #    inds_flux = (signal.value >= flux_vec[i]) & (signal.value < flux_vec[i+1])
+                #    Nsources = len(signal[inds_flux])
+                #    Ndetected = int(self.flux_detection_lim(0.5*(flux_vec[i]+flux_vec[i+1]))*Nsources)
+                    #remove randomly from each bin
+                #    inds_detected = np.random.choice(Nsources,Ndetected,replace=False)
+                #    inds[inds_flux][inds_detected] = False
+                #inds = inds & (signal.value > 0.)
+                #signal = signal[inds]
+                #theta, phi = rd2tp(halos['RA'][inds], halos['DEC'][inds])
         else:
             inds = (signal.value > 0.)
             signal = signal[inds]
