@@ -369,7 +369,12 @@ class Lightcone(object):
             self._update_lightcone_list = []
             for attribute in self._update_survey_list:
                 delattr(self,attribute)
-            self._update_survey_list = []
+            try: 
+                del(self.SEDSpl)
+                del(self.NormSpl)
+                self._update_survey_list = []
+            except:
+                self._update_survey_list = []
             for attribute in self._update_measure_list:
                 delattr(self,attribute)
             self._update_measure_list = []
@@ -379,14 +384,24 @@ class Lightcone(object):
             self._update_lightcone_list = []
             for attribute in self._update_survey_list:
                 delattr(self,attribute)
-            self._update_survey_list = []
+            try: 
+                del(self.SEDSpl)
+                del(self.NormSpl)
+                self._update_survey_list = []
+            except:
+                self._update_survey_list = []
             for attribute in self._update_measure_list:
                 delattr(self.__class__,attribute)
             self._update_measure_list = []
         elif any(item in survey_params for item in new_params.keys()):
             for attribute in self._update_survey_list:
                 delattr(self,attribute)
-            self._update_survey_list = []
+            try: 
+                del(self.SEDSpl)
+                del(self.NormSpl)
+                self._update_survey_list = []
+            except:
+                self._update_survey_list = []
             for attribute in self._update_measure_list:
                 delattr(self,attribute)
             self._update_measure_list = []

@@ -183,8 +183,14 @@ def CIB_band_Agora(self,halos,LIR,pars,itau_nu0,tau_nu0_norm):
     nsubcat = len(halos[inds])//Niter 
 
     #Generate lookup tables for IR SEDs as a function of temperature
-    SEDSpl = SEDTabulate(self,nu0)
-    NormSpl = make_SEDnorm(self) 
+    try: 
+        SEDSpl = self.SEDSpl
+        NormSpl = self.NormSpl
+    except:
+        SEDSpl = SEDTabulate(self,nu0)
+        NormSpl = make_SEDnorm(self) 
+        self.SEDSpl = SEDSpl
+        self.NormSpl = NormSpl
     #Iteratively compute the SED contribution to L_CIB for each halo
     for i in range(Niter+1):
         if i == Niter:
@@ -201,8 +207,8 @@ def CIB_band_Agora(self,halos,LIR,pars,itau_nu0,tau_nu0_norm):
         iSEDSpl = interp1d(nu0,SEDhalos)(nu_c)
         Cc = np.trapz(tau_nu0*SEDhalos/iSEDSpl[:,None],nu0)/Cc_norm #Color correction
 
-        #(1+zhalo)^2 added in the integralto do the integral in restframe nu and to set tau in rest-frame nu
-        int_term = Cc*np.trapz(SEDhalos*tau_nu0[None,:]*(1+zhalo[:,None])**2, nu0.value, axis=1)/SEDnorm/tau_nu0_norm * self.rng.normal(1, 0.25, len(SEDnorm))    
+        #(1+zhalo) added in the integral to do the integral in restframe nu
+        int_term = Cc*np.trapz(SEDhalos*tau_nu0[None,:]*(1+zhalo[:,None]), nu0.value, axis=1)/SEDnorm/tau_nu0_norm * self.rng.normal(1, 0.25, len(SEDnorm))    
         if i== Niter:
             L_CIB[hidx[i*nsubcat:][:,0]] = int_term
         else:
