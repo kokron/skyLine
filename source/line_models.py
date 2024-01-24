@@ -255,7 +255,9 @@ def SEDTabulate(self,nu):
     SEDvec = np.zeros(shape=(len(nu), len(zvec), len(betad)))
 
     kTh = (cu.k_B * Td / (cu.h)).to(u.GHz)    
-    nup = kTh*(3+betad+alpha_d)
+    A = 3+betad+alpha_d
+    #Very well converged approximation to nu' see appendix
+    nup = kTh*(A - A * np.exp(-A) + (A * np.exp(-A))**2)
 
     #Build the mask
     bignuvec = np.tile(nu, len(betad)*len(zvec)).reshape(len(betad), len(zvec), len(nu)).T
