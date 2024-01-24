@@ -202,7 +202,7 @@ def CIB_band_Agora(self,halos,LIR,pars,itau_nu0,tau_nu0_norm):
             zhalo = halos[inds]['Zobs'][i*nsubcat:(i+1)*nsubcat]
         #Quick evaluation of full SED on nu0 for each entry
         SEDhalos = SEDSpl((zhalo, Td))
-        SEDnorm = NormSpl(Td)
+        SEDnorm = NormSpl((zhalo,Td))
 
         iSEDSpl = interp1d(nu0,SEDhalos)(nu_c)
         Cc = np.trapz(tau_nu0*SEDhalos/iSEDSpl[:,None],nu0)/Cc_norm #Color correction
@@ -223,18 +223,28 @@ def CIB_band_Agora(self,halos,LIR,pars,itau_nu0,tau_nu0_norm):
 def make_SEDnorm(self):
     '''
     Generate a function which computes the normalization of the SED
-    for a dust temperature Td [K]
+    for a dust temperature Td [K] and z through the range of 
+    1 GHz < nu < 4e4 GHz
     '''
-    nus = np.geomspace(0.1, 1e7, 1000)*u.GHz
+    nus = np.geomspace(1, 4e4, 1000)*u.GHz
     tablespl = SEDTabulate(self,nus)
-    Tdvec = np.geomspace(0.05, 100, 2000)
+    Tdvec = np.geomspace(0.05, 100, 200)
     
     #Generate table with broad range in nus, same values of T as other function, compute normalization
-    tableSED = tablespl((self.zmin,Tdvec))
+    dz = 0.01
+    zvec = np.arange(self.zmin-dz, self.zmax+dz, dz)
+
+    #Build z and T arg for norm 
+    tilez = np.repeat(zs, len(Tdvec))
+    tiled = np.tile(Tdvec, len(zs))
+    tilevec = np.array([tilez, tiled]).T
+
+    tableSED = tablespl(tilevec)
     #print(tableSED.shape)
     #print(nus.shape)
-    norm = np.trapz(tableSED, nus, axis=1)*(1+self.zmin) #correction factor to do this integral at same frame
-    normspl = interp1d(Tdvec, norm)
+    norms = np.trapz(tableSED, nus, axis=1)
+
+    normspl = RegularGridInterpolator((zvec, Tdvec), norms.reshape(len(zvec), len(Tdvec)))
     return normspl
 
 def SEDTabulate(self,nu):
@@ -242,7 +252,7 @@ def SEDTabulate(self,nu):
     Given an input set of frequencies nu, generate SED for Td. 
     '''
 
-    Tdvec = np.geomspace(0.05, 100, 2000)
+    Tdvec = np.geomspace(0.05, 100, 200)
     dz = 0.01
     zvec = np.arange(self.zmin-dz,self.zmax+dz,dz)
     
