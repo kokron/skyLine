@@ -208,7 +208,7 @@ def CIB_band_Agora(self,halos,LIR,pars,itau_nu0,tau_nu0_norm):
         Cc = np.trapz(tau_nu0*SEDhalos/iSEDSpl[:,None],nu0)/Cc_norm #Color correction
 
         #(1+zhalo) added in the integral to do the integral in restframe nu
-        int_term = Cc*np.trapz(SEDhalos*tau_nu0[None,:]*(1+zhalo[:,None]), nu0.value, axis=1)/SEDnorm/tau_nu0_norm * self.rng.normal(1, 0.25, len(SEDnorm))    
+        int_term = Cc*np.trapz(SEDhalos*tau_nu0[None,:], nu0.value, axis=1)/SEDnorm/tau_nu0_norm * self.rng.normal(1, 0.25, len(SEDnorm))    
         if i== Niter:
             L_CIB[hidx[i*nsubcat:][:,0]] = int_term
         else:
