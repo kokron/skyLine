@@ -235,8 +235,8 @@ def make_SEDnorm(self):
     zvec = np.arange(self.zmin-dz, self.zmax+dz, dz)
 
     #Build z and T arg for norm 
-    tilez = np.repeat(zs, len(Tdvec))
-    tiled = np.tile(Tdvec, len(zs))
+    tilez = np.repeat(zvec, len(Tdvec))
+    tiled = np.tile(Tdvec, len(zvec))
     tilevec = np.array([tilez, tiled]).T
 
     tableSED = tablespl(tilevec)
