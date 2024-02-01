@@ -490,11 +490,11 @@ class Survey(Lightcone):
         if self.do_angular:
             ntot = np.trapz(dndz_file,z_file)*u.sr**-1
             dndz_spline = interp1d(z_file,dndz_file/ntot.value,bounds_error=False,fill_value=0.)(zarr)
-            dndz = ntot*0.5*(dndz_spline[1:]+dndz_spline[:-1])*np.diff(zarr)
+            dndz = ntot*0.5*(dndz_spline[1:]+dndz_spline[:-1])*np.diff(zarr)*u.sr
         else:
             dndz_spline = interp1d(z_file,dndz_file,bounds_error=False,fill_value=0.)(zarr)
-            dndz = 0.5*(dndz_spline[1:]+dndz_spline[:-1])*self.Mpch**-3
-        return dndz.to(self.Mpch**-3)
+            dndz = (0.5*(dndz_spline[1:]+dndz_spline[:-1])*self.Mpch**-3).to(self.Mpch**-3)
+        return dndz
             
     
     @cached_survey_property
