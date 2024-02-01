@@ -490,7 +490,7 @@ class Survey(Lightcone):
         if self.do_angular:
             ntot = np.trapz(dndz_file,z_file)*u.sr**-1
             dndz_spline = interp1d(z_file,dndz_file/ntot.value,bounds_error=False,fill_value=0.)(zarr)
-            dndz = ntot*0.5*(dndz_spline[1:]+dndz_spline[:-1])*np.diff(zarr)*u.sr
+            dndz = ntot*0.5*(dndz_spline[1:]+dndz_spline[:-1])*np.diff(zarr)
         else:
             dndz_spline = interp1d(z_file,dndz_file,bounds_error=False,fill_value=0.)(zarr)
             dndz = (0.5*(dndz_spline[1:]+dndz_spline[:-1])*self.Mpch**-3).to(self.Mpch**-3)
@@ -1066,13 +1066,13 @@ class Survey(Lightcone):
         Adds the contribution from the number counts of a slice to the 2d healpy map
         '''
         #number counts [empty unit]
-        signal = np.ones(len(halos['Zobs']))*(1*self.unit/self.unit)
+        signal = np.ones(len(halos['Zobs']))
             
         #Paste the signals to the map
         theta, phi = rd2tp(halos['RA'], halos['DEC'])
         pixel_idxs = hp.ang2pix(self.nside, theta, phi)
 
-        np.add.at(hp_map, pixel_idxs, signal.value)
+        np.add.at(hp_map, pixel_idxs, signal)
         
         return hp_map
     
