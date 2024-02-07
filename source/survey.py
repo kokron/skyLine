@@ -113,6 +113,9 @@ class Survey(Lightcone):
     -do_remove_mean         Boolean: Remove the mean of the map or not
                             (Defult: True)
 
+    -Nmesh                  1D np array with 3 elements: Mesh size for 3D maps (only relevant if do_angular=False)
+                            (Default: None -> Using a mesh determined by the resolution of the experiment)
+
     -do_angular             Create an angular survey (healpy map)
                             (Default: False)
 
@@ -178,6 +181,7 @@ class Survey(Lightcone):
                  do_z_buffering = True,
                  do_downsample = True,
                  do_remove_mean = True,
+                 Nmesh = None,
                  do_angular = False,
                  do_gal_foregrounds = False,
                  foreground_model=dict(precomputed_file=None, dgrade_nside=2**10, survey_center=[0*u.deg, 90*u.deg], sky={'synchrotron' : True, 'dust' : True, 'freefree' : True,'ame' : True}),
@@ -1193,9 +1197,10 @@ class Survey(Lightcone):
             
         Lbox = self.Lbox.value
         
-        Nmesh = np.array([self.spectral_supersample*np.ceil(Lbox[0]/sigma_par_target),
-                  self.angular_supersample*self.Npixside[0],
-                  self.angular_supersample*self.Npixside[1]], dtype=int)
+        if self.Nmesh == None:
+            Nmesh = np.array([self.spectral_supersample*np.ceil(Lbox[0]/sigma_par_target),
+                              self.angular_supersample*self.Npixside[0],
+                              self.angular_supersample*self.Npixside[1]], dtype=int)
         
         ralim = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_max.value])) 
         declim = np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value]))
