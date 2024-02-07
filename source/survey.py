@@ -1201,6 +1201,8 @@ class Survey(Lightcone):
             Nmesh = np.array([self.spectral_supersample*np.ceil(Lbox[0]/sigma_par_target),
                               self.angular_supersample*self.Npixside[0],
                               self.angular_supersample*self.Npixside[1]], dtype=int)
+        else:
+            Nmesh = self.Nmesh
         
         ralim = np.deg2rad(np.array([self.RAObs_min.value,self.RAObs_max.value])) 
         declim = np.deg2rad(np.array([self.DECObs_min.value,self.DECObs_max.value]))
