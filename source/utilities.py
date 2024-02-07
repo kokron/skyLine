@@ -140,6 +140,9 @@ def check_params(self,input_params, default_params):
             elif key == 'nu_c':
                 if type(input_value) == u.quantity.Quantity:
                     continue
+            elif key == 'Nmesh':
+                if type(input_value) == np.ndarray:
+                    continue
             else:
                 raise TypeError("Parameter "+key+" must be a "+
                                 str(type(default_value)))
