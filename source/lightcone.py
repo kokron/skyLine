@@ -38,7 +38,8 @@ class Lightcone(object):
                             (conversion from Mpc/h to Mpc done internally). (Default: 25)
 
     -zmin,zmax              Minimum and maximum redshifts to read from the lightcone
-                            (default: 0,20 - limited by Universe Machine)
+                            (default: 0,20 - limited by Universe Machine). For number_count
+                            it is actually the maximum and minimum redshift of the survey
 
     -RA_width:              Total RA width to read from the lightcone.
                             Assumed to be centered in origin
@@ -61,6 +62,11 @@ class Lightcone(object):
     -LIR_pars               Dictionary with the parameters required to compute infrared
                             luminosity, needed to compute certain lines luminosities.
                             Check the LIR function in source/line_models.py for the required parameters 
+                            and available models
+
+    -CIB_pars               Dictionary with the parameters required to compute cosmic infrared
+                            SED, needed to compute the CIB luminosities for a given band.
+                            Check the CIB functions in source/line_models.py for the required parameters 
                             and available models
 
     -do_external_SFR        Boolean, whether to use a SFR different than Universe Machine
@@ -97,6 +103,7 @@ class Lightcone(object):
                                OIII_88 = dict(model_name = '', model_pars = {}), OI_63 = dict(model_name = '', model_pars = {}), 
                                OI_145 = dict(model_name = '', model_pars = {}), OII = dict(model_name = '', model_pars = {}), OIII_0p5 = dict(model_name = '', model_pars = {})),
                  LIR_pars = {},
+                 CIB_pars = {},
                  do_external_SFR = False, external_SFR = '',sig_extSFR = 0.3, SFR_pars=dict(M0=1e-6, Ma=10**8, Mb=10**12.3, a=1.9, b=3.0, c=-1.4), 
                  seed=None,
                  cache_catalog = True):
@@ -178,10 +185,13 @@ class Lightcone(object):
             ind[ifile] =  int(fnames[ifile].split('_')[-1].split('.')[0])
         sort_ind = np.argsort(ind)
         #get the edge distances for each slice in Mpc (self.lightcone_slice_width in Mpc/h width each slice)
-        dist_edges = (np.arange(Nfiles+1)+ind[[sort_ind[0]]])*self.lightcone_slice_width*self.Mpch.value
+        dist_edges = (np.arange(Nfiles+1)+ind[[sort_ind[0]]]+1)*self.lightcone_slice_width*self.Mpch.value
         min_dist = self.cosmo.comoving_radial_distance(zmin)
         max_dist = self.cosmo.comoving_radial_distance(zmax)
-        inds_in = np.where(np.logical_and(dist_edges[:-1] >= min_dist, dist_edges[1:] <= max_dist))[0]
+        min_idx = min_dist//(self.lightcone_slice_width*self.Mpch.value) - 1
+        max_idx = max_dist//(self.lightcone_slice_width*self.Mpch.value) + 1
+        inds_in = np.arange(min_idx, max_idx, dtype=int)
+
         N_in = len(inds_in)
         fnames = np.array(fnames)
 
@@ -203,7 +213,8 @@ class Lightcone(object):
         data = np.array(fil[1].data)
         inds_RA = (data['RA'] > self.RA_min.value)&(data['RA'] < self.RA_max.value)
         inds_DEC = (data['DEC'] > self.DEC_min.value)&(data['DEC'] < self.DEC_max.value)
-        inds_sky = inds_RA&inds_DEC
+        inds_z = (data['Z']+data['DZ'] > self.zmin)&(data['Z']+data['DZ'] < self.zmax)
+        inds_sky = inds_RA&inds_DEC&inds_z
         bigcat = data[inds_sky]
         #append the rest:
         for ifile in range(1,nfiles):
@@ -211,7 +222,8 @@ class Lightcone(object):
             data = np.array(fil[1].data)
             inds_RA = (data['RA'] > self.RA_min.value)&(data['RA'] < self.RA_max.value)
             inds_DEC = (data['DEC'] > self.DEC_min.value)&(data['DEC'] < self.DEC_max.value)
-            inds_sky = inds_RA&inds_DEC
+            inds_z = (data['Z']+data['DZ'] > self.zmin)&(data['Z']+data['DZ'] < self.zmax)
+            inds_sky = inds_RA&inds_DEC&inds_z
             bigcat = np.append(bigcat, data[inds_sky])
             
         #Return and cache the whole catalog:
@@ -225,7 +237,8 @@ class Lightcone(object):
         data = np.array(fil[1].data)
         inds_RA = (data['RA'] > self.RA_min.value)&(data['RA'] < self.RA_max.value)
         inds_DEC = (data['DEC'] > self.DEC_min.value)&(data['DEC'] < self.DEC_max.value)
-        inds_sky = inds_RA&inds_DEC
+        inds_z = (data['Z']+data['DZ'] > self.zmin)&(data['Z']+data['DZ'] < self.zmax)
+        inds_sky = inds_RA&inds_DEC&inds_z
         bigcat = data[inds_sky]
         
         #return *one* slice does not enter in cache
@@ -260,7 +273,7 @@ class Lightcone(object):
             SFR = self.halo_catalog_all['SFR_HALO']
             
         if len(self.LIR_pars.keys())>0:
-            LIR = getattr(LM,'LIR')(self,self.halo_catalog_all,SFR,self.LIR_pars,self.rng)
+            LIR = getattr(LM,'LIR')(self,SFR,self.halo_catalog_all['SM_HALO'],self.LIR_pars,self.rng)
         else:
             LIR = 0*u.Lsun
 
@@ -299,7 +312,7 @@ class Lightcone(object):
             SFR = self.halo_catalog['SFR_HALO']
             
         if len(self.LIR_pars.keys())>0:
-            LIR = getattr(LM,'LIR')(self,self.halo_catalog,SFR,self.LIR_pars,self.rng)
+            LIR = getattr(LM,'LIR')(self,SFR,self.halo_catalog['SM_HALO'],self.LIR_pars,self.rng)
         else:
             LIR = 0*u.Lsun
 
@@ -356,7 +369,12 @@ class Lightcone(object):
             self._update_lightcone_list = []
             for attribute in self._update_survey_list:
                 delattr(self,attribute)
-            self._update_survey_list = []
+            try: 
+                del(self.SEDSpl)
+                del(self.NormSpl)
+                self._update_survey_list = []
+            except:
+                self._update_survey_list = []
             for attribute in self._update_measure_list:
                 delattr(self,attribute)
             self._update_measure_list = []
@@ -366,14 +384,24 @@ class Lightcone(object):
             self._update_lightcone_list = []
             for attribute in self._update_survey_list:
                 delattr(self,attribute)
-            self._update_survey_list = []
+            try: 
+                del(self.SEDSpl)
+                del(self.NormSpl)
+                self._update_survey_list = []
+            except:
+                self._update_survey_list = []
             for attribute in self._update_measure_list:
-                delattr(self,attribute)
+                delattr(self.__class__,attribute)
             self._update_measure_list = []
         elif any(item in survey_params for item in new_params.keys()):
             for attribute in self._update_survey_list:
                 delattr(self,attribute)
-            self._update_survey_list = []
+            try: 
+                del(self.SEDSpl)
+                del(self.NormSpl)
+                self._update_survey_list = []
+            except:
+                self._update_survey_list = []
             for attribute in self._update_measure_list:
                 delattr(self,attribute)
             self._update_measure_list = []
@@ -389,5 +417,13 @@ class Lightcone(object):
         self.rng = np.random.default_rng(self.seed)
         #check updated paramters:
         check_updated_params(self)
+
+        for key in new_params:
+            if 'width' in key:
+                self.RA_min,self.RA_max = -self.RA_width/2.,self.RA_width/2.
+                self.DEC_min,self.DEC_max = -self.DEC_width/2.,self.DEC_width/2.
+                self.RAObs_min,self.RAObs_max = -self.RAObs_width/2.,self.RAObs_width/2.
+                self.DECObs_min,self.DECObs_max = -self.DECObs_width/2.,self.DECObs_width/2.
+                break
 
         return
