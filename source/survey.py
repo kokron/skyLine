@@ -854,12 +854,13 @@ class Survey(Lightcone):
         inds = inds_sky&inds_mass
         Ngal = np.sum(inds)
         
-        halos_survey = np.zeros(Ngal, dtype={'names':('RA', 'DEC', 'Zobs', 'SFR', 'Mstar'), 'formats':('f4', 'f4', 'f4', 'f4', 'f4')})
+        halos_survey = np.zeros(Ngal, dtype={'names':('RA', 'DEC', 'Zobs', 'SFR', 'Mstar','Mhalo'), 'formats':('f4', 'f4', 'f4', 'f4', 'f4', 'f4')})
         halos_survey['RA'] = self.halo_catalog['RA'][inds]
         halos_survey['DEC'] = self.halo_catalog['DEC'][inds]
         halos_survey['Zobs'] = self.halo_catalog['Z'][inds]+self.halo_catalog['DZ'][inds]
         halos_survey['SFR'] =  self.halo_catalog['SFR_HALO'][inds]
         halos_survey['Mstar'] = self.halo_catalog['SM_HALO'][inds]
+        halos_survey['Mhalo'] = self.halo_catalog['M_HALO'][inds]
 
         self.halos_in_survey = halos_survey
         return
@@ -1023,39 +1024,6 @@ class Survey(Lightcone):
             #Brightness Temperature[uK]
             signal = (signal*u.sr*cu.c**2/2/cu.k_B/nu_c**2).to(u.uK)
         
-        #Figure out what channel the halos will be in to figure out the voxel volume, for the signal.
-        #This is what will be added to the healpy map.
-        #nu_bins = self.nuObs_min.to('GHz').value + np.arange(self.Nchan)*self.dnu.to('GHz').value
-        #zmid_channel = self.line_nu0[line].to('GHz').value/(nu_bins + 0.5*self.dnu.to('GHz').value) - 1
-
-        #Channel of each halo, can now compute voxel volumes where each of them are seamlessly
-        #bin_idxs = np.digitize(self.line_nu0[line].to('GHz').value/(1+Zhalo), nu_bins)-1
-        #zmids = zmid_channel[bin_idxs]
-
-        #Vcell = Omega_pix * D_A (z)^2 * (1+z) * dnu/nu_obs * c/H is the volume of the voxel for a given channel
-                            #D_A here is comoving angular diameter distance = comoving_radial_distance in flat space
-        #Vcell_true = hp.nside2pixarea(self.nside)*(self.cosmo.comoving_radial_distance(zmids)*u.Mpc )**2 * (self.dnu.value/nu_bins[bin_idxs]) * (1+zmids) * (cu.c.to('km/s')/self.cosmo.hubble_parameter(zmids)/(u.km/u.Mpc/u.s))
-
-        #if self.unit_convention == 'Inu':
-            #intensity[Jy/sr]
-        #    signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*halos['Lhalo']/Vcell_true).to(self.unit)
-        #elif self.unit_convention == 'Tcmb':
-            #intensity[Jy/sr]
-        #    signal = (cu.c/(4.*np.pi*self.line_nu0[line]*Hubble*(1.*u.sr))*halos['Lhalo']/Vcell_true).to(self.unit)
-            #Read the imaging band table
-        #    nu0 = np.geomspace(self.nuObs_min,self.nuObs_max,self.NnuObs)
-        #    data_table = np.loadtxt(self.spectral_transmission_file)
-        #    tau_nu0 = interp1d(data_table[:,0],data_table[:,1],bounds_error=False,fill_value=0)(nu0)
-        #    bnu = (2*cu.h*nu0**3/cu.c**2/(np.exp(cu.h*nu0/cu.k_B/2.7255/u.K)-1)).to(u.Jy)/u.sr/u.K
-        #    if self.nu_c == None:
-        #        nu_c = np.trapz(nu0*tau_nu0,nu0)/np.trapz(tau_nu0,nu0)
-        #    else:
-        #        nu_c = self.nu_c
-        #    conv_factor = np.trapz(bnu*tau_nu0,nu0)/np.trapz(tau_nu0*nu_c/nu0,nu0)
-        #    signal = (signal/conv_factor).to(u.uK)
-        #else:
-        #    #Brightness Temperature[uK]
-        #    signal = (cu.c**3*(1+Zhalo)**2/(8*np.pi*cu.k_B*self.line_nu0[line]**3*Hubble)*halos['Lhalo']/Vcell_true).to(self.unit)
             
         #Paste the signals to the map
         theta, phi = rd2tp(halos['RA'], halos['DEC'])
@@ -1103,7 +1071,6 @@ class Survey(Lightcone):
         #removed "detected resolved" sources if required
         if self.flux_detection_lim:
             if type(self.flux_detection_lim) == u.quantity.Quantity:
-                ##flux = (signal*self.beam_FWHM**2).to(self.flux_detection_lim.unit)
                 inds = ((signal.to(self.flux_detection_lim.unit)).value < self.flux_detection_lim.value) & (signal.value > 0.) 
                 signal = signal[inds]
                 theta, phi = rd2tp(halos['RA'][inds], halos['DEC'][inds])
@@ -1127,19 +1094,6 @@ class Survey(Lightcone):
                     inds[inds_flux][inds_detected] = False
                 signal = signal[inds]
                 theta, phi = rd2tp(halos['RA'][inds], halos['DEC'][inds])
-                #signal = signal.to(u.mJy)
-                #flux_vec = np.linspace(0,np.max(signal.value),17)
-                #inds = np.ones_like(signal.value,dtype=bool)
-                #for i in range(len(flux_vec)-1):
-                #    inds_flux = (signal.value >= flux_vec[i]) & (signal.value < flux_vec[i+1])
-                #    Nsources = len(signal[inds_flux])
-                #    Ndetected = int(self.flux_detection_lim(0.5*(flux_vec[i]+flux_vec[i+1]))*Nsources)
-                    #remove randomly from each bin
-                #    inds_detected = np.random.choice(Nsources,Ndetected,replace=False)
-                #    inds[inds_flux][inds_detected] = False
-                #inds = inds & (signal.value > 0.)
-                #signal = signal[inds]
-                #theta, phi = rd2tp(halos['RA'][inds], halos['DEC'][inds])
         else:
             inds = (signal.value > 0.)
             signal = signal[inds]

@@ -137,7 +137,7 @@ class Lightcone(object):
         self._update_survey_list = []
         self._update_measure_list = []
 
-        #Initialize camb (we nee804380.08585994d background only) - values used in UM
+        #Initialize camb (we need background only) - values used in UM
         camb_pars = camb.set_params(H0=67.8, omch2 = 0.118002988, ombh2 = 0.02312)
         self.h = 0.678
         self.cosmo = camb.get_background(camb_pars)

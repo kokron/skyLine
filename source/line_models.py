@@ -207,7 +207,6 @@ def CIB_band_Agora(self,halos,LIR,pars,itau_nu0,tau_nu0_norm):
         iSEDSpl = interp1d(nu0,SEDhalos)(nu_c)
         Cc = np.trapz(tau_nu0*SEDhalos/iSEDSpl[:,None],nu0)/Cc_norm #Color correction
 
-        #(1+zhalo) added in the integral to do the integral in restframe nu
         int_term = Cc*np.trapz(SEDhalos*tau_nu0[None,:], nu0.value, axis=1)/SEDnorm/tau_nu0_norm * self.rng.normal(1, 0.25, len(SEDnorm))    
         if i== Niter:
             L_CIB[hidx[i*nsubcat:][:,0]] = int_term
@@ -215,9 +214,6 @@ def CIB_band_Agora(self,halos,LIR,pars,itau_nu0,tau_nu0_norm):
             L_CIB[hidx[i*nsubcat:(i+1)*nsubcat][:,0]] = int_term
     #Get the SED normalization
     #Compute the L_CIB that each halo contributes to the band (giving SED its unit)
-    #The units are super funky right now.. Need to double check NOTE -> JOSE: Units are Lsun (from LIR) / GHz (from the SED). tau_nu0 has no units
-    #L_CIB[inds] = LIR[inds]*L_CIB[inds]
-    #return L_CIB
     return LIR*L_CIB/u.GHz
 
 def make_SEDnorm(self):
@@ -240,8 +236,6 @@ def make_SEDnorm(self):
     tilevec = np.array([tilez, tiled]).T
 
     tableSED = tablespl(tilevec)
-    #print(tableSED.shape)
-    #print(nus.shape)
     norms = np.trapz(tableSED, nus, axis=1)
 
     normspl = RegularGridInterpolator((zvec, Tdvec), norms.reshape(len(zvec), len(Tdvec)))
@@ -334,7 +328,7 @@ def Tdust_Agora(z,SFR,Mstar,LIR,B,zeta_d,A_d,alpha):
     beta_d = newton_root(beta_d_function,beta_d_derivative,2.5,LIR.value,Mdust,zeta_d,A_d,Niter=5)
     #print(time() - st, "Root find Niter=5")
     Tdust = A_d * (LIR.value/Mdust)**(1/(4+beta_d))
-    return Tdust*u.K#, beta_d
+    return Tdust*u.K
 
 def beta_d_function(beta_d,LIR,Mdust,zeta_d,A_d):
     '''
