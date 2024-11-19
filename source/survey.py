@@ -485,10 +485,10 @@ class Survey(Lightcone):
             #get the number of files loaded for the zrange
             fnames = self.halo_slices(self.zmin,self.zmax)
             nfiles = len(fnames)
-            #Get the z grid from the slices
-            min_dist = self.cosmo.comoving_radial_distance(self.zmin)
+            #Get the z grid from the slices: minimum distance is the number of file * distance
+            min_dist = int(fnames[0].split('.fits')[0].split('_')[-1])*self.lightcone_slice_width*self.Mpch.value            
             dist_array = min_dist+np.arange(nfiles+1)*self.lightcone_slice_width*self.Mpch.value
-            zarr = self.cosmo.redshift_at_comoving_radial_distance(dist_array)
+            zarr = self.cosmo.redshift_at_comoving_radial_distance(dist_array)        
         #Get the values for the give z binning
         self.zarr_dndzgal = zarr
         if self.do_angular:
