@@ -798,7 +798,7 @@ class Survey(Lightcone):
                 Vslice = ((np.diff(self.raside_lim)*np.diff(self.decside_lim)*(dist2-dist1))[0]/rmid_proj**2*rmid_true**2*self.Mpch**2).to(self.Mpch**3)
             Ngal_tot = (ngal_z[ifile]*Vslice).decompose()
         #if enough galaxies, get the brightests
-        if Ngal_tot > Ngal_max:
+        if Ngal_tot >= Ngal_max:
             if self.do_angular:
                 ngal_max = np.sum(Ngal_max)/self.Omega_field
             else:
