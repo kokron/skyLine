@@ -996,7 +996,7 @@ class Survey(Lightcone):
         nu0_halo = self.line_nu0[line].to('GHz')/(1+Zhalo)
         
         #get the specific flux and intensity for each halo
-        signal = (halos['Lhalo']/(4*np.pi*chi**2*(1+Zhalo))*itau_nu0(nu0_halo)/tau_nu0_norm).to(u.Jy)
+        signal = (halos['Lhalo']/(4*np.pi*chi**2*(1+Zhalo)**2)*itau_nu0(nu0_halo)/tau_nu0_norm).to(u.Jy)
         signal *= 1/(hp.nside2pixarea(self.nside, degrees = False)*u.sr)
 
         #unit conventions
